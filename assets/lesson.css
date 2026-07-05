@@ -1,0 +1,145 @@
+/* Lesson stylesheet — Tufte-inspired, print-friendly */
+:root {
+  --text: #111;
+  --muted: #555;
+  --accent: #1a5276;
+  --bg: #fffff8;
+  --border: #ddd;
+  --correct: #1e6f3d;
+  --incorrect: #922b21;
+  --surface: #f7f7f0;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  font-size: 18px;
+}
+
+body {
+  font-family: "Palatino Linotype", Palatino, Georgia, serif;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
+  max-width: 38rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+h1, h2, h3 {
+  font-weight: normal;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+h1 { font-size: 1.75rem; margin-top: 0; }
+h2 { font-size: 1.25rem; margin-top: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
+h3 { font-size: 1.05rem; margin-top: 1.5rem; }
+
+p { margin: 0.75rem 0; }
+
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid #c5d9e8; }
+a:hover { border-bottom-color: var(--accent); }
+
+code, pre {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+pre {
+  background: var(--surface);
+  border-left: 3px solid var(--accent);
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+code { background: var(--surface); padding: 0.1em 0.35em; }
+
+.meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 2rem;
+}
+
+.cite {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+.callout {
+  background: var(--surface);
+  border-left: 3px solid var(--accent);
+  padding: 0.75rem 1rem;
+  margin: 1.25rem 0;
+}
+
+.callout strong { display: block; margin-bottom: 0.25rem; }
+
+/* Quiz component */
+.quiz { margin: 1.5rem 0; }
+
+.quiz-question {
+  font-weight: bold;
+  margin-bottom: 0.75rem;
+}
+
+.quiz-options {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.quiz-options li { margin: 0.5rem 0; }
+
+.quiz-options button {
+  font-family: inherit;
+  font-size: 0.95rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.6rem 0.85rem;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.quiz-options button:hover { border-color: var(--accent); background: #fafaf5; }
+
+.quiz-options button.correct {
+  border-color: var(--correct);
+  background: #eaf7ee;
+}
+
+.quiz-options button.incorrect {
+  border-color: var(--incorrect);
+  background: #fdf0ef;
+}
+
+.quiz-feedback {
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+  min-height: 1.4em;
+}
+
+.teacher-note {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+nav.lesson-nav {
+  font-size: 0.85rem;
+  margin-bottom: 2rem;
+  color: var(--muted);
+}
+
+@media print {
+  body { max-width: none; padding: 0; }
+  .quiz-options button { border: 1px solid #999; }
+  .teacher-note::after { content: " — Ask your teacher follow-up questions in Cursor."; }
+}

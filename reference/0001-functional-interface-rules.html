@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Functional Interface Rules — Reference</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav"><a href="../lessons/0001-what-is-a-functional-interface.html">← Lesson 1</a></nav>
+
+  <h1>Functional Interface Rules</h1>
+  <p class="meta">Quick reference · <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/lang/FunctionalInterface.html">Oracle javadoc</a></p>
+
+  <h2>The SAM rule</h2>
+  <p>A <strong>functional interface</strong> has <em>exactly one</em> abstract method (SAM = Single Abstract Method).</p>
+
+  <h2>What does NOT count as abstract</h2>
+  <ul>
+    <li><code>default</code> methods — they have a body</li>
+    <li><code>static</code> methods — they have a body</li>
+    <li>Methods overriding <code>Object</code> public methods (e.g. <code>toString</code>)</li>
+  </ul>
+
+  <h2>Instantiation</h2>
+  <p>A functional interface can be implemented via:</p>
+  <ul>
+    <li>Lambda expression</li>
+    <li>Method reference (<code>System.out::println</code>)</li>
+    <li>Constructor reference (<code>ArrayList::new</code>)</li>
+    <li>Anonymous inner class (verbose; avoid when lambda works)</li>
+  </ul>
+
+  <h2>Annotation</h2>
+  <pre>@FunctionalInterface
+public interface MyOp {
+    int apply(int a, int b);
+}</pre>
+  <p><code>@FunctionalInterface</code> is optional but recommended — the compiler errors if you add a second abstract method.</p>
+
+  <h2>Six core standard interfaces</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+    <tr style="border-bottom:1px solid #ddd;"><th align="left">Interface</th><th align="left">Method</th><th align="left">Use</th></tr>
+    <tr><td><code>Predicate&lt;T&gt;</code></td><td><code>boolean test(T)</code></td><td>filter / test</td></tr>
+    <tr><td><code>Consumer&lt;T&gt;</code></td><td><code>void accept(T)</code></td><td>side effect</td></tr>
+    <tr><td><code>Supplier&lt;T&gt;</code></td><td><code>T get()</code></td><td>produce value</td></tr>
+    <tr><td><code>Function&lt;T,R&gt;</code></td><td><code>R apply(T)</code></td><td>transform</td></tr>
+    <tr><td><code>UnaryOperator&lt;T&gt;</code></td><td><code>T apply(T)</code></td><td>same-type transform</td></tr>
+    <tr><td><code>BinaryOperator&lt;T&gt;</code></td><td><code>T apply(T,T)</code></td><td>combine two</td></tr>
+  </table>
+  <p class="cite">Full set: <a href="https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/util/function/package-summary.html">java.util.function</a></p>
+</body>
+</html>

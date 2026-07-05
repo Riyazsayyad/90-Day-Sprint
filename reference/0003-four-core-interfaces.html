@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Four Core Interfaces — Reference</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav"><a href="../lessons/0003-predicate-function-consumer-supplier.html">← Lesson 3</a></nav>
+
+  <h1>Predicate · Function · Consumer · Supplier</h1>
+  <p class="meta"><code>java.util.function</code> · <a href="https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/util/function/package-summary.html">Oracle package</a></p>
+
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+    <tr style="border-bottom:2px solid #1a5276;">
+      <th align="left">Interface</th><th align="left">Input</th><th align="left">Output</th><th align="left">Method</th><th align="left">Question it answers</th>
+    </tr>
+    <tr>
+      <td><code>Predicate&lt;T&gt;</code></td><td>T</td><td><code>boolean</code></td><td><code>test(T)</code></td><td>Does it pass?</td>
+    </tr>
+    <tr>
+      <td><code>Function&lt;T,R&gt;</code></td><td>T</td><td>R</td><td><code>apply(T)</code></td><td>What does it become?</td>
+    </tr>
+    <tr>
+      <td><code>Consumer&lt;T&gt;</code></td><td>T</td><td><code>void</code></td><td><code>accept(T)</code></td><td>Do something with it</td>
+    </tr>
+    <tr>
+      <td><code>Supplier&lt;T&gt;</code></td><td>none</td><td>T</td><td><code>get()</code></td><td>Give me a value</td>
+    </tr>
+  </table>
+
+  <h2>Stream mapping</h2>
+  <pre>list.stream()
+    .filter(x -> x % 2 == 0)   // Predicate — keep or drop
+    .map(x -> x * x)           // Function — transform
+    .forEach(System.out::println); // Consumer — act on each</pre>
+
+  <h2>Lambda examples</h2>
+  <pre>Predicate&lt;String&gt; longEnough = s -> s.length() &gt; 5;
+Function&lt;String, Integer&gt; len = String::length;
+Consumer&lt;String&gt; shout = s -> System.out.println(s.toUpperCase());
+Supplier&lt;Double&gt; random = () -> Math.random();</pre>
+
+  <h2>Default methods (worth knowing)</h2>
+  <ul style="font-size:0.9rem;">
+    <li><code>Predicate.and</code> / <code>or</code> / <code>negate</code> — combine tests</li>
+    <li><code>Function.andThen</code> / <code>compose</code> — chain transforms</li>
+    <li><code>Consumer.andThen</code> — run two side effects in sequence</li>
+  </ul>
+
+  <h2>When to use primitives</h2>
+  <p>Prefer <code>IntPredicate</code>, <code>ToIntFunction</code>, etc. in hot paths — avoids boxing overhead. <a href="https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/util/function/package-summary.html">See specialized variants</a>.</p>
+</body>
+</html>

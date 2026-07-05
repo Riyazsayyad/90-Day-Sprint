@@ -1,0 +1,480 @@
+1<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 7 — ArrayList Internals</title>
+  <meta name="description" content="Learn Java ArrayList internals: how the backing array works, capacity vs size, 1.5x growth strategy, why random access is O(1), and the performance cost of insertions and deletions.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <style>
+    /* Simulator Container Styles */
+    .simulator {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1.25rem;
+      margin: 1.5rem 0;
+    }
+    .sim-stats {
+      display: flex;
+      justify-content: space-around;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      background: #fff;
+      padding: 0.5rem;
+      border: 1px solid var(--border);
+    }
+    .stat-box {
+      text-align: center;
+    }
+    .stat-val {
+      font-weight: bold;
+      color: var(--accent);
+      font-size: 1.1rem;
+    }
+    .array-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+      margin: 1.25rem 0;
+      min-height: 4.5rem;
+    }
+    .array-slot {
+      width: 3.2rem;
+      height: 3.8rem;
+      border: 1px solid var(--border);
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.25rem;
+      font-size: 0.85rem;
+      border-radius: 2px;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+    .slot-idx {
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+    .slot-val {
+      font-weight: bold;
+      color: var(--text);
+      font-size: 1rem;
+    }
+    .slot-val.empty {
+      color: #ccc;
+      font-weight: normal;
+      font-size: 0.8rem;
+    }
+    /* States */
+    .array-slot.filled {
+      background: #eaf2f8;
+      border-color: #a9cce3;
+    }
+    .array-slot.null-slot {
+      border-style: dashed;
+      background: #fafaf9;
+    }
+    .array-slot.highlight {
+      background: #fdebd0;
+      border-color: #f5b041;
+      transform: scale(1.05);
+    }
+    .array-slot.access {
+      background: #eaf7ee;
+      border-color: #58d68d;
+      transform: scale(1.05);
+    }
+    .sim-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+    .sim-btn {
+      font-family: inherit;
+      font-size: 0.8rem;
+      padding: 0.4rem 0.6rem;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .sim-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: #fafaf5;
+    }
+    .sim-btn:disabled {
+      color: #ccc;
+      cursor: not-allowed;
+    }
+    .sim-log {
+      margin-top: 0.75rem;
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+      min-height: 2.2rem;
+      background: #fff;
+      padding: 0.4rem;
+      border: 1px solid var(--border);
+      overflow-y: auto;
+    }
+    .formula {
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 0.9em;
+      background: var(--surface);
+      padding: 0.1rem 0.4rem;
+    }
+  </style>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="0006-hashmap-treeify.html">← Lesson 6</a> ·
+    <a href="../reference/0007-arraylist-internals.html">ArrayList reference</a>
+  </nav>
+
+  <h1>ArrayList Internals</h1>
+  <p class="meta">~8 minutes · builds on <a href="0005-resize-and-load-factor.html">resize &amp; load factor</a></p>
+
+  <h2>The Backing Array</h2>
+  <p>Unlike a `LinkedList`, which represents elements as node chain links, Java's <code>ArrayList</code> stores elements inside a simple, contiguous <strong>backing array</strong>: <code>Object[] elementData</code>.</p>
+  <p>Because primitive Java arrays have a fixed size, the <code>ArrayList</code> class manages the complexity of expanding this array dynamically behind the scenes as you insert elements.</p>
+  <p class="cite">Source: <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/ArrayList.html">Oracle ArrayList API Specifications</a></p>
+
+  <h2>Capacity vs Size</h2>
+  <p>To understand the mechanics, we must separate two fundamental properties of an <code>ArrayList</code>:</p>
+  <ul>
+    <li><strong>Capacity:</strong> The physical length of the backing array (<code>elementData.length</code>). This is the maximum number of items the list can hold before allocating a new array.</li>
+    <li><strong>Size:</strong> The logical count of elements currently stored in the list by the user (accessed via <code>size()</code>).</li>
+  </ul>
+  <p>The condition <code>size <= capacity</code> is always true. When <code>size == capacity</code>, the backing array is full, and the next insertion will trigger a growth phase.</p>
+
+  <h2>Interactive Simulator</h2>
+  <p>Use the simulator below to inspect the state of the backing array. Notice how adding elements changes <strong>Size</strong>, and watch what happens to the array's <strong>Capacity</strong> when it runs out of empty slots.</p>
+
+  <div class="simulator" id="al-sim">
+    <div class="sim-stats">
+      <div class="stat-box">
+        <div>Backing Array Length (Capacity)</div>
+        <div class="stat-val" id="sim-cap">4</div>
+      </div>
+      <div class="stat-box">
+        <div>List Size</div>
+        <div class="stat-val" id="sim-size">0</div>
+      </div>
+    </div>
+
+    <div class="array-container" id="sim-array">
+      <!-- Generated slots -->
+    </div>
+
+    <div class="sim-controls">
+      <button class="sim-btn" id="btn-add">Add to End (add(x))</button>
+      <button class="sim-btn" id="btn-insert">Insert at Index 0 (add(0, x))</button>
+      <button class="sim-btn" id="btn-remove">Delete at Index 0 (remove(0))</button>
+      <button class="sim-btn" id="btn-access">Random Access Index 2 (get(2))</button>
+      <button class="sim-btn" id="btn-reset" style="grid-column: span 2;">Reset (Capacity = 4)</button>
+    </div>
+
+    <div class="sim-log" id="sim-log">
+      Simulator initialized. Capacity is 4. Size is 0.
+    </div>
+  </div>
+
+  <h2>Growth Strategy (1.5x Scaling)</h2>
+  <p>When you attempt to add an element to a full list, Java reallocates a larger array. The JDK calculates the new capacity using a bitwise shift right operation:</p>
+  <pre><code>int newCapacity = oldCapacity + (oldCapacity >> 1);</code></pre>
+  <p>Since shifting right by 1 bit (<code>>> 1</code>) is equivalent to integer division by 2, this means:
+  <br><span class="formula">newCapacity = oldCapacity + 0.5 * oldCapacity = 1.5 * oldCapacity</span>.</p>
+  <p>Once the new capacity is computed, Java allocates the new array and copies the old elements over via <code>Arrays.copyOf()</code>, which internally utilizes the extremely fast, native memory copying operation <code>System.arraycopy()</code>.</p>
+
+  <h2>Why Random Access is O(1)</h2>
+  <p>In computer memory, an array is stored as a <strong>contiguous block</strong> of bytes. Because every object reference in Java takes up the same fixed amount of space (typically 4 or 8 bytes), the JVM can compute the exact physical address of any element immediately without traversing the list:</p>
+  <pre><code>Address(index) = BaseAddress + index * ReferenceSize</code></pre>
+  <p>This single addition and multiplication allows the computer to look up the element at any arbitrary index in constant <code>O(1)</code> time, whether it is the first element, the middle element, or the last.</p>
+
+  <h2>Insertions and Deletions</h2>
+  <p>While indexing is fast, altering the size of the array has trade-offs:</p>
+  <ul>
+    <li><strong>Inserting/Deleting at the end:</strong> This takes <code>O(1)</code> time. Resizing occurs only occasionally (at a geometric interval), so the cost of copies amortizes to a constant <code>O(1)</code> overall.</li>
+    <li><strong>Inserting/Deleting at arbitrary indices:</strong> This takes <code>O(n)</code> time. If you insert at index <code>i</code>, all elements from index <code>i</code> to <code>size - 1</code> must be shifted one slot to the right. Deleting an element requires shifting everything to the left. Try this in the simulator above and watch the orange highlight shift step-by-step.</li>
+  </ul>
+
+  <h2>Practice — Growth Mechanics</h2>
+  <p>Assume you initialize an <code>ArrayList</code> using the default constructor (which starts with an empty buffer and scales to capacity 10 on the first element). You add 10 items to fill the list.</p>
+
+  <div class="quiz" id="quiz-growth">
+    <p class="quiz-question">What is the capacity of the backing array immediately after you add the 11th item?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">fifteen (it grows the capacity by fifty percent)</button></li>
+      <li><button data-answer="wrong">twenty (it doubles the capacity of the list)</button></li>
+      <li><button data-answer="wrong">eleven (it expands the capacity by one slot)</button></li>
+      <li><button data-answer="wrong">ten (it maintains the current capacity size limit)</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Retrieval Practice</h2>
+  <p>Cover the answer. What is the time complexity of looking up a value in an ArrayList if you do not know its index (e.g. searching for a value using <code>contains(Object o)</code>)?</p>
+  <details style="font-size:0.9rem; color:#555; margin-top:0.5rem;">
+    <summary>Reveal</summary>
+    <p>It is <code>O(n)</code>. Because you do not know the index, the list must iterate through the backing array one-by-one from index 0 until the matching element is found.</p>
+  </details>
+
+  <h2>Primary Reading</h2>
+  <p>Review the Oracle official documentation for the <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/ArrayList.html">ArrayList class</a> to review its performance guarantees, and read Baeldung's guide on <a href="https://www.baeldung.com/java-arraylist">ArrayList capacity management</a>.</p>
+
+  <h2>What's next</h2>
+  <p>You can ask your teacher about the differences between <code>ArrayList</code> and <code>LinkedList</code>, or deep-dive into how <code>System.arraycopy()</code> works at the OS level.</p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — for example, ask how ArrayList handles element removals to avoid memory leaks (loitering references).
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-growth', {
+      correct: "Correct! The JDK growth strategy multiplies the current capacity by 1.5x. Thus, 10 + (10 / 2) = 15.",
+      wrong: "Not quite. Remember that ArrayList scales capacity by 1.5x (growing by 50%), rather than doubling it, incrementing by 1, or staying static."
+    });
+
+    // SIMULATOR CODE
+    (function() {
+      let capacity = 4;
+      let size = 0;
+      let elements = [];
+      const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      let elementCounter = 0;
+      let isAnimating = false;
+
+      const simCap = document.getElementById('sim-cap');
+      const simSize = document.getElementById('sim-size');
+      const simArray = document.getElementById('sim-array');
+      const simLog = document.getElementById('sim-log');
+
+      const btnAdd = document.getElementById('btn-add');
+      const btnInsert = document.getElementById('btn-insert');
+      const btnRemove = document.getElementById('btn-remove');
+      const btnAccess = document.getElementById('btn-access');
+      const btnReset = document.getElementById('btn-reset');
+
+      function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+      }
+
+      function log(msg) {
+        simLog.textContent = msg;
+      }
+
+      function disableButtons(disable) {
+        btnAdd.disabled = disable;
+        btnInsert.disabled = disable;
+        btnRemove.disabled = disable && (size === 0);
+        btnAccess.disabled = disable && (size < 3);
+        btnReset.disabled = disable;
+      }
+
+      function updateUI() {
+        simCap.textContent = capacity;
+        simSize.textContent = size;
+        simArray.innerHTML = '';
+
+        for (let i = 0; i < capacity; i++) {
+          const slot = document.createElement('div');
+          slot.className = 'array-slot';
+          slot.id = 'slot-' + i;
+
+          const idxLabel = document.createElement('div');
+          idxLabel.className = 'slot-idx';
+          idxLabel.textContent = '[' + i + ']';
+          slot.appendChild(idxLabel);
+
+          const valSpan = document.createElement('div');
+          valSpan.className = 'slot-val';
+
+          if (i < size) {
+            slot.classList.add('filled');
+            valSpan.textContent = elements[i];
+          } else {
+            slot.classList.add('null-slot');
+            valSpan.classList.add('empty');
+            valSpan.textContent = 'null';
+          }
+          slot.appendChild(valSpan);
+          simArray.appendChild(slot);
+        }
+        
+        btnRemove.disabled = (size === 0);
+        btnAccess.disabled = (size < 3);
+      }
+
+      async function triggerResize() {
+        const oldCap = capacity;
+        capacity = oldCap + (oldCap >> 1); // 1.5x
+        log(`Backing array full! Growing capacity: ${oldCap} -> ${capacity}. Copying elements...`);
+        
+        // Visual feedback: highlight all existing slots in gold
+        for (let i = 0; i < oldCap; i++) {
+          document.getElementById('slot-' + i).classList.add('highlight');
+        }
+        await sleep(600);
+        updateUI();
+        await sleep(300);
+      }
+
+      async function addElement() {
+        if (isAnimating) return;
+        isAnimating = true;
+        disableButtons(true);
+
+        const newEl = alphabet[elementCounter % alphabet.length];
+        elementCounter++;
+
+        if (size === capacity) {
+          await triggerResize();
+        }
+
+        elements[size] = newEl;
+        size++;
+        log(`Added element '${newEl}' to index ${size - 1}.`);
+        updateUI();
+        
+        const lastSlot = document.getElementById('slot-' + (size - 1));
+        if (lastSlot) {
+          lastSlot.classList.add('access');
+          await sleep(400);
+          lastSlot.classList.remove('access');
+        }
+
+        isAnimating = false;
+        disableButtons(false);
+      }
+
+      async function insertAtZero() {
+        if (isAnimating) return;
+        isAnimating = true;
+        disableButtons(true);
+
+        const newEl = alphabet[elementCounter % alphabet.length];
+        elementCounter++;
+
+        if (size === capacity) {
+          await triggerResize();
+        }
+
+        // Visualise the shift
+        log(`Inserting '${newEl}' at index 0. Shifting elements to the right...`);
+        updateUI();
+        await sleep(400);
+
+        // Shift elements from right to left
+        for (let i = size - 1; i >= 0; i--) {
+          const fromSlot = document.getElementById('slot-' + i);
+          const toSlot = document.getElementById('slot-' + (i + 1));
+          
+          if (fromSlot) fromSlot.classList.add('highlight');
+          if (toSlot) toSlot.classList.add('highlight');
+          
+          log(`Shifting index ${i} ('${elements[i]}') to index ${i + 1}...`);
+          elements[i + 1] = elements[i];
+          await sleep(500);
+          
+          updateUI();
+        }
+
+        elements[0] = newEl;
+        size++;
+        log(`Placed '${newEl}' into index 0.`);
+        updateUI();
+
+        const firstSlot = document.getElementById('slot-0');
+        if (firstSlot) {
+          firstSlot.classList.add('access');
+          await sleep(400);
+          firstSlot.classList.remove('access');
+        }
+
+        isAnimating = false;
+        disableButtons(false);
+      }
+
+      async function removeFromZero() {
+        if (isAnimating || size === 0) return;
+        isAnimating = true;
+        disableButtons(true);
+
+        log(`Deleting index 0 ('${elements[0]}'). Shifting elements to the left...`);
+        const firstSlot = document.getElementById('slot-0');
+        if (firstSlot) firstSlot.classList.add('highlight');
+        await sleep(500);
+
+        // Shift elements left
+        for (let i = 1; i < size; i++) {
+          const fromSlot = document.getElementById('slot-' + i);
+          const toSlot = document.getElementById('slot-' + (i - 1));
+          
+          if (fromSlot) fromSlot.classList.add('highlight');
+          if (toSlot) toSlot.classList.add('highlight');
+
+          log(`Shifting index ${i} ('${elements[i]}') to index ${i - 1}...`);
+          elements[i - 1] = elements[i];
+          await sleep(500);
+
+          updateUI();
+        }
+
+        // Nullify last and decrease size
+        elements[size - 1] = null;
+        size--;
+        log(`Cleared loitering reference at index ${size}. Size is now ${size}.`);
+        updateUI();
+
+        isAnimating = false;
+        disableButtons(false);
+      }
+
+      async function randomAccessIdx2() {
+        if (isAnimating || size < 3) return;
+        isAnimating = true;
+        disableButtons(true);
+
+        log(`Calculating address: BaseAddress + 2 * ReferenceSize...`);
+        await sleep(500);
+
+        log(`Directly accessed index 2: Contains '${elements[2]}'. O(1) cost!`);
+        const slot2 = document.getElementById('slot-2');
+        if (slot2) {
+          slot2.classList.add('access');
+          await sleep(800);
+          slot2.classList.remove('access');
+        }
+
+        isAnimating = false;
+        disableButtons(false);
+      }
+
+      function resetSim() {
+        capacity = 4;
+        size = 0;
+        elements = [];
+        elementCounter = 0;
+        isAnimating = false;
+        log("Simulator reset. Capacity is 4. Size is 0.");
+        updateUI();
+      }
+
+      btnAdd.addEventListener('click', addElement);
+      btnInsert.addEventListener('click', insertAtZero);
+      btnRemove.addEventListener('click', removeFromZero);
+      btnAccess.addEventListener('click', randomAccessIdx2);
+      btnReset.addEventListener('click', resetSim);
+
+      updateUI();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 2 — Lambda Expressions</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="0001-what-is-a-functional-interface.html">← Lesson 1</a> ·
+    <a href="../reference/0002-lambda-syntax.html">Syntax reference</a>
+  </nav>
+
+  <h1>Lambda Expressions</h1>
+  <p class="meta">~7 minutes · builds on <a href="0001-what-is-a-functional-interface.html">functional interfaces</a></p>
+
+  <h2>What a lambda is</h2>
+  <p>A <strong>lambda expression</strong> is a compact way to supply the single abstract method of a functional interface — without naming the method or the class.</p>
+  <pre>// Anonymous inner class (5+ lines)
+Comparator&lt;String&gt; byLen = new Comparator&lt;String&gt;() {
+    public int compare(String a, String b) {
+        return a.length() - b.length();
+    }
+};
+
+// Lambda (1 line)
+Comparator&lt;String&gt; byLen = (a, b) -> a.length() - b.length();</pre>
+  <p class="cite">Source: <a href="https://www.oracle.com/webfolder/technetwork/tutorials/obe/java/Lambda-QuickStart/index.html">Oracle — Lambda Quick Start</a></p>
+
+  <h2>Syntax — three parts</h2>
+  <div class="callout">
+    <strong>(parameters) -> body</strong>
+    Argument list · arrow token · expression or block
+  </div>
+
+  <h3>Parameters</h3>
+  <ul>
+    <li><strong>Zero:</strong> <code>() -> 42</code></li>
+    <li><strong>One (type inferred):</strong> <code>x -> x * 2</code> — parentheses optional</li>
+    <li><strong>One (typed):</strong> <code>(int x) -> x * 2</code></li>
+    <li><strong>Many:</strong> <code>(a, b) -> a + b</code> — parentheses required</li>
+  </ul>
+  <p>Types are usually inferred from context (<em>target typing</em>). If you type one parameter, type them all.</p>
+  <p class="cite">Source: <a href="https://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html">Oracle — Syntax of Lambda Expressions</a></p>
+
+  <h3>Body — expression vs block</h3>
+  <pre>// Expression body — result is returned automatically
+Function&lt;Integer, Integer&gt; square = n -> n * n;
+
+// Block body — use return for non-void results
+Function&lt;Integer, Integer&gt; square = n -> {
+    int result = n * n;
+    return result;
+};
+
+// Void — single statement needs no braces
+Consumer&lt;String&gt; print = s -> System.out.println(s);</pre>
+  <p>A block body that must produce a value needs an explicit <code>return</code> on every path. A block with only <code>s.isEmpty()</code> does <em>not</em> return a <code>boolean</code> — it just calls the method and discards the result.</p>
+
+  <h2>Target typing</h2>
+  <p>Lambdas have no standalone type. The compiler checks them against the <em>expected</em> functional interface:</p>
+  <pre>Predicate&lt;String&gt; isBlank = s -> s.isBlank();
+//  ^ target type tells compiler: test(String) -> boolean</pre>
+  <p>That is why a lambda alone — <code>s -> s.isEmpty()</code> — does not compile. It needs a target.</p>
+
+  <h2>Practice — pick the valid lambda</h2>
+  <p>Target type: <code>Predicate&lt;String&gt;</code> (method <code>boolean test(String)</code>).</p>
+
+  <div class="quiz" id="quiz-lambda">
+    <p class="quiz-question">Which lambda is valid?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">one param, expression returns value</button></li>
+      <li><button data-answer="wrong">one param, return without braces</button></li>
+      <li><button data-answer="wrong">block body, return is missing</button></li>
+      <li><button data-answer="wrong">two params, no parens at all</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <details style="margin-top:1rem; font-size:0.9rem; color:#555;">
+    <summary>Reveal the code behind each option</summary>
+    <pre>// correct:   s -> s.isEmpty()
+// wrong:     s -> return s.isEmpty();
+// wrong:     (s) -> { s.isEmpty(); }
+// wrong:     s, t -> s.isEmpty()</pre>
+  </details>
+
+  <h2>Retrieval — rewrite from memory</h2>
+  <p>Without looking above, write a lambda that implements <code>Runnable</code> and prints <code>"start"</code>. Then check:</p>
+  <pre>() -> System.out.println("start")</pre>
+  <p>Cover the answer, try yourself first — that effort is what builds retention.</p>
+
+  <h2>Primary reading</h2>
+  <p>Read <a href="https://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html">Oracle — Syntax of Lambda Expressions</a> and <a href="https://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html#target-typing">Target Typing</a>. Stop before method references.</p>
+
+  <h2>What's next</h2>
+  <p><a href="0003-predicate-function-consumer-supplier.html">Lesson 3 — Predicate, Function, Consumer, Supplier</a></p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — paste your lambda and the compiler error, if you have one.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-lambda', {
+      correct: 'Right. s -> s.isEmpty() is an expression body — its boolean result is returned automatically.',
+      wrong: 'Not valid. Expression bodies cannot use return; block bodies need return; multi-param lambdas need ().'
+    });
+  </script>
+</body>
+</html>

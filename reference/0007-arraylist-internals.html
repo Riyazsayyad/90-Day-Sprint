@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ArrayList Internals — Reference</title>
+  <meta name="description" content="Quick reference guide for Java ArrayList internals, covering capacity vs size formulas, 1.5x growth strategy, time complexities, and constant-time random access calculations.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <style>
+    .formula { font-family: "SF Mono", Menlo, monospace; font-size: 0.95rem; font-weight: bold; background: var(--surface); padding: 0.5rem 1rem; border-left: 3px solid var(--accent); margin: 0.5rem 0; display: inline-block; }
+  </style>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/0007-arraylist-internals.html">← Lesson 7</a> ·
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>ArrayList Internals Reference</h1>
+  <p class="meta"><a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/ArrayList.html">Oracle ArrayList Javadoc</a></p>
+
+  <h2>Core Structure</h2>
+  <p>Inside the JDK, an <code>ArrayList</code> is implemented as a wrapper around a primitive, dynamically-resized array:</p>
+  <pre><code>// The array buffer into which the elements of the ArrayList are stored.
+transient Object[] elementData;
+
+// The size of the ArrayList (the number of elements it contains).
+private int size;</code></pre>
+
+  <h2>Capacity vs Size</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left">Metric</th>
+      <th align="left">Capacity</th>
+      <th align="left">Size</th>
+    </tr>
+    <tr>
+      <td><strong>Definition</strong></td>
+      <td>The physical length of the backing array (<code>elementData.length</code>).</td>
+      <td>The logical count of elements added by the user (<code>size</code>).</td>
+    </tr>
+    <tr>
+      <td><strong>Default</strong></td>
+      <td>Starts at <code>0</code> (empty). Expands to <code>10</code> on the first insertion.</td>
+      <td>Starts at <code>0</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Relation</strong></td>
+      <td>Always greater than or equal to Size (<code>capacity >= size</code>).</td>
+      <td>Represents the index where the next element will be inserted.</td>
+    </tr>
+  </table>
+
+  <h2>Growth Strategy</h2>
+  <p>When <code>size == capacity</code>, adding another element triggers a resize:</p>
+  <ol>
+    <li>Calculate new capacity (1.5x of the old capacity):
+      <div class="formula">newCapacity = oldCapacity + (oldCapacity >> 1)</div>
+    </li>
+    <li>Allocate a new array of <code>newCapacity</code>.</li>
+    <li>Copy all elements from the old array using <code>System.arraycopy()</code>.</li>
+    <li>Discard the old array (making it eligible for Garbage Collection).</li>
+  </ol>
+
+  <h2>Time Complexities</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left">Operation</th>
+      <th align="left">Time Complexity</th>
+      <th align="left">Description / Cause</th>
+    </tr>
+    <tr>
+      <td><strong>Random Access (get/set)</strong></td>
+      <td><code>O(1)</code></td>
+      <td>Direct memory addressing math. No traversal needed.</td>
+    </tr>
+    <tr>
+      <td><strong>Insertion (Add to End)</strong></td>
+      <td><code>O(1)</code> Amortized</td>
+      <td>Usually <code>O(1)</code>. Occasional <code>O(n)</code> resize costs spread out over many additions.</td>
+    </tr>
+    <tr>
+      <td><strong>Insertion (Arbitrary Index)</strong></td>
+      <td><code>O(n)</code></td>
+      <td>Requires shifting all elements to the right from that index using <code>System.arraycopy</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Deletion (Arbitrary Index)</strong></td>
+      <td><code>O(n)</code></td>
+      <td>Requires shifting all elements to the left, and clearing the last element to avoid memory leaks.</td>
+    </tr>
+  </table>
+
+  <h2>Why is Random Access O(1)?</h2>
+  <p>An array is allocated as a contiguous block of memory. To read the element at index <code>i</code>, the computer does not traverse the array. Instead, it computes the exact memory address directly in one math operation:</p>
+  <div class="formula">Address(i) = BaseAddress + i * ElementSize</div>
+  <p>This memory addressing takes constant time, meaning it is independent of the size of the array.</p>
+</body>
+</html>

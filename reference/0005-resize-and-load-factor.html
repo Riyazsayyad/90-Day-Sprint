@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Resize & Load Factor — Reference</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/0005-resize-and-load-factor.html">← Lesson 5</a> ·
+    <a href="0004-hashmap-internals.html">Full internals</a>
+  </nav>
+
+  <h1>Resize &amp; Load Factor</h1>
+  <p class="meta"><a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/HashMap.html">Oracle HashMap</a></p>
+
+  <h2>Formulas</h2>
+  <pre>threshold = capacity × loadFactor
+resize when:  size > threshold
+new capacity = old capacity × 2   (always power of 2)</pre>
+
+  <h2>Defaults</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+    <tr style="border-bottom:1px solid #ddd;"><th>Constant</th><th>Value</th></tr>
+    <tr><td><code>DEFAULT_INITIAL_CAPACITY</code></td><td>16</td></tr>
+    <tr><td><code>DEFAULT_LOAD_FACTOR</code></td><td>0.75</td></tr>
+    <tr><td>First threshold</td><td>12</td></tr>
+    <tr><td>First resize at</td><td>13th entry</td></tr>
+  </table>
+
+  <h2>Tradeoffs</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+    <tr style="border-bottom:1px solid #ddd;"><th>Load factor</th><th>Effect</th></tr>
+    <tr><td>Higher (e.g. 0.9)</td><td>Less memory, longer chains, slower lookup</td></tr>
+    <tr><td>Lower (e.g. 0.5)</td><td>More memory, shorter chains, faster lookup</td></tr>
+    <tr><td>0.75 (default)</td><td>JDK's balanced default</td></tr>
+  </table>
+
+  <h2>Rehash on resize</h2>
+  <p>Index mask grows by one bit. Each entry stays at <code>oldIndex</code> or moves to <code>oldIndex + oldCapacity</code>.</p>
+
+  <h2>Avoiding resize</h2>
+  <pre>new HashMap&lt;&gt;(expectedMappings);  // Java 19+
+new HashMap&lt;&gt;((int)(n / 0.75f) + 1);  // older JDKs</pre>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Treeification — Reference</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/0006-hashmap-treeify.html">← Lesson 6</a> ·
+    <a href="0004-hashmap-internals.html">Full internals</a>
+  </nav>
+
+  <h1>Treeification Reference</h1>
+  <p class="meta"><a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/HashMap.html">Oracle HashMap</a></p>
+
+  <h2>Key Constants</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;"><th align="left">Constant</th><th align="left">Default Value</th><th align="left">Purpose</th></tr>
+    <tr><td><code>TREEIFY_THRESHOLD</code></td><td><code>8</code></td><td>Chain length threshold to convert a list to a tree. Triggered when the 9th node is added.</td></tr>
+    <tr><td><code>UNTREEIFY_THRESHOLD</code></td><td><code>6</code></td><td>Size below which a tree is converted back to a list during resize or removal.</td></tr>
+    <tr><td><code>MIN_TREEIFY_CAPACITY</code></td><td><code>64</code></td><td>Minimum table capacity required for treeification. Resizes instead if map capacity is smaller.</td></tr>
+  </table>
+
+  <h2>Data Structure Comparison</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;"><th align="left">Metric</th><th align="left">Linked List (Node)</th><th align="left">Red-Black Tree (TreeNode)</th></tr>
+    <tr><td>Worst-case Lookup</td><td><code>O(n)</code></td><td><code>O(log n)</code></td></tr>
+    <tr><td>Worst-case Insert</td><td><code>O(n)</code></td><td><code>O(log n)</code></td></tr>
+    <tr><td>Memory Overhead</td><td>Low (only <code>next</code> pointer)</td><td>High (<code>left</code>, <code>right</code>, <code>parent</code>, <code>red</code> color flag)</td></tr>
+    <tr><td>Key Requirements</td><td>None (only <code>hashCode()</code> and <code>equals()</code>)</td><td>Strongly prefers <code>Comparable</code> keys to break ties; falls back to class name comparison/identity hash code if not comparable.</td></tr>
+  </table>
+
+  <h2>Why is the Treeify Threshold 8?</h2>
+  <p>The JDK source code comments explain that under random hash codes, the sizes of buckets follow a <strong>Poisson distribution</strong>. With a default load factor of <code>0.75</code>, the probability of a bucket having a size of 8 is extremely small (about 1 in 10 million):</p>
+  <pre>
+List size occurrences probability:
+0:    0.60653066
+1:    0.30326533
+2:    0.07581633
+3:    0.01263606
+4:    0.00157952
+5:    0.00015795
+6:    0.00001316
+7:    0.00000094
+8:    0.00000006
+more: less than 1 in ten million</pre>
+  <p>Therefore, under normal usage, treeification should rarely happen. It acts as a safety net against poorly written hash functions and HashDoS security attacks.</p>
+</body>
+</html>

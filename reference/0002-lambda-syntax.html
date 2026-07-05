@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lambda Syntax — Reference</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav"><a href="../lessons/0002-lambda-expressions.html">← Lesson 2</a> · <a href="../reference/0001-functional-interface-rules.html">FI rules</a></nav>
+
+  <h1>Lambda Expression Syntax</h1>
+  <p class="meta">Quick reference · <a href="https://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html">Oracle tutorial</a></p>
+
+  <h2>Shape</h2>
+  <pre>(parameters) -> expression
+(parameters) -> { statements; }</pre>
+
+  <h2>Parameter forms</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+    <tr style="border-bottom:1px solid #ddd;"><th align="left">Case</th><th align="left">Syntax</th></tr>
+    <tr><td>Zero params</td><td><code>() -> expr</code></td></tr>
+    <tr><td>One param (inferred)</td><td><code>x -> expr</code> or <code>(x) -> expr</code></td></tr>
+    <tr><td>One param (typed)</td><td><code>(String s) -> expr</code></td></tr>
+    <tr><td>Multiple params</td><td><code>(a, b) -> expr</code> — parens required</td></tr>
+  </table>
+  <p>If you declare a type for one parameter, declare types for <em>all</em> parameters.</p>
+
+  <h2>Body forms</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+    <tr style="border-bottom:1px solid #ddd;"><th align="left">Form</th><th align="left">Returns?</th><th align="left">Example</th></tr>
+    <tr><td>Expression</td><td>Yes — value is returned</td><td><code>x -> x * 2</code></td></tr>
+    <tr><td>Block</td><td>Yes — needs <code>return</code></td><td><code>x -> { return x * 2; }</code></td></tr>
+    <tr><td>Void statement</td><td>No — single void call OK</td><td><code>s -> System.out.println(s)</code></td></tr>
+    <tr><td>Void block</td><td>No — no <code>return</code> value</td><td><code>() -> { System.out.println("hi"); }</code></td></tr>
+  </table>
+
+  <h2>Target typing</h2>
+  <p>The compiler infers parameter types from the <em>expected</em> functional interface — the variable type, method parameter, or cast on the left.</p>
+  <pre>Predicate&lt;String&gt; empty = s -> s.isEmpty();
+//                          ^ inferred as String</pre>
+
+  <h2>Anonymous class → lambda</h2>
+  <pre>// Before
+Runnable r = new Runnable() {
+    public void run() { System.out.println("go"); }
+};
+
+// After
+Runnable r = () -> System.out.println("go");</pre>
+</body>
+</html>

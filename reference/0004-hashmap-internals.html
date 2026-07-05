@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HashMap Internals — Reference</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <style>
+    .diagram { font-family: "SF Mono", Menlo, monospace; font-size: 0.75rem; line-height: 1.35; background: var(--surface); padding: 1rem; overflow-x: auto; white-space: pre; }
+  </style>
+</head>
+<body>
+  <nav class="lesson-nav"><a href="../lessons/0004-hashmap-buckets-and-put.html">← Lesson 4</a></nav>
+
+  <h1>HashMap Internals</h1>
+  <p class="meta"><a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/HashMap.html">Oracle HashMap</a></p>
+
+  <h2>Core structure</h2>
+  <div class="diagram">table[]  ← Node&lt;K,V&gt;[] (default capacity 16, always power of 2)
+
+index:  [0]    [1]    [2]    [3]    ...
+         null   Node→  null   Node→→
+                       Node         Node   ← collision chain</div>
+
+  <h2>Node fields</h2>
+  <pre>hash  — spread hash (cached)
+key, value
+next  — next node in same bucket (linked list)</pre>
+
+  <h2>Index calculation</h2>
+  <pre>hash = key.hashCode() spread:  h ^ (h >>> 16)
+index = (capacity - 1) & hash    // same as hash % capacity when capacity is power of 2</pre>
+
+  <h2>put() outcomes</h2>
+  <ol>
+    <li>Bucket empty → insert node</li>
+    <li>Same key (<code>hash</code> + <code>equals</code>) → replace value</li>
+    <li>Different key, same bucket → append to chain (or tree)</li>
+  </ol>
+
+  <h2>get() flow</h2>
+  <p>Compute index → if bucket empty return null → walk chain/tree comparing <code>hash</code> then <code>equals</code>.</p>
+
+  <h2>Resize</h2>
+  <pre>threshold = capacity × loadFactor   // default LF = 0.75
+when size > threshold → double capacity, rehash all entries</pre>
+  <p>Default: threshold 12 (16 × 0.75). First resize on the <strong>13th</strong> entry.</p>
+
+  <h2>Java 8+ treeification</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+    <tr style="border-bottom:1px solid #ddd;"><th>Constant</th><th>Value</th><th>Meaning</th></tr>
+    <tr><td><code>TREEIFY_THRESHOLD</code></td><td>8</td><td>Chain length → convert to red-black tree</td></tr>
+    <tr><td><code>UNTREEIFY_THRESHOLD</code></td><td>6</td><td>Tree shrinks → back to linked list</td></tr>
+    <tr><td><code>MIN_TREEIFY_CAPACITY</code></td><td>64</td><td>Below this table size, resize instead of treeify</td></tr>
+  </table>
+
+  <h2>Performance</h2>
+  <ul>
+    <li>Ideal: O(1) get/put — one bucket, no chain walk</li>
+    <li>Collision chain: O(n) worst case (list) or O(log n) (tree)</li>
+    <li>Iteration: O(capacity + size) — touches empty buckets too</li>
+  </ul>
+</body>
+</html>

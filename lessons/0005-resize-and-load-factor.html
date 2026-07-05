@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 5 — Resize and Load Factor</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <style>
+    .diagram { font-family: "SF Mono", Menlo, monospace; font-size: 0.78rem; line-height: 1.4; background: var(--surface); padding: 1rem; overflow-x: auto; white-space: pre; margin: 1rem 0; }
+  </style>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="0004-hashmap-buckets-and-put.html">← Lesson 4</a> ·
+    <a href="../reference/0005-resize-and-load-factor.html">Resize reference</a>
+  </nav>
+
+  <h1>Resize and Load Factor</h1>
+  <p class="meta">~8 minutes · builds on <a href="0004-hashmap-buckets-and-put.html">buckets &amp; put()</a></p>
+
+  <h2>Why resize exists</h2>
+  <p>As entries accumulate, buckets get crowded — collision chains grow and <code>get</code>/<code>put</code> slow down. HashMap grows the <code>table</code> array to spread entries across more buckets.</p>
+  <p class="cite">Source: <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/HashMap.html">Oracle HashMap — Implementation Notes</a></p>
+
+  <h2>Load factor</h2>
+  <div class="callout">
+    <strong>Load factor</strong>
+    How full the table is allowed to get before doubling. Default <code>0.75f</code> — a time/space tradeoff chosen by the JDK authors.
+  </div>
+  <pre>threshold = capacity × loadFactor
+
+// defaults: capacity 16, load factor 0.75
+threshold = 16 × 0.75 = 12</pre>
+  <p>Higher load factor → fewer empty buckets, less memory, longer chains. Lower load factor → more buckets, more memory, shorter chains.</p>
+  <p class="cite"><a href="https://www.baeldung.com/java-hashmap-load-factor">Baeldung — HashMap Load Factor</a></p>
+
+  <h2>When resize fires</h2>
+  <p>After every successful <code>put</code>, HashMap checks:</p>
+  <pre>if (++size > threshold)
+    resize();   // double capacity, rehash every entry</pre>
+  <p>With defaults: entries 1–12 fit without resize. The <strong>13th</strong> insert makes <code>size = 13 &gt; 12</code> → resize to capacity 32, new threshold 24.</p>
+
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;"><th align="left">Event</th><th align="left">capacity</th><th align="left">threshold</th></tr>
+    <tr><td>new HashMap()</td><td>16</td><td>12</td></tr>
+    <tr><td>13th entry added</td><td>32</td><td>24</td></tr>
+    <tr><td>25th entry added</td><td>64</td><td>48</td></tr>
+  </table>
+
+  <h2>What resize actually does</h2>
+  <ol>
+    <li>Allocate new array with <strong>double</strong> the capacity</li>
+    <li>For each entry in the old table, <strong>recompute index</strong> — mask changed from <code>15</code> to <code>31</code></li>
+    <li>Move entries into new buckets (chains may split across two indices)</li>
+  </ol>
+
+  <div class="diagram">Before resize (capacity 4, mask 011):
+
+index 2:  A → C → null
+
+After resize (capacity 8, mask 1111):
+
+index 2:  A → null        (stayed — extra bit was 0)
+index 6:  C → null        (moved  — extra bit was 1)</div>
+  <p>Each entry either stays or moves to <code>oldIndex + oldCapacity</code>. Cached <code>hash</code> in each Node avoids recomputing <code>hashCode()</code> during this walk.</p>
+
+  <h2>Cost of resize</h2>
+  <p>Resize is <strong>O(n)</strong> — every entry is revisited. Frequent resizes on a growing map cause latency spikes. If you know the final size upfront, set initial capacity to avoid them:</p>
+  <pre>// Java 19+: sized for ~100 entries without resize
+Map&lt;String, Integer&gt; map = new HashMap&lt;&gt;(100);
+
+// Older pattern: capacity = expectedSize / 0.75 + 1
+int cap = (int) (expectedSize / 0.75f) + 1;
+new HashMap&lt;&gt;(cap);</pre>
+  <p class="cite">Oracle: "If the initial capacity is greater than the maximum number of entries divided by the load factor, no rehash operations will ever occur."</p>
+
+  <h2>Practice — when does resize happen?</h2>
+  <p>Default <code>HashMap</code>: capacity 16, load factor 0.75.</p>
+
+  <div class="quiz" id="quiz-resize">
+    <p class="quiz-question">Which insert triggers the first resize?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="wrong">the eighth distinct key-value pair</button></li>
+      <li><button data-answer="wrong">the twelfth distinct key-value pair</button></li>
+      <li><button data-answer="correct">the thirteenth distinct key-value pair</button></li>
+      <li><button data-answer="wrong">the sixteenth distinct key-value pair</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Retrieval — calculate threshold</h2>
+  <p>Cover the answer. A map is created with <code>new HashMap&lt;&gt;(32, 0.5f)</code>. What is the threshold?</p>
+  <details style="font-size:0.9rem; color:#555;">
+    <summary>Reveal</summary>
+    <p><code>32 × 0.5 = 16</code>. Resize when the 17th entry is added (<code>size &gt; 16</code>).</p>
+  </details>
+
+  <h2>Primary reading</h2>
+  <p>Read <a href="https://www.baeldung.com/java-hashmap-load-factor">Baeldung — HashMap Load Factor</a> in full. Re-read the capacity/load-factor paragraph in the <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/HashMap.html">HashMap javadoc</a>.</p>
+
+  <h2>What's next</h2>
+  <p><a href="0006-hashmap-treeify.html">Lesson 6 — Treeification</a>: when collision chains become red-black trees (Java 8+).</p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — try calculating threshold for a custom constructor.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-resize', {
+      correct: 'Correct. threshold is 12; resize when size exceeds it — the 13th put triggers doubling.',
+      wrong: 'Not quite. threshold = 16 × 0.75 = 12. Resize fires when size > threshold, not at 12.'
+    });
+  </script>
+</body>
+</html>

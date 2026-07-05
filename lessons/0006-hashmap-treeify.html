@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 6 — Treeification</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <style>
+    .diagram { font-family: "SF Mono", Menlo, monospace; font-size: 0.78rem; line-height: 1.4; background: var(--surface); padding: 1rem; overflow-x: auto; white-space: pre; margin: 1rem 0; }
+  </style>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="0005-resize-and-load-factor.html">← Lesson 5</a> ·
+    <a href="../reference/0006-hashmap-treeify.html">Treeification reference</a>
+  </nav>
+
+  <h1>Treeification</h1>
+  <p class="meta">~7 minutes · builds on <a href="0005-resize-and-load-factor.html">resize &amp; load factor</a></p>
+
+  <h2>The problem: O(n) worst-case</h2>
+  <p>In standard hash tables, if many keys hash to the same bucket (due to poor <code>hashCode()</code> or an intentional hash collision attack), search times degrade from <code>O(1)</code> to <code>O(n)</code>. In Java 8, the JDK developers addressed this by introducing <strong>treeification</strong>.</p>
+  <p class="cite">Source: <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/HashMap.html">Oracle HashMap — Implementation Notes</a></p>
+
+  <h2>Red-Black Trees</h2>
+  <p>When a bucket's collision chain grows too long, the linked list is converted into a self-balancing <strong>Red-Black Tree</strong>. Under high collisions, this changes lookup and insertion performance from <code>O(n)</code> to <code>O(log n)</code>.</p>
+  <p>Instead of <code>Node</code> instances, the bucket uses <code>TreeNode</code> instances (which hold <code>left</code>, <code>right</code>, <code>parent</code>, and <code>red</code> properties).</p>
+
+  <div class="diagram">Linked List (O(n)):
+[Bucket 2] → A → B → C → D → E → F → G → H → I (9 nodes)
+
+Red-Black Tree (O(log n)):
+[Bucket 2] →        E
+                  /   \
+                 B     G
+                / \   / \
+               A   C F   H
+                    \     \
+                     D     I</div>
+
+  <h2>The two conditions for treeification</h2>
+  <p>A bucket does not instantly treeify just because it has collisions. Two thresholds must be met:</p>
+  <ol>
+    <li><strong>Treeify Threshold (<code>TREEIFY_THRESHOLD = 8</code>):</strong> A linked list chain must grow to length 8. When adding the 9th node (chain length becomes 9), treeification is triggered.</li>
+    <li><strong>Minimum Capacity (<code>MIN_TREEIFY_CAPACITY = 64</code>):</strong> The total capacity of the map must be at least 64. If the map is smaller than 64 (e.g. default capacity of 16), the HashMap will trigger a <code>resize()</code> instead of treeifying. Resizing splits the bucket and distributes nodes, which usually resolves the collision chain.</li>
+  </ol>
+  <p class="cite">Source: JDK 8+ <code>HashMap.java</code> source code (<code>treeifyBin</code> method)</p>
+
+  <h2>Untreeification (The Hysteresis)</h2>
+  <p>If the number of entries in a treeified bucket decreases (due to removals or split buckets during resizing), the tree is converted back to a linked list. This happens when the count falls to <strong><code>UNTREEIFY_THRESHOLD = 6</code></strong>.</p>
+  <div class="callout">
+    <strong>Why 6 and not 8?</strong>
+    Having different thresholds (8 for treeifying, 6 for untreeifying) prevents <em>thrashing</em> — rapid, expensive conversions back and forth between a list and a tree if the bucket size fluctuates around 8.
+  </div>
+
+  <h2>Practice — when does it treeify?</h2>
+  <p>Assume you create a new <code>HashMap</code> with default options (capacity 16) and insert 9 keys that all hash to the same bucket index.</p>
+
+  <div class="quiz" id="quiz-treeify">
+    <p class="quiz-question">What is the result after inserting the 9th key?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">the map will resize and double its capacity</button></li>
+      <li><button data-answer="wrong">the bucket will treeify into a search tree</button></li>
+      <li><button data-answer="wrong">the map will throw a hash collision error</button></li>
+      <li><button data-answer="wrong">the bucket will ignore the newly added node</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Retrieval — identify the thresholds</h2>
+  <p>Cover the answer. What are the default values for the treeify threshold, untreeify threshold, and minimum treeify capacity in Java's HashMap?</p>
+  <details style="font-size:0.9rem; color:#555; margin-top:0.5rem;">
+    <summary>Reveal</summary>
+    <p><code>TREEIFY_THRESHOLD = 8</code>, <code>UNTREEIFY_THRESHOLD = 6</code>, and <code>MIN_TREEIFY_CAPACITY = 64</code>.</p>
+  </details>
+
+  <h2>Primary reading</h2>
+  <p>Read the Java 8+ HashMap Treeification explanation on <a href="https://www.baeldung.com/java-hashmap-advanced#treeification">Baeldung — HashMap Advanced (Section 6)</a>. Then, review the implementation comments at the top of the <a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/HashMap.java">JDK HashMap source code</a> (search for <code>TREEIFY_THRESHOLD</code>).</p>
+
+  <h2>What's next</h2>
+  <p>That completes the HashMap internals core track! You can explore custom key design, mutable keys, or ask your teacher for a summary of Map variations.</p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — try asking why Red-Black Trees are used instead of simpler AVL Trees or Binary Search Trees.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-treeify', {
+      correct: 'Correct! Since capacity (16) is less than MIN_TREEIFY_CAPACITY (64), the map resizes instead of treeifying.',
+      wrong: 'Not quite. Although the chain length reaches 9, the capacity is only 16. It must be at least 64 to treeify, so it resizes.'
+    });
+  </script>
+</body>
+</html>

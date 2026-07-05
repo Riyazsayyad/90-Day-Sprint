@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 4 — HashMap: Buckets and put()</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <style>
+    .diagram { font-family: "SF Mono", Menlo, monospace; font-size: 0.78rem; line-height: 1.4; background: var(--surface); padding: 1rem; overflow-x: auto; white-space: pre; margin: 1rem 0; }
+  </style>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="0003-predicate-function-consumer-supplier.html">← prior track</a> ·
+    <a href="../reference/0004-hashmap-internals.html">Internals reference</a>
+  </nav>
+
+  <h1>HashMap: Buckets and put()</h1>
+  <p class="meta">~10 minutes · <a href="../MISSION.md">mission</a> · first of HashMap series</p>
+
+  <h2>Not magic — an array of buckets</h2>
+  <p>A <code>HashMap</code> is a <strong>hash table</strong>: an array called <code>table</code>, each slot a <em>bucket</em>. Each bucket holds zero or more key-value entries.</p>
+
+  <div class="diagram">table (capacity 8):
+
+[0] null
+[1] null
+[2] (hash|keyA|valA|next) → (hash|keyD|valD|null)   ← collision chain
+[3] null
+[4] (hash|keyB|valB|null)
+...</div>
+
+  <p>Each entry is a <code>Node</code>: cached <code>hash</code>, <code>key</code>, <code>value</code>, and <code>next</code> pointer for collisions.</p>
+  <p class="cite">Source: <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/HashMap.html">Oracle HashMap javadoc</a></p>
+
+  <h2>Step 1 — spread the hash</h2>
+  <p>Java doesn't use <code>key.hashCode()</code> raw. It spreads high bits into low bits so poor <code>hashCode()</code> implementations still distribute:</p>
+  <pre>int h = key.hashCode();
+int hash = h ^ (h >>> 16);</pre>
+
+  <h2>Step 2 — pick a bucket index</h2>
+  <p>Capacity is always a <strong>power of 2</strong> (default 16). Index uses bitwise AND — fast modulo:</p>
+  <pre>int index = (capacity - 1) & hash;
+// capacity 16 → index = hash & 15  →  always 0..15</pre>
+
+  <h2>Step 3 — put() at that bucket</h2>
+  <p>Three outcomes when you call <code>map.put(key, value)</code>:</p>
+
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;"><th align="left">Case</th><th align="left">What happens</th></tr>
+    <tr><td>Bucket empty</td><td>Create a <code>Node</code>, store at <code>table[index]</code></td></tr>
+    <tr><td>Same key</td><td><code>hash</code> matches and <code>key.equals()</code> → replace value</td></tr>
+    <tr><td>Different key, same index</td><td><strong>Collision</strong> — link new node via <code>next</code> (tail of chain)</td></tr>
+  </table>
+
+  <pre>map.put("Alice", 1);  // bucket 5 empty → Node stored
+map.put("Bob",   2);  // bucket 2 empty → Node stored
+map.put("Carol", 3);  // bucket 5 again → chain: Alice → Carol</pre>
+
+  <p class="cite">Collisions are normal — two different keys can land in the same bucket. The map walks the chain with <code>equals</code> to find the right one.</p>
+
+  <h2>get() is the mirror</h2>
+  <pre>V get(K key) {
+    int index = (capacity - 1) & spreadHash(key);
+    for (Node n = table[index]; n != null; n = n.next)
+        if (n.hash == hash && key.equals(n.key))
+            return n.value;
+    return null;
+}</pre>
+  <p>Check hash first (fast), then <code>equals</code> (correct).</p>
+
+  <h2>Practice — what happens on put?</h2>
+  <p>Bucket at index 3 already has one entry for key <code>"X"</code>. You call <code>put("Y", 99)</code> and <code>"Y".hashCode()</code> maps to index 3, but <code>"Y".equals("X")</code> is false.</p>
+
+  <div class="quiz" id="quiz-put">
+    <p class="quiz-question">What does HashMap do next?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="wrong">replace the old value at index three</button></li>
+      <li><button data-answer="correct">append new node to chain at three</button></li>
+      <li><button data-answer="wrong">throw exception for duplicate index</button></li>
+      <li><button data-answer="wrong">skip put and leave map unchanged</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Retrieval — explain in one sentence</h2>
+  <p>Cover the answer. Why does HashMap store <code>hash</code> inside each <code>Node</code> instead of calling <code>key.hashCode()</code> on every comparison?</p>
+  <details style="font-size:0.9rem; color:#555; margin-top:0.5rem;">
+    <summary>Reveal</summary>
+    <p>During resize, keys are re-indexed — cached hash avoids recomputing. On lookup, comparing cached hash before <code>equals</code> skips expensive equality checks when hashes differ.</p>
+  </details>
+
+  <h2>Primary reading</h2>
+  <p>Read the <strong>Implementation Notes</strong> section of the <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/HashMap.html">HashMap javadoc</a> — capacity, load factor, and rehashing. Then skim <a href="https://www.baeldung.com/java-hashmap-advanced">Baeldung — HashMap Under the Hood</a> sections 1–6.</p>
+
+  <h2>What's next</h2>
+  <p><a href="0005-resize-and-load-factor.html">Lesson 5 — Resize &amp; load factor</a> · Lesson 6: treeification.</p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — draw a bucket diagram or paste a put/get scenario.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-put', {
+      correct: 'Right. Different keys at the same index form a collision chain — new Node linked via next.',
+      wrong: 'No. Same index ≠ same key. Replace only when hash and equals match; else chain grows.'
+    });
+  </script>
+</body>
+</html>

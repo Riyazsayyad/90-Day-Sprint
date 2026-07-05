@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 1 — What Is a Functional Interface?</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">Lesson 1 of ? · <a href="../reference/0001-functional-interface-rules.html">Rules reference</a></nav>
+
+  <h1>What Is a Functional Interface?</h1>
+  <p class="meta">~5 minutes · ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>The problem it solves</h2>
+  <p>Before Java 8, passing behaviour meant anonymous inner classes:</p>
+  <pre>button.addActionListener(new ActionListener() {
+    public void actionPerformed(ActionEvent e) {
+        System.out.println("clicked");
+    }
+});</pre>
+  <p>Verbose. The interface had <em>one</em> method to implement — the compiler already knew which one. Lambdas exploit that fact.</p>
+  <p class="cite">Background: <a href="https://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html">Oracle — Lambda Expressions tutorial</a></p>
+
+  <h2>The definition</h2>
+  <div class="callout">
+    <strong>Functional interface</strong>
+    An interface with exactly <em>one</em> abstract method. It is the <em>target type</em> for a lambda or method reference.
+  </div>
+  <p>Default and static methods don't count toward the one-method limit. Neither do <code>Object</code> overrides like <code>equals</code>.</p>
+  <p class="cite">Source: <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/lang/FunctionalInterface.html">@FunctionalInterface javadoc</a></p>
+
+  <h2>See it work</h2>
+  <pre>@FunctionalInterface
+interface Greeter {
+    String greet(String name);  // the one abstract method
+    default void shout(String name) {
+        System.out.println(greet(name).toUpperCase());
+    }
+}
+
+// Lambda supplies the one method:
+Greeter casual = name -> "hey, " + name;
+System.out.println(casual.greet("Riyaz"));  // hey, Riyaz</pre>
+
+  <h2>Practice — spot the functional interface</h2>
+  <p>Which interface can be implemented with a lambda?</p>
+
+  <div class="quiz" id="quiz-sam">
+    <p class="quiz-question">Pick the functional interface:</p>
+    <ul class="quiz-options">
+      <li><button data-answer="wrong">Two methods, both abstract</button></li>
+      <li><button data-answer="correct">One abstract, one default</button></li>
+      <li><button data-answer="wrong">Three abstract methods total</button></li>
+      <li><button data-answer="wrong">One abstract equals method</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary reading</h2>
+  <p>Read the first two sections of the <a href="https://docs.oracle.com/javase/tutorial/java/javaOO/lambdaexpressions.html">Oracle Lambda Expressions tutorial</a> — stop after "Approach 5". That is the authoritative story of why functional interfaces exist.</p>
+
+  <h2>What's next</h2>
+  <p><a href="0002-lambda-expressions.html">Lesson 2 — Lambda Expressions</a>: syntax, expression vs block bodies, and target typing.</p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — paste a code snippet or describe what confused you.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-sam', {
+      correct: 'Correct. Default methods have bodies — only one method stays abstract, so lambdas still work.',
+      wrong: 'Not quite. Count only abstract methods. Defaults and statics don\'t count; Object overrides don\'t either.'
+    });
+  </script>
+</body>
+</html>
