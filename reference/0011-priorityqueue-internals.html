@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PriorityQueue Internals — Reference</title>
+  <meta name="description" content="Quick reference guide for Java PriorityQueue internals, detailing binary heap array index equations, sift-up/sift-down pseudocode, and complexities.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/0011-priorityqueue-internals.html">← Lesson 11</a> ·
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>PriorityQueue Internals Reference</h1>
+  <p class="meta"><a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/PriorityQueue.html">Oracle PriorityQueue Javadoc</a></p>
+
+  <h2>The Backing Array (Binary Heap)</h2>
+  <p>In Java, a <code>PriorityQueue</code> is implemented as a <strong>binary heap</strong> stored inside a contiguous array. The binary tree is kept <strong>complete</strong> (all levels filled except possibly the last, which is filled left-to-right), allowing nodes to be mapped directly to array indices without pointers:</p>
+  <pre><code>public class PriorityQueue&lt;E&gt; extends AbstractQueue&lt;E&gt; {
+    // Backing array stores heap elements
+    transient Object[] queue; 
+    
+    // Number of elements in the queue
+    int size;
+}</code></pre>
+
+  <h2>Binary Heap Math Formulas</h2>
+  <p>For any node stored at index <code>i</code> in the zero-indexed array:</p>
+  <ul>
+    <li><strong>Left Child Index:</strong> <code>2 * i + 1</code></li>
+    <li><strong>Right Child Index:</strong> <code>2 * i + 2</code></li>
+    <li><strong>Parent Index:</strong> <code>(i - 1) / 2</code> (rounded down)</li>
+  </ul>
+
+  <h2>Sift-Up and Sift-Down Algorithms</h2>
+  <p>To preserve the heap property (parent $\le$ child for min-heap), the queue reorganizes elements using two core routines:</p>
+  
+  <h3>Sift-Up (Inserting Elements)</h3>
+  <p>When you call <code>offer(e)</code>, the new element is appended at the end of the array (index <code>size</code>). If it is smaller than its parent, it swaps places. This repeats until it reaches the root or is $\ge$ its parent:</p>
+  <pre><code>private void siftUp(int k, E x) {
+    while (k &gt; 0) {
+      int parent = (k - 1) &gt;&gt;&gt; 1;
+      Object e = queue[parent];
+      if (comparator.compare(x, (E) e) &gt;= 0)
+        break;
+      queue[k] = e; // Pull parent down
+      k = parent;   // Move pointer up
+    }
+    queue[k] = x;
+  }</code></pre>
+
+  <h3>Sift-Down (Extracting Elements)</h3>
+  <p>When you call <code>poll()</code>, the root (index <code>0</code>) is removed. The last element in the array is moved to index <code>0</code>, and is sifted down by swapping with its smaller child. This repeats until it has no children or is $\le$ both children:</p>
+  <pre><code>private void siftDown(int k, E x) {
+    int half = size &gt;&gt;&gt; 1; // Loop while k has at least one child
+    while (k &lt; half) {
+      int child = (k &lt;&lt; 1) + 1; // Left child index
+      Object c = queue[child];
+      int right = child + 1;
+      // If right child exists and is smaller than left child, use right
+      if (right &lt; size && comparator.compare((E) c, (E) queue[right]) &gt; 0)
+        c = queue[child = right];
+      if (comparator.compare(x, (E) c) &lt;= 0)
+        break;
+      queue[k] = c; // Pull smaller child up
+      k = child;    // Move pointer down
+    }
+    queue[k] = x;
+  }</code></pre>
+
+  <h2>Max-Heap Custom Comparator</h2>
+  <p>By default, <code>PriorityQueue</code> implements a min-heap. To build a max-heap, configure it with a reversing comparator:</p>
+  <pre><code>// Method 1: Using Comparator helper
+  PriorityQueue&lt;Integer&gt; maxHeap = new PriorityQueue&lt;&gt;(Comparator.reverseOrder());
+  
+  // Method 2: Custom Lambda
+  PriorityQueue&lt;Integer&gt; maxHeap = new PriorityQueue&lt;&gt;((a, b) -&gt; Integer.compare(b, a));</code></pre>
+
+  <h2>Complexity Comparison Table</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left">Operation</th>
+      <th align="left">PriorityQueue</th>
+      <th align="left">HashSet</th>
+      <th align="left">TreeSet</th>
+    </tr>
+    <tr>
+      <td><strong>peek() (get minimum)</strong></td>
+      <td><code>O(1)</code></td>
+      <td><code>O(1)</code> (unordered random)</td>
+      <td><code>O(log n)</code> (first())</td>
+    </tr>
+    <tr>
+      <td><strong>offer(element) (insert)</strong></td>
+      <td><code>O(log n)</code></td>
+      <td><code>O(1)</code> average</td>
+      <td><code>O(log n)</code></td>
+    </tr>
+    <tr>
+      <td><strong>poll() (remove minimum)</strong></td>
+      <td><code>O(log n)</code></td>
+      <td><code>O(1)</code> (unordered random)</td>
+      <td><code>O(log n)</code> (pollFirst())</td>
+    </tr>
+    <tr>
+      <td><strong>Constructor(Collection c)</strong></td>
+      <td><code>O(n)</code> (via heapify)</td>
+      <td><code>O(n)</code></td>
+      <td><code>O(n log n)</code></td>
+    </tr>
+  </table>
+
+  <h2>The Iterator Ordering Trap</h2>
+  <p>The iterator returned by <code>priorityQueue.iterator()</code> is <strong>not guaranteed</strong> to yield elements in order. It simply scans the backing array in linear index order (<code>[0], [1], [2], ...</code>). To retrieve elements in sorted order, you must call <code>poll()</code> repeatedly until the queue is empty.</p>
+</body>
+</html>

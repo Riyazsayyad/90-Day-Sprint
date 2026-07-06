@@ -30,3 +30,9 @@
 - Mission.md, Resources.md, and Glossary.md updated for the new track.
 - Lesson 7 created: Backing array (`Object[] elementData`), capacity vs size, growth strategy (1.5x capacity), random access memory addressing math, and insertion/deletion element shifting costs.
 - Interactive JavaScript-based simulator built inside the lesson to animate array resizing and shifting elements left/right.
+
+## Session 8 (2026-07-05)
+- User requested lesson on LinkedList internals (via `/teach 2. LinkedList`).
+- Mission.md, Resources.md, and Glossary.md updated to encompass both ArrayList and LinkedList under a unified "Java List Internals" track.
+- Lesson 8 created: Doubly linked list Node structure (`item`, `next`, `prev` references), O(n) random access, O(1) link modifications once reference is known, and bidirectional search optimization.
+- Interactive JavaScript doubly linked list simulator built inside the lesson, animating pointer traversals and node insertions.

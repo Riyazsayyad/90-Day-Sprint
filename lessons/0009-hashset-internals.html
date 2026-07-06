@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 9 — HashSet Internals</title>
+  <meta name="description" content="Learn Java HashSet internals: how it uses a backing HashMap, why duplicate elements are rejected, the importance of equals() and hashCode(), and the average vs worst-case complexities.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <style>
+    /* HashSet Simulator Styles */
+    .simulator {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1.25rem;
+      margin: 1.5rem 0;
+    }
+    .sim-stats {
+      display: flex;
+      justify-content: space-around;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      background: #fff;
+      padding: 0.5rem;
+      border: 1px solid var(--border);
+    }
+    .stat-box {
+      text-align: center;
+    }
+    .stat-val {
+      font-weight: bold;
+      color: var(--accent);
+      font-size: 1.1rem;
+    }
+    .sim-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .btn-row {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .sim-btn {
+      font-family: inherit;
+      font-size: 0.8rem;
+      padding: 0.4rem 0.6rem;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .sim-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: #fafaf5;
+    }
+    .sim-btn:disabled {
+      color: #ccc;
+      cursor: not-allowed;
+    }
+    .bucket-row {
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 4px;
+      min-height: 2.8rem;
+      padding: 0.2rem 0.5rem;
+      margin-bottom: 0.3rem;
+      transition: all 0.25s ease;
+    }
+    .bucket-index {
+      font-family: "SF Mono", Menlo, monospace;
+      font-weight: bold;
+      font-size: 0.8rem;
+      color: var(--muted);
+      width: 3.5rem;
+      border-right: 1px solid var(--border);
+      margin-right: 0.5rem;
+      user-select: none;
+    }
+    .chain-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      flex-grow: 1;
+      flex-wrap: wrap;
+    }
+    .map-node {
+      display: flex;
+      border: 1px solid var(--border);
+      background: #eef5f9;
+      border-radius: 3px;
+      overflow: hidden;
+      font-size: 0.75rem;
+      transition: all 0.3s ease;
+    }
+    .node-key {
+      padding: 0.2rem 0.4rem;
+      font-weight: bold;
+      border-right: 1px solid var(--border);
+      background: #c5d9e8;
+    }
+    .node-val {
+      padding: 0.2rem 0.4rem;
+      color: var(--muted);
+    }
+    .node-arrow {
+      color: var(--muted);
+      font-weight: bold;
+      user-select: none;
+    }
+    .active-row {
+      border-color: #f5b041;
+      background: #fdebd0;
+      box-shadow: 0 0 5px rgba(245,176,65,0.4);
+    }
+    .active-node {
+      border-color: #f5b041;
+      transform: scale(1.05);
+      box-shadow: 0 0 6px rgba(245,176,65,0.5);
+    }
+    .node-success {
+      border-color: #27ae60;
+      transform: scale(1.05);
+      box-shadow: 0 0 6px rgba(39,174,96,0.5);
+    }
+    .node-success .node-key {
+      background: #abebc6;
+    }
+    .node-failure {
+      border-color: #cb4335;
+      transform: scale(1.05);
+      box-shadow: 0 0 6px rgba(203,67,53,0.5);
+    }
+    .node-failure .node-key {
+      background: #fadbd8;
+    }
+    .sim-log {
+      margin-top: 0.75rem;
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+      min-height: 2.2rem;
+      background: #fff;
+      padding: 0.4rem;
+      border: 1px solid var(--border);
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="0008-linkedlist-internals.html">← Lesson 8</a> ·
+    <a href="../reference/0009-hashset-internals.html">HashSet reference</a>
+  </nav>
+
+  <h1>HashSet Internals</h1>
+  <p class="meta">~10 minutes · builds on <a href="0004-hashmap-buckets-and-put.html">HashMap internals</a></p>
+
+  <h2>The Backing HashMap</h2>
+  <p>In Java, a <code>HashSet</code> does not implement hashing logic or collision buckets from scratch. Instead, it is a simple wrapper around a <code>HashMap</code>. When you instantiate a <code>HashSet</code>, it secretly allocates an internal <code>HashMap</code> instance:</p>
+  <pre><code>public HashSet() {
+    map = new HashMap&lt;&gt;();
+}</code></pre>
+  <p>Every element you add to a <code>HashSet</code> is stored as a <strong>key</strong> in this backing map. Because a map requires both keys and values, the set uses a single static sentinel dummy object called <code>PRESENT</code> as the value for every entry:</p>
+  <pre><code>private static final Object PRESENT = new Object();</code></pre>
+  <p class="cite">Source: <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/HashSet.html">Oracle HashSet Specifications</a></p>
+
+  <h2>How Duplicates are Rejected</h2>
+  <p>A key property of a <code>Set</code> is that it cannot contain duplicate elements. This rule is naturally enforced by the backing map's key uniqueness guarantee.</p>
+  <p>When you call <code>hashSet.add(element)</code>, it delegates directly to <code>map.put(element, PRESENT)</code>:</p>
+  <pre><code>public boolean add(E e) {
+    return map.put(e, PRESENT) == null;
+}</code></pre>
+  <p>Recall the behavior of <code>HashMap.put(K key, V value)</code>:</p>
+  <ul>
+    <li>If the key is <strong>new</strong>: The map stores it, returns <code>null</code>. The set checks <code>null == null</code> and returns <strong><code>true</code></strong> (item added).</li>
+    <li>If the key is a <strong>duplicate</strong>: The map replaces the old value with <code>PRESENT</code> (which changes nothing) and returns the previous value (which is <code>PRESENT</code>). The set checks <code>PRESENT == null</code>, which evaluates to <strong><code>false</code></strong> (item rejected).</li>
+  </ul>
+
+  <h2>Interactive HashSet Simulator</h2>
+  <p>Add strings to the HashSet below. Watch how the backing HashMap computes their hash values, finds their bucket slots, traverses collision chains, and returns either <code>null</code> or <code>PRESENT</code> to accept or reject the element.</p>
+
+  <div class="simulator" id="hs-sim">
+    <div class="sim-stats">
+      <div class="stat-box">
+        <div>HashMap Capacity</div>
+        <div class="stat-val">8</div>
+      </div>
+      <div class="stat-box">
+        <div>HashMap Size</div>
+        <div class="stat-val" id="sim-map-size">0</div>
+      </div>
+      <div class="stat-box">
+        <div>HashSet Size</div>
+        <div class="stat-val" id="sim-set-size">0</div>
+      </div>
+    </div>
+
+    <div class="sim-controls">
+      <div class="btn-row">
+        <button class="sim-btn" id="btn-add-apple">Add "Apple"</button>
+        <button class="sim-btn" id="btn-add-banana">Add "Banana"</button>
+        <button class="sim-btn" id="btn-add-cherry">Add "Cherry"</button>
+        <button class="sim-btn" id="btn-add-apple-dup">Add "Apple" (Duplicate)</button>
+      </div>
+      <div class="btn-row" style="margin-top: 0.25rem;">
+        <input type="text" id="custom-input" placeholder="Custom key..." style="font-family:inherit; font-size:0.85rem; padding:0.35rem 0.5rem; border:1px solid var(--border); border-radius:2px; width:7.5rem;">
+        <button class="sim-btn" id="btn-add-custom">Add Custom</button>
+        <button class="sim-btn" id="btn-reset" style="background:#f7f7f0;">Reset Map</button>
+      </div>
+    </div>
+
+    <div id="sim-table">
+      <!-- Bucket rows generated by JS -->
+    </div>
+
+    <div class="sim-log" id="sim-log">
+      Simulator initialized. Backing HashMap table allocated (8 slots).
+    </div>
+  </div>
+
+  <h2>Role of equals() and hashCode()</h2>
+  <p>To identify if a key is a duplicate, the backing <code>HashMap</code> needs a way to locate and compare objects. It does this in two steps using the element's <code>hashCode()</code> and <code>equals()</code> methods:</p>
+  <ol>
+    <li><strong>Locate the bucket</strong>: It hashes the element and finds the bucket slot index.</li>
+    <li><strong>Compare key references</strong>: If the bucket already contains nodes, the map walks the chain, checking <code>if (node.hash == hash && (node.key == key || key.equals(node.key)))</code>.</li>
+  </ol>
+  <p>Because of this, if you store custom objects in a <code>HashSet</code>, you <strong>must override both</strong> <code>hashCode()</code> and <code>equals()</code>. If you override only one, or fail to override them consistently, the set will either allow duplicate entries or fail to locate elements during lookup.</p>
+
+  <h2>Time Complexities</h2>
+  <p>Because all operations delegate directly to the backing <code>HashMap</code>, they share its performance characteristics:</p>
+  <ul>
+    <li><strong><code>add()</code>, <code>remove()</code>, <code>contains()</code></strong>:
+      <ul>
+        <li><strong>Average case: <code>O(1)</code></strong>. If hash codes are well-distributed, elements map to distinct buckets with short chains, requiring constant-time lookups.</li>
+        <li><strong>Worst case: <code>O(log n)</code></strong> (Java 8+) / <strong><code>O(n)</code></strong> (Java 7-). Under severe hash collisions where all elements hash to the same bucket index, the chain grows linear in size. In Java 8+, the bucket treeifies into a Red-Black Tree, capping search time to logarithmic complexity.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>Practice — Duplicate Rejection</h2>
+  <p>Test your understanding of the return value check that determines if an element was already in the set.</p>
+
+  <div class="quiz" id="quiz-duplicate">
+    <p class="quiz-question">What does the backing Map return when adding a duplicate key?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">A sentinel PRESENT object</button></li>
+      <li><button data-answer="wrong">A null reference pointer </button></li>
+      <li><button data-answer="wrong">A new key element object </button></li>
+      <li><button data-answer="wrong">A map size integer value </button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Practice — Bucket Treeification</h2>
+  <p>Recall the performance limit of hash collections under collisions.</p>
+
+  <div class="quiz" id="quiz-complexity">
+    <p class="quiz-question">What is the worst-case time complexity of HashSet.contains() in Java 8+ if keys have identical hash codes?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">O(log n)</button></li>
+      <li><button data-answer="wrong">O(1)    </button></li>
+      <li><button data-answer="wrong">O(n)    </button></li>
+      <li><button data-answer="wrong">O(n^2)  </button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Retrieval Practice</h2>
+  <p>Cover the answer. Why is the dummy value <code>PRESENT</code> defined as a static member (<code>private static final Object PRESENT = new Object();</code>) instead of creating a new <code>Object</code> instance inside each HashSet or for each element?</p>
+  <details style="font-size:0.9rem; color:#555; margin-top:0.5rem;">
+    <summary>Reveal</summary>
+    <p>To conserve memory. Since the backing <code>HashMap</code> requires a value for every node, creating a new dummy object instance per element would waste heaps of memory. Defining <code>PRESENT</code> as a static member creates exactly one instance of <code>Object</code> in heap memory, shared across all keys and all instances of <code>HashSet</code> in the application.</p>
+  </details>
+
+  <h2>Primary reading</h2>
+  <p>Review the official JDK source implementation in the <a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/HashSet.java">HashSet.java source code</a> (focus on the constructors, and the <code>add</code> and <code>contains</code> methods).</p>
+
+  <h2>What's next</h2>
+  <p><a href="0010-treeset-internals.html">Lesson 10 — TreeSet Internals</a> · Learn how Java stores unique elements in sorted order using a Red-Black Tree.</p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — for example, ask how <code>HashSet</code>'s iterator yields elements (why order is not guaranteed).
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-duplicate', {
+      correct: "Correct! The Map.put(key, PRESENT) call returns the previous value, which is the PRESENT object if the key already existed, allowing the HashSet to detect a duplicate.",
+      wrong: "Not quite. Recall that Map.put returns the old value on duplicate, which in HashSet's case is always the sentinel PRESENT object."
+    });
+
+    initQuiz('quiz-complexity', {
+      correct: "Correct! Since Java 8, when a bucket contains more than 8 elements with colliding hashes (and table capacity is at least 64), it treeifies the bucket into a Red-Black Tree, optimizing lookup to O(log n).",
+      wrong: "Not quite. Remember that Java 8+ treeifies highly collided buckets, reducing the worst case from O(n) down to O(log n)."
+    });
+
+    // SIMULATOR CODE
+    (function() {
+      const capacity = 8;
+      let buckets = Array.from({ length: capacity }, () => []);
+      let isAnimating = false;
+
+      const simMapSize = document.getElementById('sim-map-size');
+      const simSetSize = document.getElementById('sim-set-size');
+      const simTable = document.getElementById('sim-table');
+      const simLog = document.getElementById('sim-log');
+
+      const btnApple = document.getElementById('btn-add-apple');
+      const btnBanana = document.getElementById('btn-add-banana');
+      const btnCherry = document.getElementById('btn-add-cherry');
+      const btnAppleDup = document.getElementById('btn-add-apple-dup');
+      const btnCustom = document.getElementById('btn-add-custom');
+      const btnReset = document.getElementById('btn-reset');
+      const customInput = document.getElementById('custom-input');
+
+      function computeHash(key) {
+        let h = 0;
+        for (let i = 0; i < key.length; i++) {
+          h = 31 * h + key.charCodeAt(i);
+        }
+        return Math.abs(h);
+      }
+
+      function spreadHash(h) {
+        return h ^ (h >>> 16);
+      }
+
+      function getIndex(sh) {
+        return (capacity - 1) & sh;
+      }
+
+      function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+      }
+
+      function log(msg) {
+        simLog.textContent = msg;
+      }
+
+      function disableControls(disabled) {
+        btnApple.disabled = disabled;
+        btnBanana.disabled = disabled;
+        btnCherry.disabled = disabled;
+        btnAppleDup.disabled = disabled;
+        btnCustom.disabled = disabled;
+        btnReset.disabled = disabled;
+        customInput.disabled = disabled;
+      }
+
+      function updateUI() {
+        simTable.innerHTML = '';
+        let totalElements = 0;
+
+        for (let idx = 0; idx < capacity; idx++) {
+          const row = document.createElement('div');
+          row.className = 'bucket-row';
+          row.id = `bucket-row-${idx}`;
+
+          const idxDiv = document.createElement('div');
+          idxDiv.className = 'bucket-index';
+          idxDiv.textContent = `[${idx}]`;
+          row.appendChild(idxDiv);
+
+          const chainWrapper = document.createElement('div');
+          chainWrapper.className = 'chain-wrapper';
+          chainWrapper.id = `chain-wrapper-${idx}`;
+
+          const chain = buckets[idx];
+          totalElements += chain.length;
+
+          if (chain.length === 0) {
+            const emptySpan = document.createElement('span');
+            emptySpan.style.color = '#ccc';
+            emptySpan.style.fontStyle = 'italic';
+            emptySpan.style.fontSize = '0.75rem';
+            emptySpan.textContent = 'null';
+            chainWrapper.appendChild(emptySpan);
+          } else {
+            chain.forEach((node, nodeIdx) => {
+              const nodeDiv = document.createElement('div');
+              nodeDiv.className = 'map-node';
+              nodeDiv.id = `node-${idx}-${nodeIdx}`;
+
+              const keySpan = document.createElement('span');
+              keySpan.className = 'node-key';
+              keySpan.textContent = node.key;
+
+              const valSpan = document.createElement('span');
+              valSpan.className = 'node-val';
+              valSpan.textContent = 'PRESENT';
+
+              nodeDiv.appendChild(keySpan);
+              nodeDiv.appendChild(valSpan);
+              chainWrapper.appendChild(nodeDiv);
+
+              if (nodeIdx < chain.length - 1) {
+                const arrow = document.createElement('span');
+                arrow.className = 'node-arrow';
+                arrow.textContent = ' ➔ ';
+                chainWrapper.appendChild(arrow);
+              }
+            });
+          }
+
+          row.appendChild(chainWrapper);
+          simTable.appendChild(row);
+        }
+
+        simMapSize.textContent = totalElements;
+        simSetSize.textContent = totalElements;
+      }
+
+      async function addElement(key) {
+        if (isAnimating) return;
+        isAnimating = true;
+        disableControls(true);
+
+        const h = computeHash(key);
+        const sh = spreadHash(h);
+        const idx = getIndex(sh);
+
+        // Highlight row
+        updateUI();
+        const row = document.getElementById(`bucket-row-${idx}`);
+        if (row) row.classList.add('active-row');
+
+        log(`add("${key}") requested: hashcode = ${h}, spread hash = ${sh}. Target index = ${idx}`);
+        await sleep(1000);
+
+        const chain = buckets[idx];
+        let duplicateNodeIdx = -1;
+
+        for (let i = 0; i < chain.length; i++) {
+          const nodeElement = document.getElementById(`node-${idx}-${i}`);
+          if (nodeElement) nodeElement.classList.add('active-node');
+          log(`Traversing bucket [${idx}]: comparing key "${key}" with existing key "${chain[i].key}" using equals()`);
+          await sleep(1200);
+
+          if (chain[i].hash === sh && chain[i].key === key) {
+            duplicateNodeIdx = i;
+            if (nodeElement) {
+              nodeElement.classList.remove('active-node');
+              nodeElement.classList.add('node-failure');
+            }
+            break;
+          }
+          if (nodeElement) nodeElement.classList.remove('active-node');
+        }
+
+        if (duplicateNodeIdx !== -1) {
+          log(`Duplicate detected! equals() returned true. map.put() returns PRESENT. HashSet.add() returns false (rejected).`);
+          await sleep(1800);
+        } else {
+          log(`No duplicate found in bucket. Allocating Node("${key}", PRESENT) and linking to bucket [${idx}].`);
+          chain.push({ key: key, hash: sh });
+          updateUI();
+          
+          // Re-highlight row and show success on last node
+          const newRow = document.getElementById(`bucket-row-${idx}`);
+          if (newRow) newRow.classList.add('active-row');
+          const newNodeElement = document.getElementById(`node-${idx}-${chain.length - 1}`);
+          if (newNodeElement) newNodeElement.classList.add('node-success');
+
+          await sleep(1000);
+          log(`map.put() returned null. HashSet.add() returns true (element added successfully).`);
+          await sleep(1200);
+        }
+
+        // Clean up
+        updateUI();
+        isAnimating = false;
+        disableControls(false);
+      }
+
+      btnApple.addEventListener('click', () => addElement('Apple'));
+      btnBanana.addEventListener('click', () => addElement('Banana'));
+      btnCherry.addEventListener('click', () => addElement('Cherry'));
+      btnAppleDup.addEventListener('click', () => addElement('Apple'));
+
+      btnCustom.addEventListener('click', () => {
+        const val = customInput.value.trim();
+        if (val) {
+          addElement(val);
+          customInput.value = '';
+        }
+      });
+
+      btnReset.addEventListener('click', () => {
+        buckets = Array.from({ length: capacity }, () => []);
+        log("Simulator reset. Backing HashMap cleared.");
+        updateUI();
+      });
+
+      // Init
+      updateUI();
+    })();
+  </script>
+</body>
+</html>

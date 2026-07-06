@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 10 — TreeSet Internals</title>
+  <meta name="description" content="Learn Java TreeSet internals: TreeMap backing, Red-Black Tree structures, Comparable vs Comparator contracts, duplicate rejection, and logarithmic time complexities.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <style>
+    /* TreeSet Simulator Styles */
+    .simulator {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1.25rem;
+      margin: 1.5rem 0;
+    }
+    .sim-stats {
+      display: flex;
+      justify-content: space-around;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      background: #fff;
+      padding: 0.5rem;
+      border: 1px solid var(--border);
+    }
+    .stat-box {
+      text-align: center;
+    }
+    .stat-val {
+      font-weight: bold;
+      color: var(--accent);
+      font-size: 1.1rem;
+    }
+    .sim-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .btn-row {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .sim-btn {
+      font-family: inherit;
+      font-size: 0.8rem;
+      padding: 0.4rem 0.6rem;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .sim-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: #fafaf5;
+    }
+    .sim-btn:disabled {
+      color: #ccc;
+      cursor: not-allowed;
+    }
+    .tree-container {
+      position: relative;
+      width: 100%;
+      height: 250px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      margin: 1rem 0;
+      overflow: hidden;
+    }
+    .tree-lines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .tree-node {
+      position: absolute;
+      width: 2.2rem;
+      height: 2.2rem;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: #eef5f9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 0.85rem;
+      font-family: "SF Mono", Menlo, monospace;
+      transition: all 0.25s ease;
+      z-index: 2;
+      user-select: none;
+    }
+    /* Node Highlighting */
+    .tree-node.active-node {
+      border-color: #f5b041;
+      background: #fdebd0;
+      transform: scale(1.15);
+      box-shadow: 0 0 6px rgba(245,176,65,0.6);
+    }
+    .tree-node.node-success {
+      border-color: #27ae60;
+      background: #abebc6;
+      transform: scale(1.15);
+      box-shadow: 0 0 6px rgba(39,174,96,0.6);
+    }
+    .tree-node.node-failure {
+      border-color: #cb4335;
+      background: #fadbd8;
+      transform: scale(1.15);
+      box-shadow: 0 0 6px rgba(203,67,53,0.6);
+    }
+    .sim-log {
+      margin-top: 0.75rem;
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+      min-height: 2.2rem;
+      background: #fff;
+      padding: 0.4rem;
+      border: 1px solid var(--border);
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="0009-hashset-internals.html">← Lesson 9</a> ·
+    <a href="../reference/0010-treeset-internals.html">TreeSet reference</a>
+  </nav>
+
+  <h1>TreeSet Internals</h1>
+  <p class="meta">~11 minutes · builds on <a href="0009-hashset-internals.html">HashSet internals</a></p>
+
+  <h2>The Backing TreeMap</h2>
+  <p>Like <code>HashSet</code>, a <code>TreeSet</code> does not implement its core data structures from scratch. It is a wrapper delegating all elements to a backing <code>TreeMap</code> instance as keys, with the sentinel object <code>PRESENT</code> as values:</p>
+  <pre><code>public class TreeSet&lt;E&gt; extends AbstractSet&lt;E&gt; implements NavigableSet&lt;E&gt; {
+    private transient NavigableMap&lt;E,Object&gt; m;
+    private static final Object PRESENT = new Object();
+    
+    public TreeSet() {
+        this(new TreeMap&lt;&gt;());
+    }
+}</code></pre>
+  <p>Under the hood, a <code>TreeMap</code> is implemented as a <strong>Red-Black Tree</strong>: a self-balancing binary search tree. Each node contains a key, a value, and links to left, right, and parent nodes, plus a boolean flag representing its color (Red or Black).</p>
+  <p class="cite">Source: <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/TreeSet.html">Oracle TreeSet API Specifications</a></p>
+
+  <h2>Self-Balancing Binary Search Trees</h2>
+  <p>In a standard binary search tree, search time depends on node layout. If keys are added in sorted order (e.g. 10, 20, 30), the tree degenerates into a straight linked list, degrading search performance to linear <code>O(n)</code> time.</p>
+  <p>A Red-Black Tree enforces structural rules (such as maintaining black height balance and avoiding adjacent red nodes) that trigger tree rotations on insertion. This guarantees that the tree height remains bounded by approximately <strong><code>2 log(n + 1)</code></strong>. As a result, lookups, insertions, and deletions are guaranteed to scale at logarithmic <strong><code>O(log n)</code></strong> time.</p>
+
+  <h2>Interactive TreeSet BST Simulator</h2>
+  <p>Insert values to build a Binary Search Tree. Observe how the insertion logic traverses from the root node downward: comparing values, deciding to branch left (smaller) or right (larger), and rejecting duplicates if a comparison yields exactly zero.</p>
+
+  <div class="simulator" id="ts-sim">
+    <div class="sim-stats">
+      <div class="stat-box">
+        <div>Tree Depth Limit</div>
+        <div class="stat-val">4 Levels</div>
+      </div>
+      <div class="stat-box">
+        <div>TreeSet Size</div>
+        <div class="stat-val" id="sim-size">0</div>
+      </div>
+    </div>
+
+    <div class="sim-controls">
+      <div class="btn-row">
+        <button class="sim-btn" id="btn-add-20">Insert 20</button>
+        <button class="sim-btn" id="btn-add-40">Insert 40</button>
+        <button class="sim-btn" id="btn-add-60">Insert 60</button>
+        <button class="sim-btn" id="btn-add-80">Insert 80</button>
+        <button class="sim-btn" id="btn-add-50-dup">Insert 50 (Duplicate)</button>
+      </div>
+      <div class="btn-row" style="margin-top: 0.25rem;">
+        <input type="number" id="custom-input" min="1" max="99" placeholder="1-99..." style="font-family:inherit; font-size:0.85rem; padding:0.35rem 0.5rem; border:1px solid var(--border); border-radius:2px; width:7.5rem;">
+        <button class="sim-btn" id="btn-add-custom">Insert Custom</button>
+        <button class="sim-btn" id="btn-reset" style="background:#f7f7f0;">Reset to [50, 30, 70]</button>
+      </div>
+    </div>
+
+    <div class="tree-container" id="tree-container">
+      <svg class="tree-lines" id="tree-lines"></svg>
+      <!-- Tree nodes rendered by JS -->
+    </div>
+
+    <div class="sim-log" id="sim-log">
+      Simulator initialized. Pre-populated root node (50) and children (30, 70).
+    </div>
+  </div>
+
+  <h2>Role of Ordering: Comparable vs. Comparator</h2>
+  <p>Because elements must be sorted, a <code>TreeSet</code> requires a way to compare them. It utilizes one of two interfaces:</p>
+  <ul>
+    <li><strong>Comparable (Natural Ordering)</strong>: The element's class implements <code>java.lang.Comparable</code> and overrides <code>compareTo(E other)</code>. Standard classes like <code>String</code>, <code>Integer</code>, and <code>Date</code> implement this by default.</li>
+    <li><strong>Comparator (Custom Ordering)</strong>: You pass a custom <code>java.util.Comparator</code> implementation to the <code>TreeSet</code> constructor, defining comparison rules externally (e.g. comparing Strings by length instead of alphabetical order).</li>
+  </ul>
+
+  <div class="callout">
+    <strong>Gotcha: Comparison vs. equals()</strong>
+    <p>A <code>HashSet</code> checks if an item is a duplicate using <code>equals()</code>. A <code>TreeSet</code> ignores <code>equals()</code> entirely during insertion; duplicate check is strictly based on the comparison result. If <code>compareTo(x) == 0</code> (or <code>compare(a, b) == 0</code>), the element is rejected as a duplicate, even if <code>equals()</code> returned false!</p>
+  </div>
+
+  <h2>Practice — Duplicate Condition</h2>
+  <p>Test your understanding of the TreeSet contract for duplicate checks.</p>
+
+  <div class="quiz" id="quiz-uniqueness">
+    <p class="quiz-question">What determines if two objects are duplicates in a TreeSet?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">compareTo() results in zero </button></li>
+      <li><button data-answer="wrong">equals() returns true value  </button></li>
+      <li><button data-answer="wrong">hashCode() outputs are same  </button></li>
+      <li><button data-answer="wrong">identity comparison is match </button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Practice — Interface Violations</h2>
+  <p>What happens if you violate the collection invariants during initialization?</p>
+
+  <div class="quiz" id="quiz-errors">
+    <p class="quiz-question">What occurs if you add elements to a TreeSet that do not implement Comparable and no Comparator is provided?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">A ClassCastException is thrown  </button></li>
+      <li><button data-answer="wrong">A NullPointerException occurs   </button></li>
+      <li><button data-answer="wrong">The element is added normally   </button></li>
+      <li><button data-answer="wrong">The set silently rejects values </button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Retrieval Practice</h2>
+  <p>Cover the answer. If you need a collection that stores unique values and you only need lookup, insertion, and deletion operations, which collection should you select: <code>HashSet</code> or <code>TreeSet</code>?</p>
+  <details style="font-size:0.9rem; color:#555; margin-top:0.5rem;">
+    <summary>Reveal</summary>
+    <p>You should select <code>HashSet</code>. <code>HashSet</code> operates in average constant <code>O(1)</code> time for lookup, insertion, and deletion, which is faster than the logarithmic <code>O(log n)</code> performance of <code>TreeSet</code>. You should only choose <code>TreeSet</code> if you specifically need elements to be sorted or require range operations (like extracting sub-sets).</p>
+  </details>
+
+  <h2>Primary reading</h2>
+  <p>Inspect the official source implementation in the <a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/TreeSet.java">TreeSet.java source code</a> (focus on constructor initializations and the <code>add</code> method).</p>
+
+  <h2>What's next</h2>
+  <p><a href="0011-priorityqueue-internals.html">Lesson 11 — PriorityQueue Internals</a> · Learn how Java processes element priorities using a backing Binary Heap inside a contiguous array.</p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — for example, ask how Red-Black Tree rotation mechanisms balance parent-child heights.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-uniqueness', {
+      correct: "Correct! TreeSet relies solely on the natural Comparable (compareTo) or custom Comparator (compare) return value to check duplicates. If it yields 0, the element is rejected.",
+      wrong: "Not quite. Remember that TreeSet completely bypasses equals() and hashCode() for uniqueness checks, using only the comparison return value (0)."
+    });
+
+    initQuiz('quiz-errors', {
+      correct: "Correct! If the collection cannot cast the inserted element to Comparable, and has no custom Comparator registered, it throws a java.lang.ClassCastException at runtime.",
+      wrong: "Not quite. Since TreeSet requires comparisons to position nodes, it will throw a ClassCastException on insertion if no comparison rule is available."
+    });
+
+    // SIMULATOR CODE
+    (function() {
+      let root = null;
+      let isAnimating = false;
+
+      const simSize = document.getElementById('sim-size');
+      const simLog = document.getElementById('sim-log');
+      const treeContainer = document.getElementById('tree-container');
+      const treeLines = document.getElementById('tree-lines');
+
+      const btn20 = document.getElementById('btn-add-20');
+      const btn40 = document.getElementById('btn-add-40');
+      const btn60 = document.getElementById('btn-add-60');
+      const btn80 = document.getElementById('btn-add-80');
+      const btn50Dup = document.getElementById('btn-add-50-dup');
+      const btnCustom = document.getElementById('btn-add-custom');
+      const btnReset = document.getElementById('btn-reset');
+      const customInput = document.getElementById('custom-input');
+
+      function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+      }
+
+      function log(msg) {
+        simLog.textContent = msg;
+      }
+
+      function disableControls(disabled) {
+        btn20.disabled = disabled;
+        btn40.disabled = disabled;
+        btn60.disabled = disabled;
+        btn80.disabled = disabled;
+        btn50Dup.disabled = disabled;
+        btnCustom.disabled = disabled;
+        btnReset.disabled = disabled;
+        customInput.disabled = disabled;
+      }
+
+      function updateUI() {
+        // Clear nodes except the SVG lines container
+        const nodes = treeContainer.querySelectorAll('.tree-node');
+        nodes.forEach(n => n.remove());
+        treeLines.innerHTML = '';
+
+        const width = treeContainer.clientWidth || 550;
+        let count = 0;
+
+        function drawNode(n) {
+          if (n === null) return;
+          count++;
+
+          // Calculate visual x, y coordinates based on tree depth and pos
+          const x = width * ((n.pos + 0.5) / Math.pow(2, n.depth));
+          const y = 30 + n.depth * 52;
+
+          if (n.left !== null) {
+            const cx = width * ((n.left.pos + 0.5) / Math.pow(2, n.left.depth));
+            const cy = 30 + n.left.depth * 52;
+            drawLine(x, y, cx, cy);
+            drawNode(n.left);
+          }
+          if (n.right !== null) {
+            const cx = width * ((n.right.pos + 0.5) / Math.pow(2, n.right.depth));
+            const cy = 30 + n.right.depth * 52;
+            drawLine(x, y, cx, cy);
+            drawNode(n.right);
+          }
+
+          // Render node circle
+          const nodeDiv = document.createElement('div');
+          nodeDiv.className = 'tree-node';
+          nodeDiv.id = `node-${n.val}`;
+          nodeDiv.style.left = `calc(${x}px - 1.1rem)`;
+          nodeDiv.style.top = `calc(${y}px - 1.1rem)`;
+          nodeDiv.textContent = n.val;
+          treeContainer.appendChild(nodeDiv);
+        }
+
+        function drawLine(x1, y1, x2, y2) {
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', x1);
+          line.setAttribute('y1', y1);
+          line.setAttribute('x2', x2);
+          line.setAttribute('y2', y2);
+          line.setAttribute('stroke', '#ccd1d1');
+          line.setAttribute('stroke-width', '2');
+          treeLines.appendChild(line);
+        }
+
+        drawNode(root);
+        simSize.textContent = count;
+      }
+
+      async function insertValue(val) {
+        if (isAnimating) return;
+        isAnimating = true;
+        disableControls(true);
+
+        log(`add(${val}) requested. Querying binary tree starting from Root...`);
+        await sleep(800);
+
+        if (root === null) {
+          log(`Tree is empty. Setting ${val} as Root node.`);
+          root = { val: val, left: null, right: null, depth: 0, pos: 0 };
+          updateUI();
+          const el = document.getElementById(`node-${val}`);
+          if (el) el.classList.add('node-success');
+          await sleep(1000);
+          updateUI();
+          log("TreeMap returns null. Insertion successful.");
+          isAnimating = false;
+          disableControls(false);
+          return;
+        }
+
+        let curr = root;
+        let parent = null;
+        let depth = 0;
+        let pos = 0;
+        let pathNodes = [];
+
+        while (curr !== null) {
+          const el = document.getElementById(`node-${curr.val}`);
+          if (el) el.classList.add('active-node');
+          pathNodes.push(el);
+
+          log(`Traversing tree: comparing target ${val} with node ${curr.val}...`);
+          await sleep(1200);
+
+          if (val === curr.val) {
+            log(`Comparison yields 0 (duplicate detected!). Rejecting insertion.`);
+            if (el) {
+              el.classList.remove('active-node');
+              el.classList.add('node-failure');
+            }
+            await sleep(1600);
+            updateUI();
+            log("TreeMap returns PRESENT (key already exists). add() returns false.");
+            isAnimating = false;
+            disableControls(false);
+            return;
+          }
+
+          if (el) el.classList.remove('active-node');
+          parent = curr;
+
+          if (val < curr.val) {
+            log(`${val} < ${curr.val}: branching LEFT.`);
+            curr = curr.left;
+            depth++;
+            pos = pos * 2;
+          } else {
+            log(`${val} > ${curr.val}: branching RIGHT.`);
+            curr = curr.right;
+            depth++;
+            pos = pos * 2 + 1;
+          }
+          await sleep(600);
+        }
+
+        if (depth > 3) {
+          log(`Tree depth limit (4 levels) reached for this simulator. Keeping it compact!`);
+          await sleep(1500);
+        } else {
+          log(`Spot found at depth ${depth}. Inserting element ${val}.`);
+          if (val < parent.val) {
+            parent.left = { val: val, left: null, right: null, depth: depth, pos: pos };
+          } else {
+            parent.right = { val: val, left: null, right: null, depth: depth, pos: pos };
+          }
+          updateUI();
+
+          const el = document.getElementById(`node-${val}`);
+          if (el) el.classList.add('node-success');
+          await sleep(1000);
+          updateUI();
+          log("TreeMap returns null. Insertion successful.");
+        }
+
+        isAnimating = false;
+        disableControls(false);
+      }
+
+      function resetTree() {
+        // Pre-populate with root 50 and children 30, 70
+        root = {
+          val: 50,
+          depth: 0,
+          pos: 0,
+          left: { val: 30, depth: 1, pos: 0, left: null, right: null },
+          right: { val: 70, depth: 1, pos: 1, left: null, right: null }
+        };
+        log("Tree reinitialized to standard layout [50, 30, 70].");
+        updateUI();
+      }
+
+      btn20.addEventListener('click', () => insertValue(20));
+      btn40.addEventListener('click', () => insertValue(40));
+      btn60.addEventListener('click', () => insertValue(60));
+      btn80.addEventListener('click', () => insertValue(80));
+      btn50Dup.addEventListener('click', () => insertValue(50));
+
+      btnCustom.addEventListener('click', () => {
+        const val = parseInt(customInput.value, 10);
+        if (!isNaN(val) && val >= 1 && val <= 99) {
+          insertValue(val);
+          customInput.value = '';
+        } else {
+          log("Please enter a valid integer between 1 and 99.");
+        }
+      });
+
+      btnReset.addEventListener('click', resetTree);
+
+      // Handle window resizing to keep responsive SVG lines correctly aligned
+      window.addEventListener('resize', updateUI);
+
+      // Initialize
+      resetTree();
+    })();
+  </script>
+</body>
+</html>

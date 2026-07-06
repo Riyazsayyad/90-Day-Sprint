@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 11 — PriorityQueue Internals</title>
+  <meta name="description" content="Learn Java PriorityQueue internals: how a binary heap complete tree is mapped to a contiguous array, sift-up/sift-down algorithms, and complexities.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <style>
+    /* PriorityQueue Simulator Styles */
+    .simulator {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1.25rem;
+      margin: 1.5rem 0;
+    }
+    .sim-stats {
+      display: flex;
+      justify-content: space-around;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      background: #fff;
+      padding: 0.5rem;
+      border: 1px solid var(--border);
+    }
+    .stat-box {
+      text-align: center;
+    }
+    .stat-val {
+      font-weight: bold;
+      color: var(--accent);
+      font-size: 1.1rem;
+    }
+    .sim-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .btn-row {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .sim-btn {
+      font-family: inherit;
+      font-size: 0.8rem;
+      padding: 0.4rem 0.6rem;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .sim-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: #fafaf5;
+    }
+    .sim-btn:disabled {
+      color: #ccc;
+      cursor: not-allowed;
+    }
+    /* Tree Layout */
+    .tree-container {
+      position: relative;
+      width: 100%;
+      height: 180px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-top-left-radius: 4px;
+      border-top-right-radius: 4px;
+      overflow: hidden;
+    }
+    .tree-lines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .tree-node {
+      position: absolute;
+      width: 2.1rem;
+      height: 2.1rem;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: #eef5f9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-family: "SF Mono", Menlo, monospace;
+      transition: all 0.25s ease;
+      z-index: 2;
+      user-select: none;
+    }
+    .node-idx-label {
+      font-size: 0.55rem;
+      color: #888;
+      line-height: 1;
+    }
+    .node-val-label {
+      font-weight: bold;
+      line-height: 1;
+    }
+    /* Array Layout */
+    .array-container {
+      display: flex;
+      justify-content: center;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-top: none;
+      border-bottom-left-radius: 4px;
+      border-bottom-right-radius: 4px;
+      padding: 0.75rem;
+      gap: 0.25rem;
+      flex-wrap: wrap;
+    }
+    .array-slot {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: #fff;
+      width: 2.8rem;
+      overflow: hidden;
+      transition: all 0.25s ease;
+    }
+    .slot-idx {
+      background: #f7f7f0;
+      font-size: 0.6rem;
+      font-family: "SF Mono", Menlo, monospace;
+      color: var(--muted);
+      width: 100%;
+      text-align: center;
+      border-bottom: 1px solid var(--border);
+      padding: 0.1rem 0;
+      user-select: none;
+    }
+    .slot-val {
+      font-weight: bold;
+      font-size: 0.85rem;
+      font-family: "SF Mono", Menlo, monospace;
+      padding: 0.25rem 0;
+      width: 100%;
+      text-align: center;
+    }
+    /* Highlight States */
+    .tree-node.active-node, .array-slot.active-slot {
+      border-color: #f5b041;
+      background: #fdebd0;
+      transform: scale(1.08);
+      box-shadow: 0 0 5px rgba(245,176,65,0.5);
+    }
+    .tree-node.node-success, .array-slot.slot-success {
+      border-color: #27ae60;
+      background: #abebc6;
+      transform: scale(1.08);
+      box-shadow: 0 0 5px rgba(39,174,96,0.5);
+    }
+    .tree-node.node-failure, .array-slot.slot-failure {
+      border-color: #cb4335;
+      background: #fadbd8;
+      transform: scale(1.08);
+      box-shadow: 0 0 5px rgba(203,67,53,0.5);
+    }
+    .sim-log {
+      margin-top: 0.75rem;
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+      min-height: 2.2rem;
+      background: #fff;
+      padding: 0.4rem;
+      border: 1px solid var(--border);
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="0010-treeset-internals.html">← Lesson 10</a> ·
+    <a href="../reference/0011-priorityqueue-internals.html">PriorityQueue reference</a>
+  </nav>
+
+  <h1>PriorityQueue Internals</h1>
+  <p class="meta">~12 minutes · builds on <a href="0007-arraylist-internals.html">ArrayList internals</a></p>
+
+  <h2>The Backing Array (Binary Heap)</h2>
+  <p>In Java, a <code>PriorityQueue</code> is structured under the hood as a <strong>binary heap</strong>. A binary heap is a complete binary tree (all levels are filled completely, except possibly the bottom level, which is filled from left to right).</p>
+  <p>Because the tree is guaranteed to be complete, it can be packed into a flat, contiguous <strong>primitive array</strong> (represented as <code>Object[] queue</code>) without the need for left/right node reference pointers. This merges the structural speed of tree hierarchies with the memory efficiency of contiguous arrays.</p>
+  <p class="cite">Source: <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/PriorityQueue.html">Oracle PriorityQueue API Specifications</a></p>
+
+  <h2>Mapping Trees to Array Indexes</h2>
+  <p>By filling tree nodes level-by-level, we establish a mathematical link between tree parent-child relations and array indices. For any element located at index <strong><code>i</code></strong> in the zero-indexed array:</p>
+  <ul>
+    <li><strong>Left child index</strong> is calculated as: <code>2 * i + 1</code></li>
+    <li><strong>Right child index</strong> is calculated as: <code>2 * i + 2</code></li>
+    <li><strong>Parent index</strong> is calculated as: <code>(i - 1) / 2</code> (rounded down)</li>
+  </ul>
+  <p>For example, if parent node is at index <code>0</code>, its left child is at <code>2(0)+1 = 1</code>, and its right child is at <code>2(0)+2 = 2</code>. If a node is at index <code>4</code>, its parent is at <code>(4-1)/2 = 1</code>.</p>
+
+  <h2>Sift-Up and Sift-Down Operations</h2>
+  <p>To preserve the min-heap ordering constraint (that each parent node must be $\le$ both of its child nodes), the priority queue implements two index-relocating algorithms:</p>
+  <ul>
+    <li><strong>Sift-Up (Inserting)</strong>: When adding an element via <code>offer(e)</code>, the value is appended at the end of the array (bottom-right of tree). It is compared to its parent; if smaller, they swap. This process repeats upward until the heap property is satisfied or the element becomes the root.</li>
+    <li><strong>Sift-Down (Extracting)</strong>: When pulling the minimum element via <code>poll()</code>, the root (index 0) is returned. The last element in the array is relocated to index 0, and is sifted downward by swapping with its <em>smaller</em> child. This repeats until it has no children or is smaller than both.</li>
+  </ul>
+
+  <h2>Interactive Heap Simulator</h2>
+  <p>Interact with the binary heap visualizer below. Add elements to trigger Sift-Up swaps, or poll the smallest item to trigger Sift-Down swaps. Notice how nodes in the tree synchronize with slots in the underlying array representation.</p>
+
+  <div class="simulator" id="pq-sim">
+    <div class="sim-stats">
+      <div class="stat-box">
+        <div>Heap Capacity Limit</div>
+        <div class="stat-val">7 Elements</div>
+      </div>
+      <div class="stat-box">
+        <div>PriorityQueue Size</div>
+        <div class="stat-val" id="sim-size">0</div>
+      </div>
+    </div>
+
+    <div class="sim-controls">
+      <div class="btn-row">
+        <button class="sim-btn" id="btn-add-15">Insert 15</button>
+        <button class="sim-btn" id="btn-add-5">Insert 5</button>
+        <button class="sim-btn" id="btn-poll">Poll (Remove Root)</button>
+        <button class="sim-btn" id="btn-reset" style="background:#f7f7f0;">Reset Heap</button>
+      </div>
+      <div class="btn-row" style="margin-top: 0.25rem;">
+        <input type="number" id="custom-input" min="1" max="99" placeholder="1-99..." style="font-family:inherit; font-size:0.85rem; padding:0.35rem 0.5rem; border:1px solid var(--border); border-radius:2px; width:7.5rem;">
+        <button class="sim-btn" id="btn-add-custom">Insert Custom</button>
+      </div>
+    </div>
+
+    <!-- Tree Panel -->
+    <div class="tree-container" id="tree-container">
+      <svg class="tree-lines" id="tree-lines"></svg>
+      <!-- Tree nodes rendered by JS -->
+    </div>
+
+    <!-- Array Panel -->
+    <div class="array-container" id="array-container">
+      <!-- Array slots rendered by JS -->
+    </div>
+
+    <div class="sim-log" id="sim-log">
+      Simulator initialized. Pre-populated heap array: [10, 30, 20, 50, 40].
+    </div>
+  </div>
+
+  <h2>Max-Heaps using Comparators</h2>
+  <p>By default, Java's <code>PriorityQueue</code> sorts elements in their natural ascending order (acting as a min-heap). If you need a max-heap (where <code>poll()</code> retrieves the largest element first), you must initialize it with a custom comparator that reverses the natural ordering:</p>
+  <pre><code>PriorityQueue&lt;Integer&gt; maxHeap = new PriorityQueue&lt;&gt;(Comparator.reverseOrder());</code></pre>
+  <p>Under the hood, the sift-up and sift-down algorithms will compare elements using <code>comparator.compare(x, parent)</code>. If the comparator reverses the check, swaps will happen when children are larger than parents, turning the structure into a max-heap.</p>
+
+  <h2>Time Complexities</h2>
+  <ul>
+    <li><strong><code>peek()</code></strong>: <strong><code>O(1)</code></strong>. The highest priority item is always at index 0 of the backing array.</li>
+    <li><strong><code>offer()</code> / <code>poll()</code></strong>: <strong><code>O(log n)</code></strong>. Restoring the heap constraint requires traversing a single branch of the tree, which is bounded by the logarithmic tree height.</li>
+    <li><strong>Heapify constructor (<code>new PriorityQueue(collection)</code>)</strong>: <strong><code>O(n)</code></strong>. Building a heap bottom-up is a standard algorithm that runs in linear time.</li>
+  </ul>
+
+  <h2>Practice — Index Math</h2>
+  <p>Verify your understanding of heap array index mapping equations.</p>
+
+  <div class="quiz" id="quiz-math">
+    <p class="quiz-question">For a heap node stored at index i in a zero-indexed array, how is the left child's index calculated?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">2 * i + 1</button></li>
+      <li><button data-answer="wrong">2 * i + 2</button></li>
+      <li><button data-answer="wrong">2 * i - 1</button></li>
+      <li><button data-answer="wrong">2 * i + 0</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Practice — Heapify Complexity</h2>
+  <p>Compare the cost of bulk heap construction against individual element additions.</p>
+
+  <div class="quiz" id="quiz-complexity">
+    <p class="quiz-question">What is the time complexity of building a PriorityQueue from an unsorted collection of size n?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">O(n)    </button></li>
+      <li><button data-answer="wrong">O(log n)</button></li>
+      <li><button data-answer="wrong">O(n log)</button></li>
+      <li><button data-answer="wrong">O(n^2)  </button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Retrieval Practice</h2>
+  <p>Cover the answer. If you iterate through a <code>PriorityQueue</code> using an iterator or a enhanced for-each loop, does it yield elements in sorted ascending order?</p>
+  <details style="font-size:0.9rem; color:#555; margin-top:0.5rem;">
+    <summary>Reveal</summary>
+    <p>No, it does not. The iterator simply scans the backing array sequentially from index <code>0</code> to <code>size - 1</code>. While index <code>0</code> is guaranteed to be the minimum, the remaining array indexes are arranged to satisfy parent-child heap constraints, not linear sorted order. To extract elements in sorted order, you must call <code>poll()</code> in a loop until the queue is empty.</p>
+  </details>
+
+  <h2>Primary reading</h2>
+  <p>Read the official OpenJDK implementation of <a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/PriorityQueue.java">PriorityQueue.java source code</a> (focus on <code>siftUp</code> and <code>siftDown</code> methods).</p>
+
+  <h2>What's next</h2>
+  <p>Now that you've completed the basic data structures track, you can ask your teacher for a summary comparison cheat sheet covering ArrayList, LinkedList, HashSet, TreeSet, and PriorityQueue.</p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — for example, ask how PriorityQueue resizes its backing array when it runs out of capacity.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-math', {
+      correct: "Correct! The left child is at index 2 * i + 1, the right child is at 2 * i + 2, and the parent is at (i - 1) / 2.",
+      wrong: "Not quite. Remember: left is 2 * i + 1, right is 2 * i + 2, and parent is (i - 1) / 2."
+    });
+
+    initQuiz('quiz-complexity', {
+      correct: "Correct! Building a binary heap from an unsorted collection of size n bottom-up using the Floyd's heapify algorithm takes linear O(n) time.",
+      wrong: "Not quite. Adding elements one by one takes O(n log n), but bulk initializing a PriorityQueue from a collection takes O(n) time."
+    });
+
+    // SIMULATOR CODE
+    (function() {
+      const maxCapacity = 7;
+      let heap = [];
+      let isAnimating = false;
+
+      const simSize = document.getElementById('sim-size');
+      const simLog = document.getElementById('sim-log');
+      const treeContainer = document.getElementById('tree-container');
+      const treeLines = document.getElementById('tree-lines');
+      const arrayContainer = document.getElementById('array-container');
+
+      const btn15 = document.getElementById('btn-add-15');
+      const btn5 = document.getElementById('btn-add-5');
+      const btnPoll = document.getElementById('btn-poll');
+      const btnReset = document.getElementById('btn-reset');
+      const btnCustom = document.getElementById('btn-add-custom');
+      const customInput = document.getElementById('custom-input');
+
+      function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+      }
+
+      function log(msg) {
+        simLog.textContent = msg;
+      }
+
+      function disableControls(disabled) {
+        btn15.disabled = disabled || heap.length >= maxCapacity;
+        btn5.disabled = disabled || heap.length >= maxCapacity;
+        btnPoll.disabled = disabled || heap.length === 0;
+        btnReset.disabled = disabled;
+        btnCustom.disabled = disabled || heap.length >= maxCapacity;
+        customInput.disabled = disabled;
+      }
+
+      // Maps array index k to visual tree depth and pos
+      function getCoordinates(k, width) {
+        let depth = 0;
+        let pos = 0;
+        if (k === 0) {
+          depth = 0; pos = 0;
+        } else if (k === 1) {
+          depth = 1; pos = 0;
+        } else if (k === 2) {
+          depth = 1; pos = 1;
+        } else {
+          depth = 2;
+          pos = k - 3;
+        }
+
+        const x = width * ((pos + 0.5) / Math.pow(2, depth));
+        const y = 25 + depth * 55;
+        return { x, y };
+      }
+
+      function updateUI() {
+        // Clear nodes except the SVG lines container
+        const nodes = treeContainer.querySelectorAll('.tree-node');
+        nodes.forEach(n => n.remove());
+        treeLines.innerHTML = '';
+        arrayContainer.innerHTML = '';
+
+        const width = treeContainer.clientWidth || 550;
+        simSize.textContent = heap.length;
+
+        // Render Tree and Draw Lines
+        for (let i = 0; i < heap.length; i++) {
+          const { x, y } = getCoordinates(i, width);
+
+          // Draw line to parent if i > 0
+          if (i > 0) {
+            const pIdx = Math.floor((i - 1) / 2);
+            const parentCoords = getCoordinates(pIdx, width);
+            drawLine(parentCoords.x, parentCoords.y, x, y);
+          }
+
+          // Render node circle
+          const nodeDiv = document.createElement('div');
+          nodeDiv.className = 'tree-node';
+          nodeDiv.id = `node-${i}`;
+          nodeDiv.style.left = `calc(${x}px - 1.05rem)`;
+          nodeDiv.style.top = `calc(${y}px - 1.05rem)`;
+          
+          const valLabel = document.createElement('div');
+          valLabel.className = 'node-val-label';
+          valLabel.textContent = heap[i];
+          nodeDiv.appendChild(valLabel);
+
+          const idxLabel = document.createElement('div');
+          idxLabel.className = 'node-idx-label';
+          idxLabel.textContent = `[${i}]`;
+          nodeDiv.appendChild(idxLabel);
+
+          treeContainer.appendChild(nodeDiv);
+        }
+
+        // Render Array Slots
+        for (let i = 0; i < maxCapacity; i++) {
+          const slot = document.createElement('div');
+          slot.className = 'array-slot';
+          slot.id = `slot-${i}`;
+
+          const idxDiv = document.createElement('div');
+          idxDiv.className = 'slot-idx';
+          idxDiv.textContent = `[${i}]`;
+          slot.appendChild(idxDiv);
+
+          const valDiv = document.createElement('div');
+          valDiv.className = 'slot-val';
+          valDiv.textContent = i < heap.length ? heap[i] : '-';
+          if (i >= heap.length) {
+            valDiv.style.color = '#ccc';
+          }
+          slot.appendChild(valDiv);
+
+          arrayContainer.appendChild(slot);
+        }
+
+        function drawLine(x1, y1, x2, y2) {
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', x1);
+          line.setAttribute('y1', y1);
+          line.setAttribute('x2', x2);
+          line.setAttribute('y2', y2);
+          line.setAttribute('stroke', '#ccd1d1');
+          line.setAttribute('stroke-width', '2');
+          treeLines.appendChild(line);
+        }
+
+        disableControls(false);
+      }
+
+      async function insertValue(val) {
+        if (isAnimating || heap.length >= maxCapacity) return;
+        isAnimating = true;
+        disableControls(true);
+
+        log(`offer(${val}) requested: appending at index ${heap.length} (bottom-right of tree).`);
+        let k = heap.length;
+        heap.push(val);
+        updateUI();
+
+        // Highlight newly appended slot and node in green
+        const nodeEl = document.getElementById(`node-${k}`);
+        const slotEl = document.getElementById(`slot-${k}`);
+        if (nodeEl) nodeEl.className = 'tree-node node-success';
+        if (slotEl) slotEl.className = 'array-slot slot-success';
+        await sleep(1200);
+
+        // Sift Up
+        while (k > 0) {
+          let parent = Math.floor((k - 1) / 2);
+          
+          // Clear successes, highlight comparisons
+          updateUI();
+          disableControls(true);
+          const currNode = document.getElementById(`node-${k}`);
+          const currSlot = document.getElementById(`slot-${k}`);
+          const parentNode = document.getElementById(`node-${parent}`);
+          const parentSlot = document.getElementById(`slot-${parent}`);
+
+          if (currNode) currNode.className = 'tree-node active-node';
+          if (currSlot) currSlot.className = 'array-slot active-slot';
+          if (parentNode) parentNode.className = 'tree-node active-node';
+          if (parentSlot) parentSlot.className = 'array-slot active-slot';
+
+          log(`Sifting up index ${k}: comparing element (${heap[k]}) with parent index ${parent} (${heap[parent]}).`);
+          await sleep(1500);
+
+          if (heap[k] < heap[parent]) {
+            log(`${heap[k]} < ${heap[parent]}: Violates min-heap property. Swapping element with parent.`);
+            // Swap in array
+            let temp = heap[k];
+            heap[k] = heap[parent];
+            heap[parent] = temp;
+            
+            updateUI();
+            disableControls(true);
+            
+            // Show swap success highlight
+            const nextNode = document.getElementById(`node-${parent}`);
+            const nextSlot = document.getElementById(`slot-${parent}`);
+            if (nextNode) nextNode.className = 'tree-node node-success';
+            if (nextSlot) nextSlot.className = 'array-slot slot-success';
+            await sleep(1200);
+
+            k = parent;
+          } else {
+            log(`${heap[k]} >= ${heap[parent]}: Heap constraint satisfied.`);
+            break;
+          }
+        }
+
+        log("Insertion complete. Heap order restored.");
+        updateUI();
+        isAnimating = false;
+        disableControls(false);
+      }
+
+      async function pollRoot() {
+        if (isAnimating || heap.length === 0) return;
+        isAnimating = true;
+        disableControls(true);
+
+        log(`poll() requested: extracting root element ${heap[0]} at index 0.`);
+        
+        // Highlight root node in red (to delete)
+        const rootNode = document.getElementById('node-0');
+        const rootSlot = document.getElementById('slot-0');
+        if (rootNode) rootNode.className = 'tree-node node-failure';
+        if (rootSlot) rootSlot.className = 'array-slot slot-failure';
+        await sleep(1200);
+
+        if (heap.length === 1) {
+          heap.pop();
+          log("Heap is now empty.");
+          updateUI();
+          isAnimating = false;
+          disableControls(false);
+          return;
+        }
+
+        const lastElement = heap.pop();
+        log(`Relocating last element (${lastElement}) from index ${heap.length} to root index 0.`);
+        heap[0] = lastElement;
+        updateUI();
+        disableControls(true);
+
+        const newRootNode = document.getElementById('node-0');
+        const newRootSlot = document.getElementById('slot-0');
+        if (newRootNode) newRootNode.className = 'tree-node active-node';
+        if (newRootSlot) newRootSlot.className = 'array-slot active-slot';
+        await sleep(1500);
+
+        // Sift Down
+        let k = 0;
+        let half = Math.floor(heap.length / 2);
+
+        while (k < half) {
+          let leftChild = 2 * k + 1;
+          let rightChild = 2 * k + 2;
+          let smallerChild = leftChild;
+
+          if (rightChild < heap.length && heap[rightChild] < heap[leftChild]) {
+            smallerChild = rightChild;
+          }
+
+          // Highlight current node and smaller child
+          updateUI();
+          disableControls(true);
+
+          const currNode = document.getElementById(`node-${k}`);
+          const currSlot = document.getElementById(`slot-${k}`);
+          const childNode = document.getElementById(`node-${smallerChild}`);
+          const childSlot = document.getElementById(`slot-${smallerChild}`);
+
+          if (currNode) currNode.className = 'tree-node active-node';
+          if (currSlot) currSlot.className = 'array-slot active-slot';
+          if (childNode) childNode.className = 'tree-node active-node';
+          if (childSlot) childSlot.className = 'array-slot active-slot';
+
+          log(`Sifting down index ${k}: comparing element (${heap[k]}) with smaller child index ${smallerChild} (${heap[smallerChild]}).`);
+          await sleep(1500);
+
+          if (heap[k] > heap[smallerChild]) {
+            log(`${heap[k]} > ${heap[smallerChild]}: Violates min-heap property. Swapping element with child.`);
+            // Swap in array
+            let temp = heap[k];
+            heap[k] = heap[smallerChild];
+            heap[smallerChild] = temp;
+
+            updateUI();
+            disableControls(true);
+
+            // Show swap success highlight
+            const nextNode = document.getElementById(`node-${smallerChild}`);
+            const nextSlot = document.getElementById(`slot-${smallerChild}`);
+            if (nextNode) nextNode.className = 'tree-node node-success';
+            if (nextSlot) nextSlot.className = 'array-slot slot-success';
+            await sleep(1200);
+
+            k = smallerChild;
+          } else {
+            log(`${heap[k]} <= ${heap[smallerChild]}: Heap constraint satisfied.`);
+            break;
+          }
+        }
+
+        log(`Polling complete. Returned root element. Heap order restored.`);
+        updateUI();
+        isAnimating = false;
+        disableControls(false);
+      }
+
+      function resetHeap() {
+        heap = [10, 30, 20, 50, 40];
+        log("Heap reinitialized to complete binary tree [10, 30, 20, 50, 40].");
+        updateUI();
+      }
+
+      btn15.addEventListener('click', () => insertValue(15));
+      btn5.addEventListener('click', () => insertValue(5));
+      btnPoll.addEventListener('click', pollRoot);
+
+      btnCustom.addEventListener('click', () => {
+        const val = parseInt(customInput.value, 10);
+        if (!isNaN(val) && val >= 1 && val <= 99) {
+          if (heap.length < maxCapacity) {
+            insertValue(val);
+            customInput.value = '';
+          } else {
+            log("Heap is full. Remove elements before adding more.");
+          }
+        } else {
+          log("Please enter a valid integer between 1 and 99.");
+        }
+      });
+
+      btnReset.addEventListener('click', resetHeap);
+
+      window.addEventListener('resize', updateUI);
+
+      // Initialize
+      resetHeap();
+    })();
+  </script>
+</body>
+</html>

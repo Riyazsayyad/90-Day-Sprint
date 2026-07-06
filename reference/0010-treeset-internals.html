@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TreeSet Internals — Reference</title>
+  <meta name="description" content="Quick reference guide for Java TreeSet internals, detailing TreeMap backing, Comparable vs Comparator contracts, duplicate rejection, and complexity tables.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/0010-treeset-internals.html">← Lesson 10</a> ·
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>TreeSet Internals Reference</h1>
+  <p class="meta"><a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/TreeSet.html">Oracle TreeSet Javadoc</a></p>
+
+  <h2>The Backing TreeMap</h2>
+  <p>Inside Java's <code>TreeSet</code>, elements are stored as <strong>keys</strong> in a backing <code>TreeMap</code> (which implements <code>NavigableMap</code>). The values are all bound to the dummy sentinel <code>PRESENT</code>:</p>
+  <pre><code>public class TreeSet&lt;E&gt; extends AbstractSet&lt;E&gt; implements NavigableSet&lt;E&gt;, Cloneable, java.io.Serializable {
+    private transient NavigableMap&lt;E,Object&gt; m;
+
+    private static final Object PRESENT = new Object();
+
+    // Natural ordering constructor
+    public TreeSet() {
+        this(new TreeMap&lt;&gt;());
+    }
+
+    // Custom ordering constructor
+    public TreeSet(Comparator&lt;? super E&gt; comparator) {
+        this(new TreeMap&lt;&gt;(comparator));
+    }
+    
+    TreeSet(NavigableMap&lt;E,Object&gt; m) {
+        this.m = m;
+    }
+}</code></pre>
+
+  <h2>Comparable vs. Comparator</h2>
+  <p>To insert and sort elements, <code>TreeSet</code> requires an ordering rule. If neither is available, it throws a <code>ClassCastException</code> on insertion.</p>
+  
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left">Property</th>
+      <th align="left">Comparable (Natural Ordering)</th>
+      <th align="left">Comparator (Custom Ordering)</th>
+    </tr>
+    <tr>
+      <td><strong>Interface</strong></td>
+      <td><code>java.lang.Comparable&lt;T&gt;</code></td>
+      <td><code>java.util.Comparator&lt;T&gt;</code></td>
+    </tr>
+    <tr>
+      <td><strong>Method</strong></td>
+      <td><code>int compareTo(T o)</code></td>
+      <td><code>int compare(T o1, T o2)</code></td>
+    </tr>
+    <tr>
+      <td><strong>Location</strong></td>
+      <td>Implemented on the element class itself.</td>
+      <td>Implemented in a separate helper class/lambda.</td>
+    </tr>
+    <tr>
+      <td><strong>Usage</strong></td>
+      <td>Defined once for a class's default sorting.</td>
+      <td>Allows multiple custom sort layouts.</td>
+    </tr>
+    <tr>
+      <td><strong>Example</strong></td>
+      <td><code>String</code> sorted lexicographically.</td>
+      <td>Sort <code>String</code> by length: <code>(s1, s2) -> Integer.compare(s1.length(), s2.length())</code>.</td>
+    </tr>
+  </table>
+
+  <h2>The Duplication Gotcha</h2>
+  <p>Unlike <code>HashSet</code>, which relies on <code>hashCode()</code> and <code>equals()</code> to check for duplicates, a <code>TreeSet</code> relies <strong>entirely on the comparison methods</strong>:</p>
+  <ul>
+    <li>If <code>compareTo(e) == 0</code> (or <code>compare(a, b) == 0</code>), the elements are considered <strong>equal/duplicates</strong>.</li>
+    <li>If this occurs, the new element is rejected (not added to the set).</li>
+    <li><strong>Note:</strong> A set can violate the standard <code>Set</code> contract if its comparison is inconsistent with <code>equals()</code>. If <code>equals()</code> says two objects are different but <code>compareTo()</code> returns <code>0</code>, the <code>TreeSet</code> will reject the second object as a duplicate!</li>
+  </ul>
+
+  <h2>Complexities & Ranges</h2>
+  <p>A Red-Black Tree is a self-balancing binary search tree. Height is bounded by $2 \log(n + 1)$, ensuring fast lookups.</p>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left">Operation</th>
+      <th align="left">TreeSet</th>
+      <th align="left">HashSet</th>
+      <th align="left">ArrayList / LinkedList</th>
+    </tr>
+    <tr>
+      <td><strong>add / remove</strong></td>
+      <td><code>O(log n)</code> guaranteed</td>
+      <td><code>O(1)</code> average / <code>O(log n)</code> worst</td>
+      <td><code>O(n)</code> (due to shifting or search)</td>
+    </tr>
+    <tr>
+      <td><strong>contains</strong></td>
+      <td><code>O(log n)</code> guaranteed</td>
+      <td><code>O(1)</code> average / <code>O(log n)</code> worst</td>
+      <td><code>O(n)</code> (linear search)</td>
+    </tr>
+    <tr>
+      <td><strong>Ordering</strong></td>
+      <td>Sorted (Ascending/Custom)</td>
+      <td>Unordered / Unpredictable</td>
+      <td>Insertion Order</td>
+    </tr>
+  </table>
+
+  <h2>Range Query Operations</h2>
+  <p>Because the tree is sorted, it supports efficient sub-range extraction:</p>
+  <ul>
+    <li><code>first()</code> / <code>last()</code>: Retrieve the minimum / maximum element.</li>
+    <li><code>higher(e)</code> / <code>lower(e)</code>: Retrieve the next greater / next smaller element.</li>
+    <li><code>subSet(fromElement, toElement)</code>: Return elements ranging from <code>fromElement</code> to <code>toElement</code>.</li>
+  </ul>
+</body>
+</html>

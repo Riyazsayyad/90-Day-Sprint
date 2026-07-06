@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 8 — LinkedList Internals</title>
+  <meta name="description" content="Learn Java LinkedList internals: node structures, why random access takes O(n) traversal time, why insertions are O(1) given a node reference, and doubly linked list bidirectional search.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <style>
+    /* LinkedList Simulator Styles */
+    .simulator {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1.25rem;
+      margin: 1.5rem 0;
+    }
+    .sim-stats {
+      display: flex;
+      justify-content: space-around;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      background: #fff;
+      padding: 0.5rem;
+      border: 1px solid var(--border);
+    }
+    .stat-box {
+      text-align: center;
+    }
+    .stat-val {
+      font-weight: bold;
+      color: var(--accent);
+      font-size: 1.1rem;
+    }
+    .list-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 1.5rem 0;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      min-height: 5.5rem;
+    }
+    .list-pointer {
+      font-size: 0.75rem;
+      font-family: "SF Mono", Menlo, monospace;
+      color: var(--accent);
+      background: #eef5f9;
+      border: 1px solid #c5d9e8;
+      padding: 0.2rem 0.4rem;
+      border-radius: 2px;
+      margin: 0 0.25rem;
+    }
+    .node-container {
+      display: flex;
+      align-items: center;
+    }
+    .node {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #fff;
+      overflow: hidden;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+    .node-part {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0.3rem 0.5rem;
+      font-size: 0.8rem;
+    }
+    .node-prev {
+      background: #f7f7f0;
+      border-right: 1px solid var(--border);
+      width: 2.3rem;
+      color: var(--muted);
+      font-family: "SF Mono", Menlo, monospace;
+    }
+    .node-val {
+      font-weight: bold;
+      background: #eaf2f8;
+      width: 2.6rem;
+      font-size: 1rem;
+      color: var(--text);
+    }
+    .node-next {
+      background: #f7f7f0;
+      border-left: 1px solid var(--border);
+      width: 2.3rem;
+      color: var(--muted);
+      font-family: "SF Mono", Menlo, monospace;
+    }
+    .node-arrow {
+      color: var(--muted);
+      font-size: 1.3rem;
+      font-weight: bold;
+      margin: 0 0.3rem;
+      user-select: none;
+    }
+    /* Highlight States */
+    .node.active-node {
+      border-color: #f5b041;
+      transform: scale(1.06);
+      box-shadow: 0 2px 8px rgba(245,176,65,0.3);
+    }
+    .node.active-node .node-val {
+      background: #fdebd0;
+    }
+    .node-part.highlight-ptr {
+      background: #fdebd0;
+      color: #b7950b;
+      font-weight: bold;
+    }
+    .node.action-node {
+      border-color: #58d68d;
+      transform: scale(1.06);
+      box-shadow: 0 2px 8px rgba(88,214,141,0.3);
+    }
+    .node.action-node .node-val {
+      background: #eaf7ee;
+    }
+    /* Controls */
+    .sim-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+    .sim-btn {
+      font-family: inherit;
+      font-size: 0.8rem;
+      padding: 0.4rem 0.6rem;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      cursor: pointer;
+      text-align: center;
+    }
+    .sim-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: #fafaf5;
+    }
+    .sim-btn:disabled {
+      color: #ccc;
+      cursor: not-allowed;
+    }
+    .sim-log {
+      margin-top: 0.75rem;
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+      min-height: 2.2rem;
+      background: #fff;
+      padding: 0.4rem;
+      border: 1px solid var(--border);
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="0007-arraylist-internals.html">← Lesson 7</a> ·
+    <a href="../reference/0008-linkedlist-internals.html">LinkedList reference</a>
+  </nav>
+
+  <h1>LinkedList Internals</h1>
+  <p class="meta">~9 minutes · builds on <a href="0007-arraylist-internals.html">ArrayList internals</a></p>
+
+  <h2>The Node Structure</h2>
+  <p>Unlike <code>ArrayList</code>, which aggregates its objects inside a contiguous backing array, a <code>LinkedList</code> stores its elements inside individual, disjoint heap-allocated objects called <strong>nodes</strong>.</p>
+  <p>In Java, <code>java.util.LinkedList</code> implements a <strong>doubly linked list</strong>. Each node is an instance of a private static nested class containing three fields:</p>
+  <pre><code>private static class Node&lt;E&gt; {
+    E item;         // The actual data element
+    Node&lt;E&gt; next;   // Reference to the next node in the list
+    Node&lt;E&gt; prev;   // Reference to the previous node in the list
+}</code></pre>
+  <p>The list itself maintains three basic references: <code>int size</code>, <code>Node&lt;E&gt; first</code> (pointing to the head), and <code>Node&lt;E&gt; last</code> (pointing to the tail).</p>
+  <p class="cite">Source: <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/LinkedList.html">Oracle LinkedList API Specifications</a></p>
+
+  <h2>Interactive Simulator</h2>
+  <p>Inspect the visual representation of nodes below. Each node is split into a <code>prev</code> reference, an <code>item</code> value, and a <code>next</code> reference. Pointers represent memory memory addresses (indicated as <code>•</code> or <code>null</code>).</p>
+
+  <div class="simulator" id="ll-sim">
+    <div class="sim-stats">
+      <div class="stat-box">
+        <div>First Node Pointer (first)</div>
+        <div class="stat-val" id="sim-first">node0</div>
+      </div>
+      <div class="stat-box">
+        <div>Last Node Pointer (last)</div>
+        <div class="stat-val" id="sim-last">node2</div>
+      </div>
+      <div class="stat-box">
+        <div>Size</div>
+        <div class="stat-val" id="sim-size">3</div>
+      </div>
+    </div>
+
+    <div class="list-wrapper" id="sim-list">
+      <!-- Generated nodes -->
+    </div>
+
+    <div class="sim-controls">
+      <button class="sim-btn" id="btn-add-first">Add to Start (addFirst(x))</button>
+      <button class="sim-btn" id="btn-add-last">Add to End (addLast(x))</button>
+      <button class="sim-btn" id="btn-get-idx">Get Index 2 (get(2))</button>
+      <button class="sim-btn" id="btn-insert-after">Insert after Index 0 (O(1) once known)</button>
+      <button class="sim-btn" id="btn-reset" style="grid-column: span 2;">Reset List (A ⟷ B ⟷ C)</button>
+    </div>
+
+    <div class="sim-log" id="sim-log">
+      Simulator initialized. List size is 3.
+    </div>
+  </div>
+
+  <h2>Why Random Access is O(n)</h2>
+  <p>Because nodes are allocated dynamically in separate segments of memory, they do not occupy a contiguous physical block. This means we cannot calculate a node's physical address directly from an index using simple arithmetic.</p>
+  <p>To find the element at index <code>i</code>, the JVM must perform a <strong>list traversal</strong> starting at one end of the list and following the chain of pointers step-by-step:</p>
+  <pre><code>Node&lt;E&gt; x = first;
+for (int k = 0; k &lt; index; k++) {
+    x = x.next;
+}
+return x.item;</code></pre>
+  <p>Since the number of hops is proportional to the index value, lookup takes linear <strong><code>O(n)</code></strong> time.</p>
+
+  <h3>Bidirectional Optimization</h3>
+  <p>As a doubly linked list, Java optimizes this traversal. If the target index is in the second half of the list (<code>index &gt; size / 2</code>), it starts from the <code>last</code> pointer and walks backward using <code>prev</code>. While this cuts search steps in half, the worst-case complexity remains <code>O(n)</code>.</p>
+
+  <h2>O(1) Insertions (When Reference is Known)</h2>
+  <p>Adding an element to an <code>ArrayList</code> requires shifting subsequent items to the right to make room (taking <code>O(n)</code> time). A <code>LinkedList</code> never shifts items. If you already hold a direct reference to a node (say, <code>target</code>), inserting a new node involves only re-linking four pointer fields:</p>
+  <ol>
+    <li>Create the new node: <code>Node&lt;E&gt; newNode = new Node&lt;&gt;(target, element, target.next);</code></li>
+    <li>Update the following node: <code>target.next.prev = newNode;</code></li>
+    <li>Update the target node: <code>target.next = newNode;</code></li>
+  </ol>
+  <p>Because this re-linking relies on a fixed number of variable updates, it takes constant <strong><code>O(1)</code></strong> time. (Note: Locating the node by index first still requires an <code>O(n)</code> search, but the insertion operation itself is <code>O(1)</code> once you are at that node).</p>
+
+  <h2>Doubly Linked List Trade-Offs</h2>
+  <p>The extra pointers in a doubly linked list add both advantages and costs:</p>
+  <ul>
+    <li><strong>Pros:</strong> Efficient traversal in both directions, simple insertion and deletion at both ends (<code>first</code> and <code>last</code>) in <code>O(1)</code> time, which makes it ideal for implementing double-ended queues (Deques).</li>
+    <li><strong>Cons:</strong> High memory overhead. Every node must store two object pointers (<code>prev</code> and <code>next</code> references) in addition to the element reference. In a 64-bit JVM, this pointer metadata can easily consume more memory than the actual payload data.</li>
+  </ul>
+
+  <h2>Practice — Bidirectional Traversal</h2>
+  <p>Java's <code>LinkedList.get(index)</code> method optimizes lookups by splitting the list in half.</p>
+
+  <div class="quiz" id="quiz-traversal">
+    <p class="quiz-question">In a doubly linked list, how does the index lookup method get(i) optimize traversal?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">it starts searching from the closest list end point</button></li>
+      <li><button data-answer="wrong">it searches from both list ends using separate threads</button></li>
+      <li><button data-answer="wrong">it caches node memory pointers to skip traversal steps</button></li>
+      <li><button data-answer="wrong">it uses binary search algorithms to locate target nodes</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Retrieval Practice</h2>
+  <p>Cover the answer. If you are adding elements exclusively to the end of a list using <code>add(E element)</code>, which structure is generally faster and uses less memory: <code>ArrayList</code> or <code>LinkedList</code>?</p>
+  <details style="font-size:0.9rem; color:#555; margin-top:0.5rem;">
+    <summary>Reveal</summary>
+    <p><code>ArrayList</code> is generally faster and uses significantly less memory. An <code>ArrayList</code> packs references contiguously without node wrappers, reducing metadata overhead. Adding to the end is an amortized <code>O(1)</code> operation, which runs extremely fast due to sequential memory access patterns, whereas <code>LinkedList</code> must allocate a new node object on every single insertion.</p>
+  </details>
+
+  <h2>Primary Reading</h2>
+  <p>Read the official OpenJDK implementation details in the <a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/LinkedList.java">LinkedList.java source code</a> (specifically focus on the <code>linkBefore</code>, <code>unlink</code>, and <code>node(int index)</code> methods).</p>
+
+  <h2>What's next</h2>
+  <p><a href="0009-hashset-internals.html">Lesson 9 — HashSet Internals</a> · Learn how Java prevents duplicate elements using a backing HashMap.</p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — for example, ask how Java's garbage collector cleans up unlinked nodes to avoid memory leaks.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-traversal', {
+      correct: "Correct! Java checks if the index is in the first or second half, and traverses starting from either first (using next) or last (using prev).",
+      wrong: "Not quite. Recall that the lookup starts from whichever end is closer (first or last) to minimize traversals, without using threads, caches, or binary search."
+    });
+
+    // SIMULATOR CODE
+    (function() {
+      let nodes = [
+        { id: 0, val: 'A' },
+        { id: 1, val: 'B' },
+        { id: 2, val: 'C' }
+      ];
+      let idCounter = 3;
+      let isAnimating = false;
+
+      const simFirst = document.getElementById('sim-first');
+      const simLast = document.getElementById('sim-last');
+      const simSize = document.getElementById('sim-size');
+      const simList = document.getElementById('sim-list');
+      const simLog = document.getElementById('sim-log');
+
+      const btnAddFirst = document.getElementById('btn-add-first');
+      const btnAddLast = document.getElementById('btn-add-last');
+      const btnGetIdx = document.getElementById('btn-get-idx');
+      const btnInsertAfter = document.getElementById('btn-insert-after');
+      const btnReset = document.getElementById('btn-reset');
+
+      function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+      }
+
+      function log(msg) {
+        simLog.textContent = msg;
+      }
+
+      function disableButtons(disable) {
+        btnAddFirst.disabled = disable;
+        btnAddLast.disabled = disable;
+        btnGetIdx.disabled = disable || (nodes.length < 3);
+        btnInsertAfter.disabled = disable || (nodes.length === 0 || nodes.length >= 6);
+        btnReset.disabled = disable;
+      }
+
+      function updateUI() {
+        simSize.textContent = nodes.length;
+        if (nodes.length === 0) {
+          simFirst.textContent = 'null';
+          simLast.textContent = 'null';
+          simList.innerHTML = '<span style="color:#ccc; font-style:italic;">Empty List</span>';
+          btnGetIdx.disabled = true;
+          btnInsertAfter.disabled = true;
+          return;
+        }
+
+        simFirst.textContent = `node${nodes[0].id}`;
+        simLast.textContent = `node${nodes[nodes.length - 1].id}`;
+        simList.innerHTML = '';
+
+        // Draw 'first' label pointer
+        const firstPtr = document.createElement('div');
+        firstPtr.className = 'list-pointer';
+        firstPtr.textContent = 'first ➔';
+        simList.appendChild(firstPtr);
+
+        nodes.forEach((n, idx) => {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'node-container';
+          wrapper.id = `node-container-${idx}`;
+
+          const nodeDiv = document.createElement('div');
+          nodeDiv.className = 'node';
+          nodeDiv.id = `node-box-${idx}`;
+
+          const prevDiv = document.createElement('div');
+          prevDiv.className = 'node-part node-prev';
+          prevDiv.id = `node-prev-${idx}`;
+          prevDiv.textContent = idx === 0 ? 'null' : `•`;
+          nodeDiv.appendChild(prevDiv);
+
+          const valDiv = document.createElement('div');
+          valDiv.className = 'node-part node-val';
+          valDiv.innerHTML = `${n.val}<br><span style="font-size:0.6rem; color:#888;">(n${n.id})</span>`;
+          nodeDiv.appendChild(valDiv);
+
+          const nextDiv = document.createElement('div');
+          nextDiv.className = 'node-part node-next';
+          nextDiv.id = `node-next-${idx}`;
+          nextDiv.textContent = idx === nodes.length - 1 ? 'null' : `•`;
+          nodeDiv.appendChild(nextDiv);
+
+          wrapper.appendChild(nodeDiv);
+
+          // Add arrow if not the last node
+          if (idx < nodes.length - 1) {
+            const arrow = document.createElement('div');
+            arrow.className = 'node-arrow';
+            arrow.textContent = '⟷';
+            wrapper.appendChild(arrow);
+          }
+
+          simList.appendChild(wrapper);
+        });
+
+        const lastPtr = document.createElement('div');
+        lastPtr.className = 'list-pointer';
+        lastPtr.textContent = '➔ last';
+        simList.appendChild(lastPtr);
+
+        btnGetIdx.disabled = (nodes.length < 3);
+        btnInsertAfter.disabled = (nodes.length === 0 || nodes.length >= 6);
+      }
+
+      async function addFirst() {
+        if (isAnimating) return;
+        isAnimating = true;
+        disableButtons(true);
+
+        const char = String.fromCharCode(65 + (idCounter % 26)); // D, E, F...
+        const newId = idCounter++;
+        log(`Creating new Node(n${newId}) with item '${char}'...`);
+        
+        // Show visual state where node is added at start
+        nodes.unshift({ id: newId, val: char });
+        updateUI();
+
+        const box = document.getElementById('node-box-0');
+        if (box) {
+          box.classList.add('action-node');
+          await sleep(600);
+          box.classList.remove('action-node');
+        }
+
+        log(`Successfully unshifted and linked: first pointer updated to node${newId}.`);
+        isAnimating = false;
+        disableButtons(false);
+      }
+
+      async function addLast() {
+        if (isAnimating) return;
+        isAnimating = true;
+        disableButtons(true);
+
+        const char = String.fromCharCode(65 + (idCounter % 26));
+        const newId = idCounter++;
+        log(`Creating new Node(n${newId}) with item '${char}'...`);
+
+        nodes.push({ id: newId, val: char });
+        updateUI();
+
+        const box = document.getElementById(`node-box-${nodes.length - 1}`);
+        if (box) {
+          box.classList.add('action-node');
+          await sleep(600);
+          box.classList.remove('action-node');
+        }
+
+        log(`Successfully appended and linked: last pointer updated to node${newId}.`);
+        isAnimating = false;
+        disableButtons(false);
+      }
+
+      async function getIndex2() {
+        if (isAnimating || nodes.length < 3) return;
+        isAnimating = true;
+        disableButtons(true);
+
+        // Size check for bidirectional optimize
+        const half = nodes.length / 2;
+        log(`get(2) requested. Target index 2 >= (size ${nodes.length} / 2). Starting from 'last'!`);
+        await sleep(800);
+
+        // Highlight scanning from the end backward
+        for (let i = nodes.length - 1; i >= 2; i--) {
+          log(`Traversing backward: currently at index ${i} (node${nodes[i].id})`);
+          const box = document.getElementById(`node-box-${i}`);
+          if (box) {
+            box.classList.add('active-node');
+            await sleep(700);
+            box.classList.remove('active-node');
+          }
+        }
+
+        log(`Index 2 reached! Node${nodes[2].id} value is '${nodes[2].val}'. Total hops: ${nodes.length - 1 - 2 + 1}`);
+        const finalBox = document.getElementById(`node-box-2`);
+        if (finalBox) {
+          finalBox.classList.add('action-node');
+          await sleep(1000);
+          finalBox.classList.remove('action-node');
+        }
+
+        isAnimating = false;
+        disableButtons(false);
+      }
+
+      async function insertAfterIndex0() {
+        if (isAnimating || nodes.length === 0 || nodes.length >= 6) return;
+        isAnimating = true;
+        disableButtons(true);
+
+        const char = String.fromCharCode(65 + (idCounter % 26));
+        const newId = idCounter++;
+        log(`Reference to index 0 (node${nodes[0].id}) is known. Preparing to insert '${char}' directly after it...`);
+        
+        const box0 = document.getElementById('node-box-0');
+        if (box0) box0.classList.add('active-node');
+        await sleep(800);
+
+        log(`Step 1: Allocate Node(n${newId}) with next=node${nodes[0].id}.next, prev=node${nodes[0].id}`);
+        // Visual insert
+        nodes.splice(1, 0, { id: newId, val: char });
+        updateUI();
+
+        // Highlight the newly added node and pointers
+        const box1 = document.getElementById('node-box-1');
+        if (box1) box1.classList.add('action-node');
+        const prev1 = document.getElementById('node-prev-1');
+        const next1 = document.getElementById('node-next-1');
+        if (prev1) prev1.classList.add('highlight-ptr');
+        if (next1) next1.classList.add('highlight-ptr');
+        await sleep(800);
+
+        log(`Step 2: Rewire pointers: node${nodes[0].id}.next = node${newId}, and node${nodes[2].id}.prev = node${newId}`);
+        const next0 = document.getElementById('node-next-0');
+        const prev2 = document.getElementById('node-prev-2');
+        if (next0) next0.classList.add('highlight-ptr');
+        if (prev2) prev2.classList.add('highlight-ptr');
+        await sleep(1000);
+
+        if (box0) box0.classList.remove('active-node');
+        updateUI();
+        log(`Insertion complete. No elements shifted! O(1) pointer updates executed.`);
+
+        isAnimating = false;
+        disableButtons(false);
+      }
+
+      function resetSim() {
+        nodes = [
+          { id: 0, val: 'A' },
+          { id: 1, val: 'B' },
+          { id: 2, val: 'C' }
+        ];
+        idCounter = 3;
+        isAnimating = false;
+        log("Simulator reset. Initial doubly linked list re-created.");
+        updateUI();
+      }
+
+      btnAddFirst.addEventListener('click', addFirst);
+      btnAddLast.addEventListener('click', addLast);
+      btnGetIdx.addEventListener('click', getIndex2);
+      btnInsertAfter.addEventListener('click', insertAfterIndex0);
+      btnReset.addEventListener('click', resetSim);
+
+      updateUI();
+    })();
+  </script>
+</body>
+</html>

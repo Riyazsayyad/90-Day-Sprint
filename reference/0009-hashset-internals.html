@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HashSet Internals — Reference</title>
+  <meta name="description" content="Quick reference guide for Java HashSet internals, detailing the backing HashMap, the PRESENT sentinel object, duplicate rejection, and the equals/hashCode contract.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/0009-hashset-internals.html">← Lesson 9</a> ·
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>HashSet Internals Reference</h1>
+  <p class="meta"><a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/HashSet.html">Oracle HashSet Javadoc</a></p>
+
+  <h2>The Backing HashMap</h2>
+  <p>Inside Java's <code>HashSet</code>, elements are stored as <strong>keys</strong> in a backing <code>HashMap</code> instance. The map values are all bound to a single dummy sentinel object called <code>PRESENT</code>:</p>
+  <pre><code>public class HashSet&lt;E&gt; extends AbstractSet&lt;E&gt; implements Set&lt;E&gt;, Cloneable, java.io.Serializable {
+    private transient HashMap&lt;E,Object&gt; map;
+
+    // Dummy value to associate with an Object in the backing Map
+    private static final Object PRESENT = new Object();
+
+    // Default Constructor initializes the backing HashMap
+    public HashSet() {
+        map = new HashMap&lt;&gt;();
+    }
+}</code></pre>
+
+  <h2>Core Delegation Methods</h2>
+  <p>Because the backing map does all the heavy lifting, <code>HashSet</code>'s primary methods are simple wrapper delegations:</p>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left">HashSet Method</th>
+      <th align="left">Backing HashMap Call</th>
+      <th align="left">Return Value Mapping</th>
+    </tr>
+    <tr>
+      <td><code>add(E e)</code></td>
+      <td><code>map.put(e, PRESENT)</code></td>
+      <td>Returns <code>true</code> if <code>map.put</code> returns <code>null</code> (key was absent). Returns <code>false</code> if it returns <code>PRESENT</code> (key was duplicate).</td>
+    </tr>
+    <tr>
+      <td><code>remove(Object o)</code></td>
+      <td><code>map.remove(o)</code></td>
+      <td>Returns <code>true</code> if <code>map.remove</code> returns <code>PRESENT</code> (key existed). Returns <code>false</code> if it returns <code>null</code> (key absent).</td>
+    </tr>
+    <tr>
+      <td><code>contains(Object o)</code></td>
+      <td><code>map.containsKey(o)</code></td>
+      <td>Directly returns <code>map.containsKey(o)</code> boolean result.</td>
+    </tr>
+    <tr>
+      <td><code>iterator()</code></td>
+      <td><code>map.keySet().iterator()</code></td>
+      <td>Delegates to the set of keys in the backing map.</td>
+    </tr>
+  </table>
+
+  <h2>The equals() and hashCode() Contract</h2>
+  <p>When an element is queried or added, the backing <code>HashMap</code> locates its bucket using <code>hashCode()</code> and searches the bucket chain or tree using <code>equals()</code>. For custom classes, you <strong>must override both</strong>:</p>
+  <ul>
+    <li><strong>Rule 1 (Consistency):</strong> If two objects are equal according to the <code>equals(Object)</code> method, calling <code>hashCode()</code> on each must produce the <strong>same integer result</strong>.</li>
+    <li><strong>Rule 2 (Distinction):</strong> If two objects produce different hash codes, they are guaranteed to be unequal. If they produce the same hash code (a hash collision), they might still be unequal, which requires checking <code>equals()</code>.</li>
+  </ul>
+  
+  <div class="callout">
+    <strong>Broken Contracts:</strong>
+    <ul>
+      <li>If you override <code>equals()</code> but not <code>hashCode()</code>: Equal objects will produce different hash codes, landing in different buckets. The set will allow duplicates!</li>
+      <li>If you override <code>hashCode()</code> but not <code>equals()</code>: Different objects will map to the same bucket, but the set will compare them using default reference equality (<code>==</code>). Equal values will not be recognized as duplicates!</li>
+    </ul>
+  </div>
+
+  <h2>Time Complexity Comparison</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left">Operation</th>
+      <th align="left">HashSet</th>
+      <th align="left">ArrayList</th>
+      <th align="left">LinkedList</th>
+    </tr>
+    <tr>
+      <td><strong>add(element)</strong></td>
+      <td><code>O(1)</code> average / <code>O(log n)</code> worst</td>
+      <td><code>O(1)</code> amortized</td>
+      <td><code>O(1)</code></td>
+    </tr>
+    <tr>
+      <td><strong>remove(element)</strong></td>
+      <td><code>O(1)</code> average / <code>O(log n)</code> worst</td>
+      <td><code>O(n)</code> (due to shifting)</td>
+      <td><code>O(n)</code> (due to search)</td>
+    </tr>
+    <tr>
+      <td><strong>contains(element)</strong></td>
+      <td><code>O(1)</code> average / <code>O(log n)</code> worst</td>
+      <td><code>O(n)</code> (linear search)</td>
+      <td><code>O(n)</code> (linear search)</td>
+    </tr>
+  </table>
+  <p class="cite">Note: The worst-case <code>O(log n)</code> for HashSet occurs when elements suffer complete hash collisions, leading to Red-Black Tree treeification of map buckets.</p>
+
+  <h2>When to Use HashSet</h2>
+  <ul>
+    <li><strong>Use when:</strong> Uniqueness is mandatory, lookup performance is critical, and insertion order is irrelevant.</li>
+    <li><strong>Avoid when:</strong> You need to maintain insertion order (use <code>LinkedHashSet</code> instead) or sorted order (use <code>TreeSet</code> instead), or memory overhead per element is highly restricted.</li>
+  </ul>
+</body>
+</html>

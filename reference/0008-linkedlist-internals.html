@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LinkedList Internals — Reference</title>
+  <meta name="description" content="Quick reference guide for Java LinkedList internals, detailing Node node structures, bidirectional traversal logic, memory usage overheads, and comparison tables.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/0008-linkedlist-internals.html">← Lesson 8</a> ·
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>LinkedList Internals Reference</h1>
+  <p class="meta"><a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/LinkedList.html">Oracle LinkedList Javadoc</a></p>
+
+  <h2>Node Structure</h2>
+  <p>Inside Java's <code>LinkedList</code>, the list elements are wrapped in <code>Node</code> objects:</p>
+  <pre><code>private static class Node&lt;E&gt; {
+    E item;
+    Node&lt;E&gt; next;
+    Node&lt;E&gt; prev;
+
+    Node(Node&lt;E&gt; prev, E element, Node&lt;E&gt; next) {
+        this.item = element;
+        this.next = next;
+        this.prev = prev;
+    }
+}</code></pre>
+
+  <h2>Bidirectional Traversal Optimization</h2>
+  <p>To access index <code>i</code>, the <code>node(int index)</code> method splits the search in half based on size:</p>
+  <pre><code>Node&lt;E&gt; node(int index) {
+    // If target index is in first half, scan forward from head
+    if (index &lt; (size &gt;&gt; 1)) {
+        Node&lt;E&gt; x = first;
+        for (int i = 0; i &lt; index; i++)
+            x = x.next;
+        return x;
+    } 
+    // Otherwise, scan backward from tail
+    else {
+        Node&lt;E&gt; x = last;
+        for (int i = size - 1; i &gt; index; i--)
+            x = x.prev;
+        return x;
+    }
+}</code></pre>
+
+  <h2>ArrayList vs. LinkedList Complexity</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left">Operation</th>
+      <th align="left">ArrayList</th>
+      <th align="left">LinkedList</th>
+      <th align="left">LinkedList Details</th>
+    </tr>
+    <tr>
+      <td><strong>get(index) / set(index)</strong></td>
+      <td><code>O(1)</code></td>
+      <td><code>O(n)</code></td>
+      <td>Requires traversal of <code>n/2</code> steps on average.</td>
+    </tr>
+    <tr>
+      <td><strong>add(E e) (to end)</strong></td>
+      <td><code>O(1)</code> Amortized</td>
+      <td><code>O(1)</code></td>
+      <td>Trivial update of the <code>last</code> pointer and appending node.</td>
+    </tr>
+    <tr>
+      <td><strong>add(index, E) (insertion)</strong></td>
+      <td><code>O(n)</code></td>
+      <td><code>O(n)</code> search + <code>O(1)</code> link</td>
+      <td>Finding the node takes <code>O(n)</code>, but pointer rewiring is <code>O(1)</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>remove(index) (deletion)</strong></td>
+      <td><code>O(n)</code></td>
+      <td><code>O(n)</code> search + <code>O(1)</code> unlink</td>
+      <td>Finding the node takes <code>O(n)</code>, unlinking pointers is <code>O(1)</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>remove(Object) (by value)</strong></td>
+      <td><code>O(n)</code></td>
+      <td><code>O(n)</code> search + <code>O(1)</code> unlink</td>
+      <td>Must search from head to find value match.</td>
+    </tr>
+  </table>
+
+  <h2>Memory Overhead</h2>
+  <p>In a 64-bit JVM, a <code>LinkedList</code> is significantly less memory-efficient than <code>ArrayList</code>:</p>
+  <ul>
+    <li><strong>ArrayList:</strong> Stores references contiguously in a single array. Overhead is only the unused array capacity (references are 4 or 8 bytes).</li>
+    <li><strong>LinkedList:</strong> Each element requires a <code>Node</code> object wrapper.
+      <ul>
+        <li>Object header: 12-16 bytes</li>
+        <li>Three reference pointers (<code>item</code>, <code>next</code>, <code>prev</code>): 12-24 bytes</li>
+        <li>Padding alignment: 4-8 bytes</li>
+        <li><strong>Total node overhead:</strong> ~32 to 48 bytes per element (in addition to the data itself).</li>
+      </ul>
+    </li>
+  </ul>
+</body>
+</html>
