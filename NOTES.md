@@ -45,4 +45,9 @@
 - User invoked `/teach Collections Utility`.
 - Lesson 13 created: java.util.Collections static utilities, unmodifiable/synchronized/checked wrappers, and sentinel empty collections.
 
+## Session 11 (2026-07-08)
+- User invoked `/teach Teach me Java Iterator from an interview perspective.`
+- Lesson 14 created: Java Iterator design, cursor internals (index pointer vs node reference), fail-fast checks (modCount), iterator.remove() vs collection.remove(), and interview guide.
+
+
 

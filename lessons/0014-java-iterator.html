@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 14 — Java Iterator Internals</title>
+  <meta name="description" content="Learn Java Iterator from an interview perspective: design origins, cursor mechanics, fail-fast modCount checks, ArrayList/LinkedList implementations, and complexities.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="0013-collections-utility.html">&larr; Lesson 13</a> &middot;
+    Lesson 14 of ? &middot;
+    <a href="../reference/0014-java-iterator.html">Iterator Reference</a>
+  </nav>
+
+  <h1>Java Iterator Internals: Interview Guide</h1>
+  <p class="meta">~8 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. Why Iterator Was Introduced</h2>
+  <p>Prior to Java 1.2, traversing collections was inconsistent. Legacy structures like <code>Vector</code> used <code>Enumeration</code>. Iterator was introduced to achieve two main goals:</p>
+  <ul>
+    <li><strong>Standardization:</strong> Provides a uniform traversal interface across all collection types (Lists, Sets, Maps), hiding the underlying structural layout (Encapsulation).</li>
+    <li><strong>Safety:</strong> Supports safe structural modifications (removal) during iteration and implements <strong>fail-fast</strong> checks to detect concurrent modifications.</li>
+  </ul>
+
+  <h2>2. Internal Cursor Mechanism</h2>
+  <p>Each collection class implements <code>Iterable</code> and defines an internal private class (e.g., <code>ArrayList.Itr</code> or <code>LinkedList.ListItr</code>) implementing the Iterator interface. They maintain internal pointers to keep track of state:</p>
+  <ul>
+    <li><strong>ArrayList Iterator:</strong> Tracks <code>int cursor</code> (index of the next element to return) and <code>int lastRet</code> (index of the last element returned; reset to <code>-1</code> after removal).</li>
+    <li><strong>LinkedList Iterator:</strong> Tracks a Node reference <code>nextNode</code> (the next node to visit) and <code>lastReturned</code> (the last node visited; reset to <code>null</code> after removal).</li>
+  </ul>
+
+  <h2>3. Methods Internals (hasNext, next, remove)</h2>
+  <p>The standard loop checks and traverses elements sequentially:</p>
+  <pre><code>// hasNext() checks if cursor hasn't reached size limit
+public boolean hasNext() {
+    return cursor != size;
+}
+
+// next() retrieves the element and increments the cursor
+public E next() {
+    checkForComodification(); // Mismatch check
+    int i = cursor;
+    if (i >= size) throw new NoSuchElementException();
+    Object[] elementData = ArrayList.this.elementData;
+    cursor = i + 1;
+    return (E) elementData[lastRet = i];
+}</code></pre>
+
+  <h2>4. The Fail-Fast vs. Safe-Remove Mechanics</h2>
+  <p>Why does <code>collection.remove()</code> throw a <code>ConcurrentModificationException</code> while <code>iterator.remove()</code> does not? It comes down to two variables:</p>
+  <ul>
+    <li><code>modCount</code>: Maintained by the collection, counting structural modifications.</li>
+    <li><code>expectedModCount</code>: Maintained by the iterator, initialized to the collection's <code>modCount</code> at startup.</li>
+  </ul>
+  <p>If you call <code>list.remove()</code>, only <code>modCount</code> increments. The next call to <code>iterator.next()</code> notices that <code>modCount != expectedModCount</code> and triggers a fail-fast crash.</p>
+  <p>If you call <code>iterator.remove()</code>, it performs the removal, increments the collection's <code>modCount</code>, and immediately <strong>re-synchronizes the iterator's state</strong>:</p>
+  <pre><code>public void remove() {
+    if (lastRet < 0) throw new IllegalStateException();
+    checkForComodification();
+    try {
+        ArrayList.this.remove(lastRet);
+        cursor = lastRet;
+        lastRet = -1;
+        expectedModCount = modCount; // <-- STATE RE-SYNCED!
+    } catch (IndexOutOfBoundsException ex) {
+        throw new ConcurrentModificationException();
+    }
+}</code></pre>
+
+  <h2>5. Time Complexity Analysis</h2>
+  <ul>
+    <li><code>hasNext()</code> and <code>next()</code>: <code>O(1)</code> across both List structures.</li>
+    <li><code>iterator.remove()</code>:
+      <ul>
+        <li><strong>ArrayList:</strong> <code>O(n)</code>. Although finding the node is <code>O(1)</code>, deleting it requires shifting array elements via <code>System.arraycopy()</code>.</li>
+        <li><strong>LinkedList:</strong> <code>O(1)</code>. The node pointer is held directly by the iterator, meaning relinking the previous and next nodes requires only constant time.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>6. Key Interview Questions</h2>
+  <div class="callout">
+    <strong>Q: What happens if you call remove() twice in a row without calling next()?</strong>
+    <br>It throws <code>IllegalStateException</code>. After the first call to <code>remove()</code>, the iterator resets <code>lastRet = -1</code>. The second call checks <code>if (lastRet < 0)</code> and fails immediately because you cannot remove an element that hasn't been retrieved yet.
+  </div>
+  <div class="callout">
+    <strong>Q: What is the difference between fail-fast and fail-safe iterators?</strong>
+    <br><strong>Fail-fast:</strong> Throws <code>ConcurrentModificationException</code> on structural modifications during iteration (e.g., ArrayList, HashSet).
+    <br><strong>Fail-safe (Weakly Consistent):</strong> Iterates over a clone of the collection or handles concurrent changes smoothly without throwing exceptions (e.g., <code>CopyOnWriteArrayList</code>, <code>ConcurrentHashMap</code>).
+  </div>
+
+  <h2>7. Real-World Use Cases</h2>
+  <ul>
+    <li><strong>Filtering Collections:</strong> Removing items matching a predicate during traversal (equivalent to modern <code>collection.removeIf(filter)</code>).</li>
+    <li><strong>Custom Collections:</strong> Implementing the <code>Iterable</code> interface in your custom structures to allow users to leverage the standard foreach loop syntax.</li>
+  </ul>
+
+  <h2>Practice — consecutive removal</h2>
+  <p>Test your understanding of structural updates:</p>
+
+  <div class="quiz" id="quiz-iterator">
+    <p class="quiz-question">Pick the correct statement regarding iterator removal behavior:</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">Calling remove twice without next throws IllegalStateException.</button></li>
+      <li><button data-answer="wrong">Calling remove twice without next throws ConcurrentModificationException.</button></li>
+      <li><button data-answer="wrong">Calling remove twice without next bypasses fail-fast check verification.</button></li>
+      <li><button data-answer="wrong">Calling remove twice without next shifts elements without cursor updates.</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary reading</h2>
+  <p>Read the <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/Iterator.html">Iterator Javadoc</a> and analyze the inner <code>Itr</code> class inside the <a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/ArrayList.java">OpenJDK ArrayList Source Code</a>.</p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — paste a code snippet or describe what confused you.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-iterator', {
+      correct: 'Correct! The remove() method resets lastRet to -1. If you call remove() again without a preceding call to next(), lastRet is -1, causing the method to throw IllegalStateException.',
+      wrong: 'Incorrect. The iterator relies on a cursor pointer variable called lastRet, which is set to -1 after a removal. A consecutive removal call sees this -1 and throws IllegalStateException.'
+    });
+  </script>
+</body>
+</html>

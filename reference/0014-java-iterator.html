@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Java Iterator — Reference</title>
+  <meta name="description" content="Quick reference guide for Java Iterator internals, detailing cursor implementations, modCount fail-fast checks, remove mechanics, and interview summaries.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/0014-java-iterator.html">&larr; Lesson 14</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Java Iterator Reference</h1>
+  <p class="meta"><a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/Iterator.html">Oracle java.util.Iterator Javadoc</a></p>
+
+  <h2>1. Core API Contract</h2>
+  <pre><code>public interface Iterator&lt;E&gt; {
+    boolean hasNext(); // Checks if more elements exist
+    E next();          // Returns next element, advances cursor
+    default void remove() { throw new UnsupportedOperationException(); }
+}</code></pre>
+
+  <h2>2. Cursor Internals (ArrayList vs. LinkedList)</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Feature</th>
+      <th align="left" style="padding: 0.5rem; width: 38%;">ArrayList.Itr</th>
+      <th align="left" style="padding: 0.5rem; width: 37%;">LinkedList.ListItr</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><strong>Cursor Tracker</strong></td>
+      <td style="padding: 0.5rem;"><code>int cursor</code> (index of next element to return)</td>
+      <td style="padding: 0.5rem;"><code>Node&lt;E&gt; nextNode</code> (reference to next node)</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><strong>Last Returned</strong></td>
+      <td style="padding: 0.5rem;"><code>int lastRet</code> (index of last returned element; -1 if removed)</td>
+      <td style="padding: 0.5rem;"><code>Node&lt;E&gt; lastReturned</code> (reference to last node; null if removed)</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><strong>next() logic</strong></td>
+      <td style="padding: 0.5rem;">Returns <code>elementData[cursor]</code>, sets <code>lastRet = cursor</code>, increments <code>cursor++</code>.</td>
+      <td style="padding: 0.5rem;">Returns <code>nextNode.item</code>, sets <code>lastReturned = nextNode</code>, moves <code>nextNode = nextNode.next</code>.</td>
+    </tr>
+  </table>
+
+  <h2>3. Fail-Fast Mechanism (modCount)</h2>
+  <p>To prevent dirty reads and data inconsistency in a multithreaded or mutating environment, Java iterators are <strong>fail-fast</strong>.</p>
+  <ul>
+    <li>The collection maintains a counter field: <code>int modCount</code> (incremented on every add/remove/clear structural modification).</li>
+    <li>When an iterator is created, it initializes: <code>int expectedModCount = modCount;</code></li>
+    <li>Every call to <code>next()</code> or <code>remove()</code> checks:
+      <pre><code>final void checkForComodification() {
+    if (modCount != expectedModCount)
+        throw new ConcurrentModificationException();
+}</code></pre>
+    </li>
+  </ul>
+
+  <h2>4. Why iterator.remove() is Safe</h2>
+  <p>If you call <code>collection.remove(obj)</code> while iterating, the collection's <code>modCount</code> increases, but the iterator's <code>expectedModCount</code> is not updated. The next call to <code>iterator.next()</code> detects the mismatch and throws a <code>ConcurrentModificationException</code>.</p>
+  <p>When you call <code>iterator.remove()</code>, the iterator performs the deletion on the backing collection, increments the collection's <code>modCount</code>, and then <strong>synchronizes its own tracker</strong>:</p>
+  <pre><code>// Inside ArrayList.Itr.remove()
+ArrayList.this.remove(lastRet);
+cursor = lastRet;
+lastRet = -1;
+expectedModCount = modCount; // <-- Synced to prevent Exception!</code></pre>
+
+  <h2>5. Time Complexity Analysis</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Operation</th>
+      <th align="left" style="padding: 0.5rem; width: 38%;">ArrayList.Itr</th>
+      <th align="left" style="padding: 0.5rem; width: 37%;">LinkedList.ListItr</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><code>hasNext()</code></td>
+      <td style="padding: 0.5rem;"><code>O(1)</code></td>
+      <td style="padding: 0.5rem;"><code>O(1)</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><code>next()</code></td>
+      <td style="padding: 0.5rem;"><code>O(1)</code></td>
+      <td style="padding: 0.5rem;"><code>O(1)</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><code>remove()</code></td>
+      <td style="padding: 0.5rem;"><code>O(n)</code> (due to array element shifting)</td>
+      <td style="padding: 0.5rem;"><code>O(1)</code> (relinking pointers of current node)</td>
+    </tr>
+  </table>
+
+  <h2>6. Key Interview Questions</h2>
+  <ol>
+    <li><strong>What is the difference between Iterator and Enumeration?</strong>
+      <br>Enumeration is legacy (JDK 1.0), read-only (no <code>remove()</code>), and is not fail-fast. Iterator (JDK 1.2) is fail-fast and supports safe removal.
+    </li>
+    <li><strong>Can you iterate and write to a collection simultaneously?</strong>
+      <br>Only if using <code>iterator.remove()</code>, or if using a concurrent collection like <code>CopyOnWriteArrayList</code> or <code>ConcurrentHashMap</code> which use fail-safe iterators operating on a clone of the backing structure.
+    </li>
+  </ol>
+</body>
+</html>
