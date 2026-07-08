@@ -16,61 +16,72 @@
   <h1>Collections Utility Class Reference</h1>
   <p class="meta"><a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/Collections.html">Oracle java.util.Collections Javadoc</a></p>
 
-  <h2>Wrapper Collections (Views vs. Copies)</h2>
-  <p>The <code>java.util.Collections</code> class provides wrapper methods that return <strong>views</strong> of a backing collection. They intercept calls to delegate or block operations, rather than copying any internal array or node data structure.</p>
-
+  <h2>1. Sorting & Searching Algorithms</h2>
   <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
     <tr style="border-bottom:1px solid #ddd;">
-      <th align="left" style="padding: 0.5rem;">Wrapper Type</th>
-      <th align="left" style="padding: 0.5rem;">Creation Method</th>
-      <th align="left" style="padding: 0.5rem;">Behavior & Constraints</th>
+      <th align="left" style="padding: 0.5rem; width: 30%;">Method</th>
+      <th align="left" style="padding: 0.5rem;">Behavior & Internal Constraints</th>
     </tr>
     <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-      <td style="padding: 0.5rem;"><strong>Unmodifiable</strong></td>
-      <td style="padding: 0.5rem;"><code>unmodifiableList(list)</code><br><code>unmodifiableSet(set)</code><br><code>unmodifiableMap(map)</code></td>
-      <td style="padding: 0.5rem;">Blocks writing calls by throwing <code>UnsupportedOperationException</code>. Read-through views: changes to the underlying backing list are visible.</td>
+      <td style="padding: 0.5rem;"><code>sort(List&lt;T&gt; list)</code><br><code>sort(List&lt;T&gt; list, Comparator&lt;? super T&gt; c)</code></td>
+      <td style="padding: 0.5rem;">
+        Sorts the list. Uses the objects' natural ordering (<code>Comparable</code>) or a custom ordering (<code>Comparator</code>).
+        <br><strong>Stable Sorting:</strong> It uses <strong>Timsort</strong> (stable hybrid merge-insertion sort), meaning equal elements retain their original relative order. Time complexity is guaranteed <code>O(n log n)</code>.
+      </td>
     </tr>
     <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-      <td style="padding: 0.5rem;"><strong>Synchronized</strong></td>
-      <td style="padding: 0.5rem;"><code>synchronizedList(list)</code><br><code>synchronizedSet(set)</code><br><code>synchronizedMap(map)</code></td>
-      <td style="padding: 0.5rem;">Wraps all reads and writes in a <code>synchronized(mutex)</code> block. <strong>Caveat:</strong> Manual synchronization on the mutex is required when iterating.</td>
-    </tr>
-    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-      <td style="padding: 0.5rem;"><strong>Checked</strong></td>
-      <td style="padding: 0.5rem;"><code>checkedList(list, Class)</code><br><code>checkedSet(set, Class)</code><br><code>checkedMap(map, K, V)</code></td>
-      <td style="padding: 0.5rem;">Enforces runtime type verification on item insertions. Prevents heap pollution when dealing with legacy non-generic code.</td>
+      <td style="padding: 0.5rem;"><code>binarySearch(List&lt;? extends Comparable&gt; list, T key)</code><br><code>binarySearch(List&lt;T&gt; list, T key, Comparator&lt;? super T&gt; c)</code></td>
+      <td style="padding: 0.5rem;">
+        Searches the list using binary search. Returns index if found; otherwise, returns <code>-(insertion_point - 1)</code>.
+        <br><strong>Prerequisite:</strong> The list **MUST be sorted** in ascending order before searching (via the same ordering contract). If not, search results are undefined.
+        <br><strong>Performance:</strong> <code>O(log n)</code> on <code>RandomAccess</code> lists (ArrayList). Degrades to <code>O(n)</code> on sequential-access chains (LinkedList) due to pointer traversals.
+      </td>
     </tr>
   </table>
 
-  <h2>Core Static Algorithms</h2>
+  <h2>2. General Utility Methods</h2>
   <ul>
-    <li><code>sort(List&lt;T&gt; list)</code>: Sorts the specified list using natural ordering. Delegates to <code>list.sort(null)</code>, which uses <strong>Timsort</strong> (hybrid merge/insertion sort) with <code>O(n log n)</code> time complexity and <code>O(n)</code> space complexity.</li>
-    <li><code>binarySearch(List&lt;? extends Comparable&gt; list, T key)</code>: Searches the list using a binary search algorithm.
-      <ul>
-        <li>If the list implements <code>RandomAccess</code> (like <code>ArrayList</code>), execution is <code>O(log n)</code>.</li>
-        <li>If the list is a sequential-access chain (like <code>LinkedList</code>), execution degrades to <code>O(n)</code> link traversal costs.</li>
-      </ul>
+    <li><code>reverse(List&lt;?&gt; list)</code>: Reverses the order of elements in the specified list. Runs in <code>O(n)</code>.</li>
+    <li><code>shuffle(List&lt;?&gt; list)</code>: Randomly permutes elements in-place using a Fisher-Yates loop. Runs in <code>O(n)</code>.</li>
+    <li><code>swap(List&lt;?&gt; list, int i, int j)</code>: Swaps the elements at indices <code>i</code> and <code>j</code> in <code>O(1)</code> for random access lists.</li>
+    <li><code>fill(List&lt;? super T&gt; list, T obj)</code>: Replaces every element in the list with the specified object. Runs in <code>O(n)</code>.</li>
+    <li><code>copy(List&lt;? super T&gt; dest, List&lt;? extends T&gt; src)</code>: Copies elements from <code>src</code> to <code>dest</code>.
+      <br><strong>Constraint:</strong> The destination list (<code>dest</code>) must be at least as long as the source list (<code>src</code>), otherwise it throws an <code>IndexOutOfBoundsException</code>.
     </li>
-    <li><code>shuffle(List&lt;?&gt; list)</code>: Randomly permutes list elements using a Fisher-Yates shuffle in <code>O(n)</code>.</li>
-    <li><code>reverse(List&lt;?&gt; list)</code>: Reverses element order in <code>O(n)</code> time.</li>
+    <li><code>min(Collection&lt;? extends T&gt; coll)</code> / <code>max(Collection&lt;? extends T&gt; coll)</code>: Returns the minimum / maximum element according to natural order or custom comparator in <code>O(n)</code> time.</li>
+    <li><code>frequency(Collection&lt;?&gt; coll, Object o)</code>: Returns the count of elements in the collection equal to the specified object in <code>O(n)</code>.</li>
+    <li><code>disjoint(Collection&lt;?&gt; c1, Collection&lt;?&gt; c2)</code>: Returns <code>true</code> if the two collections have no elements in common. Optimized to iterate over the smaller collection and query the larger.</li>
   </ul>
 
-  <h2>Immutable Collections vs. Unmodifiable Wrappers</h2>
+  <h2>3. Wrapper Collections (Views, Not Copies)</h2>
+  <p>The <code>Collections</code> wrappers return thin <strong>views</strong> representing the backing mutable collection. Writes are intercepted and blocked or synchronized, but elements are not copied.</p>
+  <ul>
+    <li><strong><code>unmodifiableList(list)</code> / <code>unmodifiableSet(set)</code> / <code>unmodifiableMap(map)</code></strong>: Blocks write methods by throwing <code>UnsupportedOperationException</code>. However, mutations to the underlying backing collection will read through and change the view.</li>
+    <li><strong><code>synchronizedList(list)</code> / <code>synchronizedSet(set)</code> / <code>synchronizedMap(map)</code></strong>: Wraps all calls inside a <code>synchronized(mutex)</code> block. Iteration must be manually synchronized on the wrapper's mutex.</li>
+    <li><strong><code>checkedList(list, Class)</code> / <code>checkedSet(set, Class)</code></strong>: Enforces runtime type checks during item inserts, throwing <code>ClassCastException</code> to prevent generics heap pollution.</li>
+  </ul>
+
+  <h2>4. Wrapper View vs. True Immutable Collection</h2>
   <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
     <tr style="border-bottom:1px solid #ddd;">
-      <th align="left" style="padding: 0.5rem;">Feature</th>
-      <th align="left" style="padding: 0.5rem;">Unmodifiable View (e.g. <code>Collections.unmodifiableList</code>)</th>
-      <th align="left" style="padding: 0.5rem;">Immutable Collection (e.g. <code>List.of</code>, <code>List.copyOf</code>)</th>
+      <th align="left" style="padding: 0.5rem; width: 30%;">Feature</th>
+      <th align="left" style="padding: 0.5rem; width: 35%;">Wrapper View (e.g., <code>Collections.unmodifiableList</code>)</th>
+      <th align="left" style="padding: 0.5rem; width: 35%;">Immutable Collection (e.g., <code>List.of</code>, <code>List.copyOf</code>)</th>
     </tr>
     <tr>
-      <td style="padding: 0.5rem;"><strong>Underlying Mutations</strong></td>
-      <td style="padding: 0.5rem;">Reflected (view reads directly from the backing mutable list).</td>
-      <td style="padding: 0.5rem;">Truly immutable (backing data cannot change; copies on creation).</td>
+      <td style="padding: 0.5rem;"><strong>Underlying Changes</strong></td>
+      <td style="padding: 0.5rem;">Reflected (reads straight through to backing mutable collection).</td>
+      <td style="padding: 0.5rem;">No backing collection exists (data is copied and locked on creation).</td>
     </tr>
     <tr>
-      <td style="padding: 0.5rem;"><strong>Null Elements</strong></td>
-      <td style="padding: 0.5rem;">Permitted if the backing collection permits them.</td>
-      <td style="padding: 0.5rem;">Prohibited (throws <code>NullPointerException</code> on creation/lookup).</td>
+      <td style="padding: 0.5rem;"><strong>Null Values</strong></td>
+      <td style="padding: 0.5rem;">Allowed if the backing collection allows them.</td>
+      <td style="padding: 0.5rem;">Forbidden (throws <code>NullPointerException</code> on creation/contains query).</td>
+    </tr>
+    <tr>
+      <td style="padding: 0.5rem;"><strong>Memory Overhead</strong></td>
+      <td style="padding: 0.5rem;">Slightly higher (requires two object instances: wrapper + backing list).</td>
+      <td style="padding: 0.5rem;">Highly optimized, space-efficient internal class representations.</td>
     </tr>
   </table>
 </body>
