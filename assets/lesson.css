@@ -1,13 +1,13 @@
 /* Lesson stylesheet — Tufte-inspired, print-friendly */
 :root {
-  --text: #e2e8f0;
-  --muted: #94a3b8;
-  --accent: #818cf8;
-  --bg: #090d16;
-  --border: rgba(255, 255, 255, 0.1);
-  --correct: #10b981;
-  --incorrect: #ef4444;
-  --surface: #131b2e;
+  --text: #111;
+  --muted: #555;
+  --accent: #1a5276;
+  --bg: #fffff8;
+  --border: #ddd;
+  --correct: #1e6f3d;
+  --incorrect: #922b21;
+  --surface: #f7f7f0;
 }
 
 * { box-sizing: border-box; }
@@ -38,7 +38,7 @@ h3 { font-size: 1.05rem; margin-top: 1.5rem; }
 
 p { margin: 0.75rem 0; }
 
-a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(129, 140, 248, 0.3); }
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid #c5d9e8; }
 a:hover { border-bottom-color: var(--accent); }
 
 code, pre {
@@ -99,26 +99,23 @@ code { background: var(--surface); padding: 0.1em 0.35em; }
   width: 100%;
   text-align: left;
   padding: 0.6rem 0.85rem;
-  background: var(--surface);
+  background: #fff;
   border: 1px solid var(--border);
   border-radius: 2px;
   cursor: pointer;
   color: var(--text);
-  transition: all 0.2s ease;
 }
 
-.quiz-options button:hover { border-color: var(--accent); background: rgba(255, 255, 255, 0.03); }
+.quiz-options button:hover { border-color: var(--accent); background: #fafaf5; }
 
 .quiz-options button.correct {
   border-color: var(--correct);
-  background: rgba(16, 185, 129, 0.15);
-  color: #a7f3d0;
+  background: #eaf7ee;
 }
 
 .quiz-options button.incorrect {
   border-color: var(--incorrect);
-  background: rgba(239, 68, 68, 0.15);
-  color: #fca5a5;
+  background: #fdf0ef;
 }
 
 .quiz-feedback {
@@ -142,19 +139,7 @@ nav.lesson-nav {
 }
 
 @media print {
-  :root {
-    --text: #111;
-    --muted: #555;
-    --accent: #1a5276;
-    --bg: #fff;
-    --border: #ddd;
-    --correct: #1e6f3d;
-    --incorrect: #922b21;
-    --surface: #f7f7f0;
-  }
-  body { max-width: none; padding: 0; background: var(--bg); color: var(--text); }
-  .quiz-options button { border: 1px solid #999; background: #fff; color: #111; }
-  .quiz-options button.correct { background: #eaf7ee; border-color: var(--correct); }
-  .quiz-options button.incorrect { background: #fdf0ef; border-color: var(--incorrect); }
+  body { max-width: none; padding: 0; }
+  .quiz-options button { border: 1px solid #999; }
   .teacher-note::after { content: " — Ask your teacher follow-up questions in Cursor."; }
 }
