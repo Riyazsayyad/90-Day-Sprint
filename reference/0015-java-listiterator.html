@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Java ListIterator — Reference</title>
+  <meta name="description" content="Quick reference guide for Java ListIterator, detailing bi-directional traversal API, cursor visualizations, add/set/remove state rules, and list differences.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/0015-java-listiterator.html">&larr; Lesson 15</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Java ListIterator Reference</h1>
+  <p class="meta"><a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/ListIterator.html">Oracle java.util.ListIterator Javadoc</a></p>
+
+  <h2>1. Interface Methods</h2>
+  <pre><code>public interface ListIterator&lt;E&gt; extends Iterator&lt;E&gt; {
+    // 1. Forward Traversal
+    boolean hasNext();
+    E next();
+    int nextIndex();
+
+    // 2. Backward Traversal
+    boolean hasPrevious();
+    E previous();
+    int previousIndex();
+
+    // 3. Structural Modifications
+    void add(E e);     // Inserts before cursor position
+    void remove();     // Deletes last returned item
+    void set(E e);      // Replaces last returned item
+}</code></pre>
+
+  <h2>2. Visualizing Cursor Positions</h2>
+  <p>The iterator cursor always lies **between** elements, or before the first element, or after the last element. Below is a list of size 4:</p>
+  <pre><code>   Index:       0          1          2          3
+             [Element]  [Element]  [Element]  [Element]
+   Cursor:   ^          ^          ^          ^          ^
+            Start     Index 1    Index 2    Index 3     End</code></pre>
+  <ul>
+    <li>Calling <code>next()</code> returns the element to the right of the cursor and advances it.</li>
+    <li>Calling <code>previous()</code> returns the element to the left of the cursor and moves it back.</li>
+  </ul>
+
+  <h2>3. State Mutation Rules</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Operation</th>
+      <th align="left" style="padding: 0.5rem; width: 35%;">Targets Which Element?</th>
+      <th align="left" style="padding: 0.5rem; width: 40%;">Under What Condition Allowed?</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><code>add(e)</code></td>
+      <td style="padding: 0.5rem;">Inserts element **immediately before** the cursor.</td>
+      <td style="padding: 0.5rem;">Always allowed. Resets <code>lastRet = -1</code> (prevents immediate <code>remove()</code>/<code>set()</code>).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><code>remove()</code></td>
+      <td style="padding: 0.5rem;">Removes the element returned by the last <code>next()</code> or <code>previous()</code>.</td>
+      <td style="padding: 0.5rem;">Only if neither <code>add()</code> nor <code>remove()</code> has been called since the last <code>next()</code>/<code>previous()</code>.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><code>set(e)</code></td>
+      <td style="padding: 0.5rem;">Replaces the element returned by the last <code>next()</code> or <code>previous()</code>.</td>
+      <td style="padding: 0.5rem;">Only if neither <code>add()</code> nor <code>remove()</code> has been called since the last <code>next()</code>/<code>previous()</code>.</td>
+    </tr>
+  </table>
+
+  <h2>4. Iterator vs. ListIterator</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem;">Feature</th>
+      <th align="left" style="padding: 0.5rem;">Iterator</th>
+      <th align="left" style="padding: 0.5rem;">ListIterator</th>
+    </tr>
+    <tr>
+      <td style="padding: 0.5rem;"><strong>Traversal Direction</strong></td>
+      <td style="padding: 0.5rem;">Forward only.</td>
+      <td style="padding: 0.5rem;">Bi-directional (forward and backward).</td>
+    </tr>
+    <tr>
+      <td style="padding: 0.5rem;"><strong>Modifications Supported</strong></td>
+      <td style="padding: 0.5rem;"><code>remove()</code> only.</td>
+      <td style="padding: 0.5rem;"><code>remove()</code>, <code>set()</code>, and <code>add()</code>.</td>
+    </tr>
+    <tr>
+      <td style="padding: 0.5rem;"><strong>Index Querying</strong></td>
+      <td style="padding: 0.5rem;">No index trackers.</td>
+      <td style="padding: 0.5rem;">Supports <code>nextIndex()</code> and <code>previousIndex()</code>.</td>
+    </tr>
+    <tr>
+      <td style="padding: 0.5rem;"><strong>Target Structures</strong></td>
+      <td style="padding: 0.5rem;">Any <code>Collection</code> (List, Set, Queue).</td>
+      <td style="padding: 0.5rem;">Only indexable structures implementing <code>List</code>.</td>
+    </tr>
+  </table>
+</body>
+</html>

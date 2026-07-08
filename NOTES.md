@@ -49,5 +49,10 @@
 - User invoked `/teach Teach me Java Iterator from an interview perspective.`
 - Lesson 14 created: Java Iterator design, cursor internals (index pointer vs node reference), fail-fast checks (modCount), iterator.remove() vs collection.remove(), and interview guide.
 
+## Session 12 (2026-07-08)
+- User invoked `/teach Teach me Java ListIterator from an interview perspective.`
+- Lesson 15 created: ListIterator bi-directional traversal, cursor placement gap visualizer, add/remove/set state validation details, and interview questions.
+
+
 
 

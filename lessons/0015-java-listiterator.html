@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 15 — Java ListIterator Internals</title>
+  <meta name="description" content="Learn Java ListIterator: bi-directional traversal, cursor placement gap mechanics, state modifications (add, set, remove), and common interview questions.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="0014-java-iterator.html">&larr; Lesson 14</a> &middot;
+    Lesson 15 of ? &middot;
+    <a href="../reference/0015-java-listiterator.html">ListIterator Reference</a>
+  </nav>
+
+  <h1>Java ListIterator Internals: Interview Guide</h1>
+  <p class="meta">~8 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. Why ListIterator Exists</h2>
+  <p>The standard <code>Iterator</code> interface is designed to work across all Collections (including Sets and Queues). Because of this, it is limited to forward-only traversal and supports only element deletion.</p>
+  <p>Lists are index-ordered collections. To exploit this indexable structure, Java introduced the specialized <code>ListIterator</code> (which extends <code>Iterator</code>) to support:</p>
+  <ul>
+    <li>Bi-directional traversal (moving backward and forward).</li>
+    <li>Modifying elements during iteration using <code>set()</code>.</li>
+    <li>Inserting elements mid-stream using <code>add()</code>.</li>
+    <li>Querying element index positions without advancing the cursor.</li>
+  </ul>
+
+  <h2>2. Forward and Backward Traversal</h2>
+  <p>In addition to <code>next()</code> and <code>hasNext()</code>, <code>ListIterator</code> adds:</p>
+  <ul>
+    <li><code>hasPrevious()</code>: Returns <code>true</code> if there are elements behind the cursor.</li>
+    <li><code>previous()</code>: Returns the element behind the cursor and moves the cursor one position backward.</li>
+    <li><code>nextIndex()</code> / <code>previousIndex()</code>: Returns the index of the element that would be returned by a subsequent call to <code>next()</code> or <code>previous()</code>.</li>
+  </ul>
+
+  <h2>3. Visualizing Cursor Positions</h2>
+  <p>The core concept to master for interviews is that **the cursor always lies in the gaps between elements** (before the first, between two, or after the last element):</p>
+  <pre><code>   Element:     [Element 0]  |  [Element 1]  |  [Element 2]
+   Index:            0       |       1       |       2
+   Cursor:      ^            ^               ^             ^
+              Start       Between         Between         End
+             Index 0     0 and 1         1 and 2        Index 3</code></pre>
+  <p>For example, if the cursor is at the Start (before index 0):</p>
+  <ol>
+    <li>Calling <code>next()</code> returns <code>Element 0</code>. The cursor shifts right (lies between 0 and 1).</li>
+    <li>Calling <code>previous()</code> returns <code>Element 0</code>. The cursor shifts left back to the Start.</li>
+  </ol>
+  <div class="callout">
+    <strong>Interview Tip: Iteration Flip</strong>
+    If you call <code>previous()</code> immediately after <code>next()</code>, you will retrieve the **exact same element** you just read!
+  </div>
+
+  <h2>4. State Modifications: add(), remove(), and set()</h2>
+  <p>The behavior of modifications depends on the last traversed element:</p>
+  <ul>
+    <li><strong><code>add(e)</code>:</strong> Inserts <code>e</code> immediately **before the cursor** position. The cursor shifts right so the new element is behind it. Subsequent calls to <code>next()</code> are unaffected, but calling <code>previous()</code> returns this newly added element.
+      <br><em>Constraint:</em> Calling <code>add()</code> resets the last-returned index tracker (<code>lastRet = -1</code>). You cannot call <code>remove()</code> or <code>set()</code> immediately after adding.
+    </li>
+    <li><strong><code>remove()</code>:</strong> Deletes the last element returned by <code>next()</code> or <code>previous()</code>.
+      <br><em>Constraint:</em> Can only be called once per call to <code>next()</code>/<code>previous()</code>, and cannot be called immediately after <code>add()</code>.
+    </li>
+    <li><strong><code>set(e)</code>:</strong> Replaces the last element returned by <code>next()</code> or <code>previous()</code> with <code>e</code>.
+      <br><em>Constraint:</em> Cannot be called immediately after <code>add()</code> or <code>remove()</code>.
+    </li>
+  </ul>
+
+  <h2>5. Internal Implementation (ArrayList vs. LinkedList)</h2>
+  <ul>
+    <li><strong>ArrayList:</strong> <code>ListItr</code> is an inner class extending <code>Itr</code>. It implements <code>previous()</code> by decrementing the internal <code>cursor</code> index:
+      <pre><code>public E previous() {
+    checkForComodification();
+    int i = cursor - 1;
+    if (i < 0) throw new NoSuchElementException();
+    Object[] elementData = ArrayList.this.elementData;
+    cursor = i;
+    return (E) elementData[lastRet = i];
+}</code></pre>
+    </li>
+    <li><strong>LinkedList:</strong> <code>ListItr</code> maintains node references. Since LinkedList is a doubly-linked list, calling <code>previous()</code> is trivial and fast: it simply reads <code>nextNode.prev</code>.</li>
+  </ul>
+
+  <h2>6. Common Interview Questions</h2>
+  <div class="callout">
+    <strong>Q: What happens if you call listIterator.add() followed by listIterator.remove()?</strong>
+    <br>It throws <code>IllegalStateException</code>. In the OpenJDK implementation, calling <code>add()</code> clears the state pointer by setting <code>lastRet = -1</code>. Since <code>remove()</code> requires <code>lastRet >= 0</code>, it fails immediately to prevent state corruption.
+  </div>
+  <div class="callout">
+    <strong>Q: What is the difference between Iterator and ListIterator?</strong>
+    <br>Iterator is uni-directional, operates on any collection, and supports read-and-delete. ListIterator is bi-directional, restricted to List implementations, supports index queries, and allows insertions/replacements during traversal.
+  </div>
+
+  <h2>Practice — consecutive actions</h2>
+  <p>Test your understanding of modification constraints:</p>
+
+  <div class="quiz" id="quiz-listiterator">
+    <p class="quiz-question">Pick the correct statement regarding ListIterator add behavior:</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">Calling add resets lastRet to prevent consecutive removal.</button></li>
+      <li><button data-answer="wrong">Calling add shifts elements to allow consecutive removal.</button></li>
+      <li><button data-answer="wrong">Calling add bypasses fail-fast check for consecutive removal.</button></li>
+      <li><button data-answer="wrong">Calling add clears previous index details for consecutive removal.</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary reading</h2>
+  <p>Read the <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/ListIterator.html">ListIterator Javadoc</a> and analyze the inner <code>ListItr</code> class inside the <a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/ArrayList.java">OpenJDK ArrayList Source Code</a>.</p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — paste a code snippet or describe what confused you.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-listiterator', {
+      correct: 'Correct! Under the hood, add() inserts the element before the cursor and resets the last returned element pointer (lastRet = -1). Therefore, calling remove() or set() right after add() throws IllegalStateException.',
+      wrong: 'Incorrect. The add() method resets the last returned tracker (lastRet = -1 or lastReturned = null) to protect list consistency. This makes calling remove() or set() immediately after add() throw IllegalStateException.'
+    });
+  </script>
+</body>
+</html>
