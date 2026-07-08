@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 16 — Fail-Fast vs Fail-Safe Iterators</title>
+  <meta name="description" content="Learn Java Fail-Fast vs Fail-Safe Iterators: ConcurrentModificationException triggers, modCount mechanics, CopyOnWriteArrayList snapshots, and interview questions.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="0015-java-listiterator.html">&larr; Lesson 15</a> &middot;
+    Lesson 16 of ? &middot;
+    <a href="../reference/0016-failfast-failsafe.html">Iteration Reference</a>
+  </nav>
+
+  <h1>Java Fail-Fast vs. Fail-Safe Iterators: Interview Guide</h1>
+  <p class="meta">~8 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. What is ConcurrentModificationException (CME)?</h2>
+  <p>In Java, iterating over a collection while modifying its structure (adding, removing, or clearing elements) is generally unsafe. If the runtime detects an illegal structural modification during traversal, it throws a <code>ConcurrentModificationException</code>.</p>
+
+  <h2>2. modCount and expectedModCount Internals</h2>
+  <p>Standard collections (like <code>ArrayList</code>) track modifications internally. The fail-fast iterator uses two fields to enforce safety:</p>
+  <ul>
+    <li><strong><code>modCount</code>:</strong> An index variable on the collection class. It increments on every add, remove, or clear structure call.</li>
+    <li><strong><code>expectedModCount</code>:</strong> A local cached copy stored inside the Iterator object upon creation.</li>
+  </ul>
+  <p>In every call to <code>next()</code> or <code>remove()</code>, the iterator calls <code>checkForComodification()</code>:</p>
+  <pre><code>final void checkForComodification() {
+    if (modCount != expectedModCount)
+        throw new ConcurrentModificationException();
+}</code></pre>
+
+  <h2>3. Why iterator.remove() updates modCount correctly</h2>
+  <p>If you call <code>list.remove()</code> during iteration, only <code>modCount</code> changes, causing a subsequent <code>next()</code> call to detect a mismatch and crash.
+  <br>However, calling <code>iterator.remove()</code> is safe because the iterator deletes the element through the collection, increments the collection's <code>modCount</code>, and then synchronizes its cached state:
+  <pre><code>expectedModCount = modCount; // Re-synchronized!</code></pre>
+
+  <h2>4. Why Fail-Fast is Best-Effort</h2>
+  <p>The Javadoc states that fail-fast behavior is **best-effort** and **not guaranteed**. Here is why:</p>
+  <ul>
+    <li><strong>Visibility Gaps:</strong> In a multithreaded context, <code>modCount</code> is not declared volatile or synchronized. A thread mutating the collection might update <code>modCount</code> in its local CPU cache, but that update may not be immediately flushed to main memory. Another iterating thread might read a stale value, missing the modification.</li>
+    <li><strong>Non-Structural Changes:</strong> Modifying the state of an object already inside the collection (e.g. <code>list.get(0).setName("Bob")</code>) does not change list size, so <code>modCount</code> is not incremented and no CME is thrown.</li>
+  </ul>
+
+  <h2>5. Fail-Safe / Weakly Consistent Iterators</h2>
+  <p>The term "fail-safe" is a common design pattern name (not a term used in the Javadoc; Java Javadoc refers to them as **weakly consistent**). Fail-safe iterators traverse a copy or use direct bucket pointer safety to avoid throwing CME.</p>
+
+  <h3>CopyOnWriteArrayList (Snapshot Iteration)</h3>
+  <p>When write operations occur (like <code>add()</code>), this collection clones the backing array, writes to the clone, and swap-references the volatile array pointer.
+  <br>The iterator holds a reference to the **original array snapshot** at the time of creation. Since that snapshot is never mutated, the iterator is 100% safe from CME.
+  <br><em>Trade-off:</em> High write memory overhead (cloning arrays) and stale read views (the iterator will not see additions made after it was created).</p>
+
+  <h3>ConcurrentHashMap (Bucket Traversal)</h3>
+  <p>Iterators here do not copy arrays. Instead, they traverse bucket node chains directly using volatile reads. They reflect some, but not all, subsequent map updates and are guaranteed to never throw CME.</p>
+
+  <h2>6. Key Interview Questions</h2>
+  <div class="callout">
+    <strong>Q: Can a fail-safe iterator reflect list updates after its creation?</strong>
+    <br>It depends on the collection. In <code>CopyOnWriteArrayList</code>, **no**—it iterates over a static array snapshot. In <code>ConcurrentHashMap</code>, **yes**—it traverses active buckets directly using weakly consistent reads.
+  </div>
+  <div class="callout">
+    <strong>Q: What is the main structural trade-off between Fail-Fast and Fail-Safe?</strong>
+    <br>Fail-fast iterators are memory-efficient (O(1) space) and detect bugs quickly, but crash under concurrency. Fail-safe iterators are concurrent-friendly but incur higher memory overhead and may traverse stale data.
+  </div>
+
+  <h2>Practice — best-effort behavior</h2>
+  <p>Test your understanding of visibility checks:</p>
+
+  <div class="quiz" id="quiz-failfast">
+    <p class="quiz-question">Pick the correct statement regarding fail-fast iterator checks:</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">Fail-fast checks are best-effort and not thread-safe.</button></li>
+      <li><button data-answer="wrong">Fail-fast checks are fully guaranteed and thread-safe.</button></li>
+      <li><button data-answer="wrong">Fail-fast checks are copy-on-write and thread-safe.</button></li>
+      <li><button data-answer="wrong">Fail-fast checks are weakly consistent and thread-safe.</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary reading</h2>
+  <p>Read the <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/ConcurrentModificationException.html">CME Javadoc</a> and analyze the write-paths in the <a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/concurrent/CopyOnWriteArrayList.java">OpenJDK CopyOnWriteArrayList Source Code</a>.</p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — paste a code snippet or describe what confused you.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-failfast', {
+      correct: 'Correct! In multithreaded environments, the modCount variable is not volatile or synchronized, meaning changes in one thread might not be immediately visible to another, making the fail-fast check a best-effort mechanism.',
+      wrong: 'Incorrect. The modCount variable is not volatile or synchronized, which means thread caching can cause visibility latencies, making the check best-effort rather than guaranteed.'
+    });
+  </script>
+</body>
+</html>

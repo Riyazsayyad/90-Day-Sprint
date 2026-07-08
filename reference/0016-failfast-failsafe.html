@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fail-Fast vs Fail-Safe — Reference</title>
+  <meta name="description" content="Quick reference guide for Fail-Fast and Fail-Safe iterators in Java, covering ConcurrentModificationException, modCount checks, and snapshot iteration.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/0016-failfast-failsafe.html">&larr; Lesson 16</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Fail-Fast vs. Fail-Safe Iteration Reference</h1>
+  <p class="meta">Study Reference for Concurrent Traversals</p>
+
+  <h2>1. What is ConcurrentModificationException (CME)?</h2>
+  <p>CME is thrown when a thread modifies the structural layout of a collection (adding, removing, or clearing elements) while another thread (or the same thread) is traversing it using a fail-fast iterator, unless that modification is performed through the iterator's own methods.</p>
+
+  <h2>2. Compare & Contrast</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Feature</th>
+      <th align="left" style="padding: 0.5rem; width: 38%;">Fail-Fast Iterators</th>
+      <th align="left" style="padding: 0.5rem; width: 37%;">Fail-Safe / Weakly Consistent</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><strong>Target Source</strong></td>
+      <td style="padding: 0.5rem;">Operates directly on the backing collection's raw array/node structure.</td>
+      <td style="padding: 0.5rem;">Operates on a cloned array (snapshot) or reads bucket pointers directly.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><strong>CME Danger?</strong></td>
+      <td style="padding: 0.5rem;">**Yes**. Throws <code>ConcurrentModificationException</code> if modCount changes.</td>
+      <td style="padding: 0.5rem;">**No**. Guaranteed to never throw <code>ConcurrentModificationException</code>.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><strong>State Visibility</strong></td>
+      <td style="padding: 0.5rem;">Immediate. Any change throws an exception or updates the view.</td>
+      <td style="padding: 0.5rem;">Stale snapshot (CopyOnWriteArrayList) or weakly consistent (ConcurrentHashMap).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><strong>Memory Overhead</strong></td>
+      <td style="padding: 0.5rem;"><code>O(1)</code> auxiliary space. Very light.</td>
+      <td style="padding: 0.5rem;">Can be <code>O(n)</code> (for copying arrays during write operations).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><strong>Examples</strong></td>
+      <td style="padding: 0.5rem;">ArrayList, LinkedList, HashMap, HashSet.</td>
+      <td style="padding: 0.5rem;">CopyOnWriteArrayList, ConcurrentHashMap, CopyOnWriteArraySet.</td>
+    </tr>
+  </table>
+
+  <h2>3. Fail-Fast Check Formula</h2>
+  <p>Every call to <code>next()</code> or <code>remove()</code> inside fail-fast iterators triggers a state validation step:</p>
+  <pre><code>final void checkForComodification() {
+    if (modCount != expectedModCount)
+        throw new ConcurrentModificationException();
+}</code></pre>
+  <p><strong>Note:</strong> Fail-fast checks are **best-effort** and **not guaranteed** to detect modifications in multithreaded environments due to unsynchronized memory reads/writes. If thread A modifies the collection and thread B iterates, thread B might read a stale cached value of <code>modCount</code> and traverse successfully without throwing an exception, leading to corrupted data structures.</p>
+
+  <h2>4. CopyOnWriteArrayList Snapshot Iteration</h2>
+  <p>When you modify a <code>CopyOnWriteArrayList</code>, it does not lock the list for reads. Instead, it copies the underlying array:</p>
+  <pre><code>// Under the hood of CopyOnWriteArrayList.add(E e)
+synchronized (lock) {
+    Object[] es = getArray();
+    int len = es.length;
+    Object[] newElements = Arrays.copyOf(es, len + 1);
+    newElements[len] = e;
+    setArray(newElements); // Swaps reference
+}</code></pre>
+  <p>The iterator keeps a reference to the **original array reference** captured during creation (the snapshot). Because this snapshot array is never mutated, the iterator is 100% immune to <code>ConcurrentModificationException</code>.</p>
+
+  <h2>5. ConcurrentHashMap Weakly Consistent Iteration</h2>
+  <p>Unlike <code>CopyOnWriteArrayList</code>, <code>ConcurrentHashMap</code>'s iterator does not copy arrays. It traverses the actual hash bucket nodes directly.
+  <br>It is **weakly consistent**:
+  <ul>
+    <li>It uses volatile bucket reads to safely traverse existing nodes.</li>
+    <li>It may or may not reflect insertions/updates made to the map after the iterator was created.</li>
+    <li>It is guaranteed to never throw <code>ConcurrentModificationException</code>.</li>
+  </ul>
+</body>
+</html>

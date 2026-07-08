@@ -53,6 +53,11 @@
 - User invoked `/teach Teach me Java ListIterator from an interview perspective.`
 - Lesson 15 created: ListIterator bi-directional traversal, cursor placement gap visualizer, add/remove/set state validation details, and interview questions.
 
+## Session 13 (2026-07-08)
+- User invoked `/teach Fail-Fast vs Fail-Safe iterators in Java from an interview perspective.`
+- Lesson 16 created: Fail-Fast vs Fail-Safe design, ConcurrentModificationException internals (modCount/expectedModCount), best-effort boundaries, CopyOnWriteArrayList snapshot iteration, and ConcurrentHashMap bucket iteration.
+
+
 
 
 
