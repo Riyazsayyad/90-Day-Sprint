@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 12 — Comparable vs Comparator</title>
+  <meta name="description" content="Learn Java Comparable vs Comparator contracts, natural vs custom sorting, and TreeSet duplicate rejection internals.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="0011-priorityqueue-internals.html">&larr; Lesson 11</a> &middot; 
+    Lesson 12 of ? &middot; 
+    <a href="../reference/0010-treeset-internals.html">TreeSet reference</a>
+  </nav>
+
+  <h1>Comparable vs. Comparator</h1>
+  <p class="meta">~6 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>The Core Difference</h2>
+  <p>In Java, sorting and ordering require clear rules. Java provides two interfaces for this, each with a different intent:</p>
+
+  <div class="callout">
+    <strong>Comparable (Natural Ordering)</strong>
+    Implemented by the class itself to define its default sorting behavior (e.g., Numbers sorted numerically, Strings sorted alphabetically).
+    <br>Method: <code>public int compareTo(T o)</code>
+  </div>
+
+  <div class="callout">
+    <strong>Comparator (Custom/External Ordering)</strong>
+    Implemented externally (often as a lambda) to sort objects using alternative rules, or to sort classes you do not own/modify.
+    <br>Method: <code>public int compare(T o1, T o2)</code>
+  </div>
+
+  <h2>The Return Contract</h2>
+  <p>Both methods follow a strict mathematical return contract. They return an integer value indicating the order of elements:</p>
+  <pre><code>// For Comparable (compareTo)
+int result = obj1.compareTo(obj2);
+
+// For Comparator (compare)
+int result = comp.compare(obj1, obj2);</code></pre>
+  <ul>
+    <li><strong>Negative Integer:</strong> <code>obj1</code> is smaller/comes before <code>obj2</code>.</li>
+    <li><strong>Zero (0):</strong> <code>obj1</code> is equal to <code>obj2</code>.</li>
+    <li><strong>Positive Integer:</strong> <code>obj1</code> is larger/comes after <code>obj2</code>.</li>
+  </ul>
+
+  <h2>Under the Hood: TreeSet & Duplicate Rejection</h2>
+  <p>This is where collection internals become critical. Unlike <code>HashSet</code> (which uses <code>hashCode()</code> and <code>equals()</code>), <strong><code>TreeSet</code> relies entirely on comparisons.</strong></p>
+  <p>When you insert an element into a <code>TreeSet</code> (backed by <code>TreeMap</code>):</p>
+  <ol>
+    <li>Java traverses the Red-Black tree, comparing the new element to the current node.</li>
+    <li>If the comparison returns a negative number, it walks left. If positive, it walks right.</li>
+    <li>If the comparison returns <code>0</code>, **the TreeSet rejects the new element as a duplicate**, and does not modify the set.</li>
+  </ol>
+  <div class="callout">
+    <strong>Warning: Uniqueness Gotcha</strong>
+    If your comparison logic returns <code>0</code> for two objects, they are duplicates in the eyes of a <code>TreeSet</code>, even if <code>equals()</code> says they are different. A TreeSet can violate the standard <code>Set</code> contract if its comparison is inconsistent with <code>equals()</code>.
+  </div>
+
+  <h2>Let's See It in Code</h2>
+  <p>Below is a custom class implementing <code>Comparable</code> for natural ordering, paired with a custom <code>Comparator</code> lambda:</p>
+  <pre><code>import java.util.*;
+
+class User implements Comparable&lt;User&gt; {
+    int id;
+    String name;
+
+    User(int id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    // Natural order: sort by id
+    @Override
+    public int compareTo(User other) {
+        return Integer.compare(this.id, other.id);
+    }
+}
+
+public class Main {
+    public static void main(String[] args) {
+        // TreeSet using Natural Order (Comparable)
+        Set&lt;User&gt; byId = new TreeSet&lt;&gt;();
+        byId.add(new User(10, "Riyaz"));
+        byId.add(new User(5, "Sayyad"));
+        // Reject: duplicate ID (10) even with a different name!
+        byId.add(new User(10, "Alice")); 
+
+        // TreeSet using Custom Order (Comparator)
+        Set&lt;User&gt; byNameLength = new TreeSet&lt;&gt;(
+            (u1, u2) -> Integer.compare(u1.name.length(), u2.name.length())
+        );
+        byNameLength.add(new User(1, "Riyaz"));   // length 5
+        byNameLength.add(new User(2, "Sayyad"));  // length 6
+        // Reject: length 5 is a duplicate of "Riyaz"!
+        byNameLength.add(new User(3, "Alice"));   
+    }
+}</code></pre>
+
+  <h2>Practice — duplication checks</h2>
+  <p>Test your understanding of TreeSet duplicates:</p>
+
+  <div class="quiz" id="quiz-comp">
+    <p class="quiz-question">Pick the correct statement regarding TreeSet duplicates:</p>
+    <ul class="quiz-options">
+      <li><button data-answer="wrong">TreeSet rejects duplicates based only on equals().</button></li>
+      <li><button data-answer="correct">TreeSet rejects duplicates based on compareTo() == 0.</button></li>
+      <li><button data-answer="wrong">TreeSet rejects duplicates using hashCode() values.</button></li>
+      <li><button data-answer="wrong">TreeSet rejects duplicates using reference equality.</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary reading</h2>
+  <p>Read the <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/lang/Comparable.html">Comparable Javadoc</a> and the <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/Comparator.html">Comparator Javadoc</a>. Focus specifically on the discussion of being "consistent with equals."</p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — paste a code snippet or describe what confused you.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-comp', {
+      correct: 'Correct. TreeSet and TreeMap use compareTo() or compare() to verify uniqueness. If the result is 0, they treat the elements as identical duplicates and reject the write.',
+      wrong: 'Incorrect. TreeSet does not call equals() or hashCode() for duplicate checks. It relies entirely on compareTo() or compare() returning 0.'
+    });
+  </script>
+</body>
+</html>

@@ -36,3 +36,8 @@
 - Mission.md, Resources.md, and Glossary.md updated to encompass both ArrayList and LinkedList under a unified "Java List Internals" track.
 - Lesson 8 created: Doubly linked list Node structure (`item`, `next`, `prev` references), O(n) random access, O(1) link modifications once reference is known, and bidirectional search optimization.
 - Interactive JavaScript doubly linked list simulator built inside the lesson, animating pointer traversals and node insertions.
+
+## Session 9 (2026-07-08)
+- User invoked `/teach Comparable vs Comparator.`
+- Lesson 12 created: Comparable (compareTo) vs Comparator (compare), returning values, and TreeSet duplicate handling (comparison equals zero vs Object.equals()).
+
