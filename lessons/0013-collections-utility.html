@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 13 — Collections Utility</title>
+  <meta name="description" content="Learn Java java.util.Collections utility class: unmodifiable views vs copies, synchronized blocks, checked collections, and static algorithms.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="0012-comparable-vs-comparator.html">&larr; Lesson 12</a> &middot;
+    Lesson 13 of ? &middot;
+    <a href="../reference/0013-collections-utility.html">Collections Reference</a>
+  </nav>
+
+  <h1>The Collections Utility Class</h1>
+  <p class="meta">~6 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>The Core Difference: Collection vs. Collections</h2>
+  <p>In Java, it is easy to confuse the two names:</p>
+  <ul>
+    <li><code>java.util.Collection</code> is the **root interface** of the collections hierarchy (implemented by List, Set, Queue).</li>
+    <li><code>java.util.Collections</code> is a **utility class** consisting exclusively of static methods that operate on or return collections. It cannot be instantiated.</li>
+  </ul>
+
+  <h2>1. Wrapper Collections (Views, Not Copies)</h2>
+  <p>One of the most important concepts of the <code>Collections</code> utility is its wrapper methods (e.g., <code>unmodifiableList(list)</code>). Under the hood, these wrappers are <strong>views</strong>. They do not copy the collection's data structure—they wrap the existing collection, delegating reads to it and blocking modifications.</p>
+
+  <pre><code>List&lt;String&gt; backing = new ArrayList&lt;&gt;();
+backing.add("Java");
+
+List&lt;String&gt; view = Collections.unmodifiableList(backing);
+System.out.println(view); // prints [Java]
+
+// Modifying the backing list affects the view!
+backing.add("Kotlin");
+System.out.println(view); // prints [Java, Kotlin]
+
+view.add("Go"); // Throws UnsupportedOperationException!</code></pre>
+  
+  <p><strong>Gotcha:</strong> If you want true immutability (where the content cannot change at all), copy the data using modern factory methods like <code>List.copyOf(backing)</code> or <code>List.of()</code> instead.</p>
+
+  <h2>2. Synchronized Wrappers & The Iterator Loophole</h2>
+  <p>Synchronized wrappers (e.g., <code>synchronizedList(list)</code>) wrap all reading and writing methods in a <code>synchronized(mutex)</code> block, making individual operations thread-safe.</p>
+  <p>However, <strong>iteration is not thread-safe</strong> by default because iterating is a compound operation. You must manually synchronize on the wrapper's mutex when iterating to prevent race conditions or <code>ConcurrentModificationException</code>:</p>
+
+  <pre><code>List&lt;String&gt; syncList = Collections.synchronizedList(new ArrayList&lt;&gt;());
+
+// Thread-safe iteration pattern
+synchronized (syncList) {
+    for (String item : syncList) {
+        System.out.println(item);
+    }
+}</code></pre>
+
+  <h2>3. Checked Wrappers</h2>
+  <p>Checked wrappers (e.g., <code>checkedList(list, String.class)</code>) enforce type safety at runtime. They verify the class of any element being added, throwing a <code>ClassCastException</code> if an invalid type is passed. This is useful for catching bugs when passing generic collections to legacy, non-generic libraries.</p>
+
+  <h2>4. Core Static Algorithms</h2>
+  <p><code>Collections</code> implements standard algorithms optimized for collection interfaces:</p>
+  <ul>
+    <li><code>Collections.sort(list)</code>: Sorts elements using a hybrid stable merge sort (Timsort). Runs in <code>O(n log n)</code>.</li>
+    <li><code>Collections.binarySearch(list, key)</code>: Performs a binary search.
+      <ul>
+        <li>If the list implements <code>RandomAccess</code> (like <code>ArrayList</code>), it runs in <code>O(log n)</code>.</li>
+        <li>If it is sequential-access (like <code>LinkedList</code>), it traverses nodes step-by-step, degrading performance to <code>O(n)</code>.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>Practice — unmodifiable collections</h2>
+  <p>Test your understanding of views vs copies:</p>
+
+  <div class="quiz" id="quiz-utility">
+    <p class="quiz-question">Pick the correct statement regarding unmodifiable collections:</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">Unmodifiable collections reflect underlying backing collection changes.</button></li>
+      <li><button data-answer="wrong">Unmodifiable collections copy backing collections during creation step.</button></li>
+      <li><button data-answer="wrong">Unmodifiable collections prevent backing collections from being mutated.</button></li>
+      <li><button data-answer="wrong">Unmodifiable collections support custom sorting via comparator algorithms.</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary reading</h2>
+  <p>Read the <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/Collections.html">Collections Javadoc</a>. Pay special attention to the synchronization instructions when iterating over synchronized wrappers.</p>
+
+  <p class="teacher-note">
+    <strong>Stuck on anything?</strong> Ask your teacher in Cursor — paste a code snippet or describe what confused you.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-utility', {
+      correct: 'Correct! Unmodifiable wrappers are read-through views. They do not duplicate the collection data—they just block write calls. If the underlying collection changes, those changes are immediately visible through the wrapper.',
+      wrong: 'Incorrect. Unmodifiable wrappers are thin delegating views, not snapshot copies. They block mutation calls but still read directly from the underlying mutable backing collection.'
+    });
+  </script>
+</body>
+</html>

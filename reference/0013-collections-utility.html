@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Collections Utility — Reference</title>
+  <meta name="description" content="Quick reference guide for java.util.Collections class, detailing static algorithms, unmodifiable/synchronized/checked wrappers, and sentinel factory methods.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/0013-collections-utility.html">&larr; Lesson 13</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Collections Utility Class Reference</h1>
+  <p class="meta"><a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/Collections.html">Oracle java.util.Collections Javadoc</a></p>
+
+  <h2>Wrapper Collections (Views vs. Copies)</h2>
+  <p>The <code>java.util.Collections</code> class provides wrapper methods that return <strong>views</strong> of a backing collection. They intercept calls to delegate or block operations, rather than copying any internal array or node data structure.</p>
+
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem;">Wrapper Type</th>
+      <th align="left" style="padding: 0.5rem;">Creation Method</th>
+      <th align="left" style="padding: 0.5rem;">Behavior & Constraints</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><strong>Unmodifiable</strong></td>
+      <td style="padding: 0.5rem;"><code>unmodifiableList(list)</code><br><code>unmodifiableSet(set)</code><br><code>unmodifiableMap(map)</code></td>
+      <td style="padding: 0.5rem;">Blocks writing calls by throwing <code>UnsupportedOperationException</code>. Read-through views: changes to the underlying backing list are visible.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><strong>Synchronized</strong></td>
+      <td style="padding: 0.5rem;"><code>synchronizedList(list)</code><br><code>synchronizedSet(set)</code><br><code>synchronizedMap(map)</code></td>
+      <td style="padding: 0.5rem;">Wraps all reads and writes in a <code>synchronized(mutex)</code> block. <strong>Caveat:</strong> Manual synchronization on the mutex is required when iterating.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+      <td style="padding: 0.5rem;"><strong>Checked</strong></td>
+      <td style="padding: 0.5rem;"><code>checkedList(list, Class)</code><br><code>checkedSet(set, Class)</code><br><code>checkedMap(map, K, V)</code></td>
+      <td style="padding: 0.5rem;">Enforces runtime type verification on item insertions. Prevents heap pollution when dealing with legacy non-generic code.</td>
+    </tr>
+  </table>
+
+  <h2>Core Static Algorithms</h2>
+  <ul>
+    <li><code>sort(List&lt;T&gt; list)</code>: Sorts the specified list using natural ordering. Delegates to <code>list.sort(null)</code>, which uses <strong>Timsort</strong> (hybrid merge/insertion sort) with <code>O(n log n)</code> time complexity and <code>O(n)</code> space complexity.</li>
+    <li><code>binarySearch(List&lt;? extends Comparable&gt; list, T key)</code>: Searches the list using a binary search algorithm.
+      <ul>
+        <li>If the list implements <code>RandomAccess</code> (like <code>ArrayList</code>), execution is <code>O(log n)</code>.</li>
+        <li>If the list is a sequential-access chain (like <code>LinkedList</code>), execution degrades to <code>O(n)</code> link traversal costs.</li>
+      </ul>
+    </li>
+    <li><code>shuffle(List&lt;?&gt; list)</code>: Randomly permutes list elements using a Fisher-Yates shuffle in <code>O(n)</code>.</li>
+    <li><code>reverse(List&lt;?&gt; list)</code>: Reverses element order in <code>O(n)</code> time.</li>
+  </ul>
+
+  <h2>Immutable Collections vs. Unmodifiable Wrappers</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem;">Feature</th>
+      <th align="left" style="padding: 0.5rem;">Unmodifiable View (e.g. <code>Collections.unmodifiableList</code>)</th>
+      <th align="left" style="padding: 0.5rem;">Immutable Collection (e.g. <code>List.of</code>, <code>List.copyOf</code>)</th>
+    </tr>
+    <tr>
+      <td style="padding: 0.5rem;"><strong>Underlying Mutations</strong></td>
+      <td style="padding: 0.5rem;">Reflected (view reads directly from the backing mutable list).</td>
+      <td style="padding: 0.5rem;">Truly immutable (backing data cannot change; copies on creation).</td>
+    </tr>
+    <tr>
+      <td style="padding: 0.5rem;"><strong>Null Elements</strong></td>
+      <td style="padding: 0.5rem;">Permitted if the backing collection permits them.</td>
+      <td style="padding: 0.5rem;">Prohibited (throws <code>NullPointerException</code> on creation/lookup).</td>
+    </tr>
+  </table>
+</body>
+</html>

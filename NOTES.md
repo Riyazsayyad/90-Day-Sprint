@@ -41,3 +41,8 @@
 - User invoked `/teach Comparable vs Comparator.`
 - Lesson 12 created: Comparable (compareTo) vs Comparator (compare), returning values, and TreeSet duplicate handling (comparison equals zero vs Object.equals()).
 
+## Session 10 (2026-07-08)
+- User invoked `/teach Collections Utility`.
+- Lesson 13 created: java.util.Collections static utilities, unmodifiable/synchronized/checked wrappers, and sentinel empty collections.
+
+
