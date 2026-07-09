@@ -37,6 +37,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const oopCard = document.getElementById('oopCard');
+  if (oopCard) {
+    oopCard.addEventListener('click', () => {
+      showToast('"OOP Fundamentals" is now active! Let your AI coach know you are ready to start the first lesson.');
+    });
+  }
+
   // Close triggers
   if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
   if (backdrop) backdrop.addEventListener('click', closeDrawer);
@@ -48,19 +55,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Toast System for Locked Cards
+  // Toast System
   const lockedCards = document.querySelectorAll('.module-card.locked');
   const toast = document.getElementById('toast');
   const toastText = document.getElementById('toastText');
   let toastTimeout;
 
-  const showToast = (moduleName) => {
+  const showToast = (message) => {
     if (!toast || !toastText) return;
     
     // Clear any active timeout
     clearTimeout(toastTimeout);
     
-    toastText.textContent = `"${moduleName}" will unlock as you progress. Stay focused on Collections!`;
+    toastText.textContent = message;
     toast.classList.add('show');
     
     toastTimeout = setTimeout(() => {
@@ -73,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
     card.addEventListener('click', () => {
       const titleEl = card.querySelector('.card-title');
       const moduleTitle = titleEl ? titleEl.textContent : 'Upcoming Module';
-      showToast(moduleTitle);
+      showToast(`"${moduleTitle}" will unlock as you progress. Stay focused on your active modules!`);
     });
   });
 });

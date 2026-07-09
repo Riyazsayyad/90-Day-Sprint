@@ -57,6 +57,10 @@
 - User invoked `/teach Fail-Fast vs Fail-Safe iterators in Java from an interview perspective.`
 - Lesson 16 created: Fail-Fast vs Fail-Safe design, ConcurrentModificationException internals (modCount/expectedModCount), best-effort boundaries, CopyOnWriteArrayList snapshot iteration, and ConcurrentHashMap bucket iteration.
 
+## Session 14 (2026-07-10)
+- Completed Module 01: Collections Internals.
+- Activated Module 00: OOP Fundamentals to begin the OOP track.
+
 
 
 
