@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 9 — Abstraction in Java</title>
+  <meta name="description" content="Master Abstraction in Java from a software engineering and interview perspective: abstract classes, interfaces, API design, skeletal implementations, and framework extensibility.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="oop-0008-polymorphism.html">&larr; Lesson 8</a> &middot;
+    Lesson 9 of 9 &middot;
+    <a href="../reference/oop-0009-abstraction.html">Abstraction Reference</a>
+  </nav>
+
+  <h1>Abstraction: Declaring Contracts & Decoupling Systems</h1>
+  <p class="meta">~12 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. Why Abstraction Exists</h2>
+  <p>In software engineering, complexity is the primary source of bugs and structural failures. **Abstraction** is the design practice of hiding internal execution details and exposing only the essential features of a component. It establishes a boundary of *what* an object does rather than *how* it does it.</p>
+  <p>By defining clear boundary contracts, abstraction reduces cognitive load on developers: you don't need to know how a database engine optimizes disk writes to issue a query, nor how a socket buffers packets to send data. It also allows developers to replace implementation layers without modifying client code.</p>
+
+  <h2>2. Abstraction vs. Encapsulation</h2>
+  <p>Although often confused in interviews, they represent different stages of boundary design:</p>
+  <ul>
+    <li><strong>Abstraction (Design Level):</strong> Focuses on <em>hiding complexity</em> by exposing a simplified model of a component (e.g. creating an <code>interface</code> or <code>abstract class</code> to represent behavior).</li>
+    <li><strong>Encapsulation (Implementation Level):</strong> Focuses on <em>hiding state and data details</em> to protect internal invariants (e.g. declaring fields as <code>private</code> and validating state changes via deliberate operations).</li>
+  </ul>
+  <div class="callout">
+    <strong>Analogy:</strong> Abstraction is the steering wheel and pedals of a car (exposing a simplified interface for driving). Encapsulation is the physical engine casing (restricting direct access to hot pistons and gears to keep you safe).
+  </div>
+
+  <h2>3. Abstract Classes: Skeletal Foundations</h2>
+  <p>An **Abstract Class** is a class declared with the <code>abstract</code> modifier. It represents an incomplete blueprint and cannot be instantiated directly using the <code>new</code> keyword. Characteristics include:</p>
+  <ul>
+    <li><strong>Partial Implementation:</strong> Can contain both abstract methods (declared with no body) and concrete methods (with bodies).</li>
+    <li><strong>Instance State:</strong> Can define instance fields, non-final methods, and constructors (which run during subclass constructor chaining via <code>super()</code>).</li>
+    <li><strong>Skeletal Implementations:</strong> Often used in API design to provide common logic (like Java's <code>AbstractList</code>), leaving specific operations to subclasses.</li>
+  </ul>
+
+  <h2>4. Interfaces: Pure Behavioral Contracts</h2>
+  <p>An **Interface** represents a strict behavior contract. A class implements an interface to promise it can execute specific actions.
+  <br>A detailed discussion of advanced interfaces is covered in later lessons, but at a high level, they differ fundamentally from abstract classes:</p>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 20%;">Property</th>
+      <th align="left" style="padding: 0.5rem; width: 40%;">Abstract Class</th>
+      <th align="left" style="padding: 0.5rem; width: 40%;">Interface (Java 8+)</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Inheritance</strong></td>
+      <td style="padding: 0.5rem;">Single inheritance (can extend at most one class).</td>
+      <td style="padding: 0.5rem;">Multiple inheritance (can implement multiple interfaces).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>State Fields</strong></td>
+      <td style="padding: 0.5rem;">Can contain instance fields (state).</td>
+      <td style="padding: 0.5rem;">Only static final constants (no instance state).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Constructors</strong></td>
+      <td style="padding: 0.5rem;">Yes, to initialize parent fields during chaining.</td>
+      <td style="padding: 0.5rem;">No, cannot have constructors or initialize state.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Methods</strong></td>
+      <td style="padding: 0.5rem;">Abstract, final, static, private, or concrete.</td>
+      <td style="padding: 0.5rem;">Abstract, default (Java 8), static, or private (Java 9).</td>
+    </tr>
+  </table>
+
+  <h2>5. Designing APIs Through Abstraction</h2>
+  <p>High-quality APIs depend on abstractions to prevent client code from compiling against concrete details. Consider a database connection framework:</p>
+  <pre><code>// Client compiles only against the abstract API contract
+public interface DatabaseConnection {
+    void executeQuery(String sql);
+}
+
+// Vendor concrete implementation is hidden
+public class PostgreSQLConnection implements DatabaseConnection {
+    @Override
+    public void executeQuery(String sql) {
+        System.out.println("Executing PostgreSQL Query: " + sql);
+    }
+}</code></pre>
+  <p>If you decide to migrate from PostgreSQL to MySQL, you only swap the concrete implementation class at the configuration layer. Since the client application compiles against <code>DatabaseConnection</code>, not a single line of client code changes.</p>
+
+  <h2>6. Why Frameworks Depend on Abstraction</h2>
+  <p>Enterprise frameworks (like Spring Boot, Hibernate, or the JDK itself) rely entirely on abstraction to remain extensible. They provide interface boundaries (such as <code>HttpServletRequest</code>, <code>Filter</code>, or <code>JpaRepository</code>) that define how the framework communicates. This lets developers plug their own custom logic into pre-built framework loops seamlessly without recompiling the framework core.</p>
+
+  <h2>7. Common Misconceptions</h2>
+  <ul>
+    <li><em>"Abstract classes cannot have constructors."</em> <strong>False.</strong> They can have constructors. Although they cannot be instantiated directly, their constructors are called during subclass instantiation.</li>
+    <li><em>"Abstraction requires writing interfaces."</em> <strong>No.</strong> Hiding helper methods using the <code>private</code> modifier inside concrete classes or wrapping complex code blocks inside simple methods also provides abstraction.</li>
+  </ul>
+
+  <h2>8. Key Interview Questions</h2>
+  <div class="callout">
+    <strong>Q: Can an abstract class have zero abstract methods?</strong>
+    Yes. Declaring a class <code>abstract</code> even without abstract methods prevents developers from creating direct instances of it, forcing them to extend it. This is useful for grouping shared configuration templates.
+  </div>
+  <div class="callout">
+    <strong>Q: Why can't we instantiate an abstract class?</strong>
+    Because it represents an incomplete abstraction. Its abstract methods lack execution logic. Instantiating it directly would allow calls to non-existent code, violating Java's type safety.
+  </div>
+
+  <h2>Retrieval Practice — Abstract Class States</h2>
+  <p>Test your understanding of abstract class state and declaration rules:</p>
+
+  <div class="quiz" id="quiz-abstract-state">
+    <p class="quiz-question">Why is a class-based abstract declaration used?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">To share default state details across subclass hierarchies.</button></li>
+      <li><button data-answer="wrong">To enable multiple inheritance features within class scopes.</button></li>
+      <li><button data-answer="wrong">To allocate instance objects directly within memory layouts.</button></li>
+      <li><button data-answer="wrong">To block compilation overrides inside subclass class scopes.</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary Sources & Reading</h2>
+  <ul>
+    <li>Read <em>Effective Java (3rd Edition)</em> by Joshua Bloch: Item 20 ("Prefer interfaces to abstract classes") and Item 21 ("Design interfaces for posterity").</li>
+    <li>Review Oracle Technical Docs on <a href="https://docs.oracle.com/javase/tutorial/java/IandI/abstract.html">Abstract Methods and Classes</a>.</li>
+  </ul>
+
+  <p class="teacher-note">
+    <strong>Designing a custom service layer contract?</strong> Share your interfaces in the chat and we will refactor them to ensure proper separation of concerns!
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-abstract-state', {
+      correct: 'Correct! Abstract classes can contain instance variables, default constructor chains, and non-abstract helper methods, allowing you to share concrete state and logic across related subclasses.',
+      wrong: 'Incorrect. Abstract classes do not support multiple inheritance, cannot be instantiated directly, and do not block compilation overrides unless methods are declared final. Think about sharing state.'
+    });
+  </script>
+</body>
+</html>

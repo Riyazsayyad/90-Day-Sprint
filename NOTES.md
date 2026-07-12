@@ -104,3 +104,7 @@
 ## Session 24 (2026-07-13)
 - User invoked `/teach Teach me "Polymorphism in Java" from an interview and software engineering perspective.`
 - Lesson 8 (Polymorphism) created (as oop-0008-polymorphism.html): Early vs late binding, overloading vs overriding differences, upcasting and downcasting, traditional vs modern instanceof pattern matching, framework dependencies (DI / Template Method), and vtable mechanics.
+
+## Session 25 (2026-07-13)
+- User invoked `/teach Teach me "Abstraction in Java" from an interview and software engineering perspective.`
+- Lesson 9 (Abstraction) created (as oop-0009-abstraction.html): Hiding complexity vs hiding state details, abstract classes vs interfaces properties, API contract designs, skeletal implementation frameworks, and framework dependency abstractions.

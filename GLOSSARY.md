@@ -318,6 +318,25 @@ _Avoid_: type forcing
 A language feature (Java 16+) that automatically binds a cast variable to a scope if the type check succeeds, eliminating explicit casting boilerplates.
 _Avoid_: smart casting
 
+## Abstraction Terms
+
+**Abstraction**:
+The design practice of hiding internal execution details and exposing only the essential features of a component to reduce complexity.
+_Avoid_: information hiding (which is access restriction, not detail omission)
+
+**Abstract Class**:
+An incomplete class blueprint declared with the abstract modifier that cannot be instantiated directly and can define partial implementation logic.
+_Avoid_: interface class
+
+**Interface**:
+A pure behavioral contract defining methods that implementing classes must define, supporting multiple behavioral inheritance.
+_Avoid_: class interface
+
+**Skeletal Implementation**:
+An API design pattern combining a pure behavioral interface with a partially implemented abstract class to simplify concrete subclass definitions.
+_Avoid_: abstract template
+
+
 
 
 

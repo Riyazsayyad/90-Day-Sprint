@@ -9,6 +9,7 @@
     { num: '06', file: 'oop-0006-encapsulation.html', title: 'Encapsulation in Java', meta: '12 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
     { num: '07', file: 'oop-0007-inheritance.html', title: 'Inheritance in Java', meta: '12 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
     { num: '08', file: 'oop-0008-polymorphism.html', title: 'Polymorphism in Java', meta: '12 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
+    { num: '09', file: 'oop-0009-abstraction.html', title: 'Abstraction in Java', meta: '12 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
     
     // Module 01: Collections Internals
     { num: '01', file: '0001-what-is-a-functional-interface.html', title: 'What Is a Functional Interface?', meta: '5 min read &bull; Core Java', module: 'Collections Internals', moduleNum: '01' },

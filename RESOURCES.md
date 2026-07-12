@@ -12,6 +12,8 @@
   Official guide covering class hierarchies, overriding, hiding, super keyword, and Object methods.
 - [Oracle: Polymorphism](https://docs.oracle.com/javase/tutorial/java/IandI/polymorphism.html)
   Official guide covering runtime polymorphism, method dispatch, and object reference mechanics.
+- [Oracle: Abstract Methods and Classes](https://docs.oracle.com/javase/tutorial/java/IandI/abstract.html)
+  Official guide covering abstract class definitions, restrictions, constructors, and comparison with interfaces.
 - [Bjarne Stroustrup: What is Object-Oriented Programming?](https://www.stroustrup.com/whatis.pdf)
   Core theoretical foundations: defining classes, inheritance hierarchies, and dynamic binding from a system architecture perspective.
 

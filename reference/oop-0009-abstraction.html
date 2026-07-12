@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Abstraction & API Contracts — Reference</title>
+  <meta name="description" content="Quick reference guide for Abstraction vs Encapsulation, Abstract classes vs Interfaces, and Skeletal implementation design patterns.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0009-abstraction.html">&larr; Lesson 9</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Java Abstraction & API Contracts Reference</h1>
+  <p class="meta">Study Reference for Abstraction vs Encapsulation, Interfaces vs Abstract Classes, and API Separation</p>
+
+  <h2>1. Abstraction vs. Encapsulation</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 20%;">Concept</th>
+      <th align="left" style="padding: 0.5rem; width: 40%;">Abstraction</th>
+      <th align="left" style="padding: 0.5rem; width: 40%;">Encapsulation</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Focus</strong></td>
+      <td style="padding: 0.5rem;"><em>Hiding complexity</em> (what an object does).</td>
+      <td style="padding: 0.5rem;"><em>Hiding data</em> (how an object protects its state).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Level</strong></td>
+      <td style="padding: 0.5rem;">Design level (focus on interfaces/contracts).</td>
+      <td style="padding: 0.5rem;">Implementation level (focus on classes/modifiers).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Enforced by</strong></td>
+      <td style="padding: 0.5rem;">Interfaces, Abstract classes, Public API signatures.</td>
+      <td style="padding: 0.5rem;"><code>private</code> fields, validation logic, final variables.</td>
+    </tr>
+  </table>
+
+  <h2>2. Concrete Class vs. Abstract Class vs. Interface</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 22%;">Feature</th>
+      <th align="left" style="padding: 0.5rem; width: 26%;">Concrete Class</th>
+      <th align="left" style="padding: 0.5rem; width: 26%;">Abstract Class</th>
+      <th align="left" style="padding: 0.5rem; width: 26%;">Interface (Java 8+)</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Instantiation</strong></td>
+      <td style="padding: 0.5rem;">Yes (via <code>new</code>).</td>
+      <td style="padding: 0.5rem;">No.</td>
+      <td style="padding: 0.5rem;">No.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Abstract Methods</strong></td>
+      <td style="padding: 0.5rem;">No.</td>
+      <td style="padding: 0.5rem;">Yes (optional).</td>
+      <td style="padding: 0.5rem;">Yes (implicitly abstract).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Instance Variables</strong></td>
+      <td style="padding: 0.5rem;">Yes.</td>
+      <td style="padding: 0.5rem;">Yes.</td>
+      <td style="padding: 0.5rem;">No (only constants).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Multiple Inheritance</strong></td>
+      <td style="padding: 0.5rem;">No.</td>
+      <td style="padding: 0.5rem;">No.</td>
+      <td style="padding: 0.5rem;">Yes, multiple interfaces.</td>
+    </tr>
+  </table>
+
+  <h2>3. Skeletal Implementation Pattern</h2>
+  <p>Combine interfaces and abstract classes to provide maximum API flexibility:</p>
+  <pre><code>// 1. The Pure behavioral interface
+public interface DocumentProcessor {
+    void load(String path);
+    void extractText();
+    void save();
+}
+
+// 2. The Abstract Skeletal class containing common logic
+public abstract class AbstractDocumentProcessor implements DocumentProcessor {
+    protected String path;
+
+    @Override
+    public void load(String path) {
+        this.path = path; // Common initialization logic
+        System.out.println("Document loaded from: " + path);
+    }
+
+    // save() and extractText() remain abstract for specific formats
+}
+
+// 3. Concrete implementations (Simple and focused)
+public class PdfProcessor extends AbstractDocumentProcessor {
+    @Override
+    public void extractText() {
+        System.out.println("Extracting PDF text from: " + path);
+    }
+
+    @Override
+    public void save() {
+        System.out.println("Saving PDF document state");
+    }
+}</code></pre>
+
+  <h2>4. Abstraction Best Practices</h2>
+  <ul>
+    <li><strong>Program to an Interface:</strong> Always reference objects by their interface or abstract parent type rather than concrete classes (e.g. <code>List&lt;String&gt; names = new ArrayList&lt;&gt;();</code>).</li>
+    <li><strong>Interface Segregation Principle:</strong> Clients should not be forced to implement methods they do not use. Prefer small, highly cohesive interfaces (e.g. <code>Runnable</code>, <code>Comparable</code>) over massive "fat" interfaces.</li>
+    <li><strong>Use Skeleton Abstractions:</strong> When designing custom framework modules, always provide a clean interface for maximum client flexibility, paired with an abstract class to provide default helper logic.</li>
+    <li><strong>Prevent Direct Constructor Calls:</strong> If a class is only meant to be a base template, declare it <code>abstract</code> even if it doesn't declare any abstract methods.</li>
+  </ul>
+</body>
+</html>
