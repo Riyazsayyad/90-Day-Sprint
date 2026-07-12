@@ -4,6 +4,10 @@
 
 - [Oracle: Object-Oriented Programming Concepts](https://docs.oracle.com/javase/tutorial/java/concepts/)
   Authoritative tutorial covering the foundations: objects, classes, inheritance, interfaces, and packages.
+- [Oracle: Controlling Access to Class Members](https://docs.oracle.com/javase/tutorial/java/javaOO/accesscontrol.html)
+  Official guide on access modifiers (private, default, protected, public) and package boundaries.
+- [Joshua Bloch: Effective Java](https://www.oreilly.com/library/view/effective-java/9780134686097/)
+  Authoritative guidance on encapsulation and immutability. Focus on Item 15 (Minimize accessibility) and Item 50 (Defensive copying).
 - [Bjarne Stroustrup: What is Object-Oriented Programming?](https://www.stroustrup.com/whatis.pdf)
   Core theoretical foundations: defining classes, inheritance hierarchies, and dynamic binding from a system architecture perspective.
 

@@ -1,0 +1,7 @@
+# Encapsulation & Info Hiding instruction track
+
+The user requested a lesson on "Encapsulation in Java" from an interview and software engineering perspective (via `/teach Teach me "Encapsulation in Java" from an interview and software engineering perspective`). This covers why encapsulation exists, what problems it solves (invariants violation, high coupling), encapsulation vs. data hiding differences, access modifier boundaries (private, default, protected, public), getter/setter abuse & "Tell, Don't Ask" principle, mutable state leaks and defensive copying (constructors/getters), immutable class design criteria, enterprise domain models (DDD aggregates vs. DTOs), common interview questions, best practices, and real-world examples beyond BankAccount (such as a ShoppingCart aggregate).
+
+**Evidence:** Explicit user request: `/teach Teach me "Encapsulation in Java" from an interview and software engineering perspective.`
+
+**Implications:** Ground the student in designing classes that protect their invariants and hide their internal representation. Shift them away from simple getter/setter auto-generation toward active domain models where state updates occur via deliberate behaviors. Provide a foundation for encapsulation in enterprise architectures, preparation for common conceptual interview questions, and correct strategies for defensive copying of mutable variables and collections.

@@ -256,6 +256,29 @@ _Avoid_: loose link
 A reference (java.lang.ref.PhantomReference) whose referent is already finalized, yielding null on get(). Combined with ReferenceQueue to schedule post-mortem resource cleanup safely.
 _Avoid_: shadow link
 
+## Encapsulation Terms
+
+**Encapsulation**:
+The bundling of state (data) and behavior (methods) that operate on that state into a single cohesive unit (a Class).
+_Avoid_: information hiding (which is access restriction, not grouping)
+
+**Information Hiding (Data Hiding)**:
+The practice of restricting access to the internal details and implementation structures of an object, enforced via access modifiers.
+_Avoid_: encapsulation (which is bundling, not access restriction)
+
+**Invariant**:
+A condition or rule that must always hold true for an object throughout its entire lifecycle to ensure it remains in a valid state.
+_Avoid_: integrity constraint
+
+**Tell, Don't Ask**:
+A design principle advising that you should command an object to perform actions rather than querying its internal state to make decisions externally.
+_Avoid_: getter queries
+
+**Defensive Copying**:
+The practice of creating duplicates of mutable input parameters or internal fields to prevent external clients from modifying private state.
+_Avoid_: instance cloning
+
+
 
 
 

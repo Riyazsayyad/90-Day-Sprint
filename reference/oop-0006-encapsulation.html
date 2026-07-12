@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Encapsulation & Info Hiding — Reference</title>
+  <meta name="description" content="Quick reference guide for Java access modifiers, defensive copying, immutability criteria, and Tell Don't Ask rules.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0006-encapsulation.html">&larr; Lesson 6</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Java Encapsulation & Information Hiding Reference</h1>
+  <p class="meta">Study Reference for Access Control, Immutable Design, and Defensive Copying Invariants</p>
+
+  <h2>1. Three Pillars of Boundary Enforcement</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Concept</th>
+      <th align="left" style="padding: 0.5rem; width: 35%;">Core Objective</th>
+      <th align="left" style="padding: 0.5rem; width: 40%;">Java Implementation Mechanism</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Encapsulation</strong></td>
+      <td style="padding: 0.5rem;">Group data and related operations into a single logical unit.</td>
+      <td style="padding: 0.5rem;">Classes with bundled fields and member methods.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Information Hiding</strong></td>
+      <td style="padding: 0.5rem;">Prevent clients from depending on unstable internal details.</td>
+      <td style="padding: 0.5rem;"><code>private</code> fields, package-private helpers, unmodifiable lists.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Abstraction</strong></td>
+      <td style="padding: 0.5rem;">Hide complexity by providing simplified model views.</td>
+      <td style="padding: 0.5rem;"><code>interface</code> declarations and abstract classes (e.g. <code>List</code> vs <code>ArrayList</code>).</td>
+    </tr>
+  </table>
+
+  <h2>2. Defensive Copying & Unmodifiable Wrappers</h2>
+  <p>To avoid representation exposure of internal lists or arrays, follow these patterns:</p>
+  <pre><code>// Pattern A: Defensive Copying (Constructor & Setter Inputs)
+public class Order {
+    private final List&lt;LineItem&gt; items;
+
+    public Order(List&lt;LineItem&gt; items) {
+        // Create a new list copy to break external references
+        this.items = items == null ? new ArrayList&lt;&gt;() : new ArrayList&lt;&gt;(items);
+    }
+}
+
+// Pattern B: Read-Only Views (Getters)
+public class Order {
+    private final List&lt;LineItem&gt; items = new ArrayList&lt;&gt;();
+
+    public List&lt;LineItem&gt; getItems() {
+        // Return an unmodifiable view (O(1) wrapper overhead)
+        return Collections.unmodifiableList(items);
+    }
+}
+
+// Pattern C: Deep Copying (For collections of mutable elements)
+public List&lt;Customer&gt; getCustomers() {
+    List&lt;Customer&gt; copy = new ArrayList&lt;&gt;();
+    for (Customer c : this.customers) {
+        copy.add(new Customer(c.getName(), c.getAddress())); // Copy elements
+    }
+    return copy;
+}</code></pre>
+
+  <h2>3. How to Construct a Fully Immutable Class</h2>
+  <pre><code>import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+// 1. Declare class final to prevent subclassing mutability
+public final class ImmutableReport {
+    
+    // 2. Make all fields private and final
+    private final String title;
+    private final List&lt;String&gt; sections;
+
+    // 3. Populate fields only during constructor execution
+    public ImmutableReport(String title, List&lt;String&gt; sections) {
+        this.title = title;
+        // 4. Defensively copy mutable arguments inside the constructor
+        this.sections = (sections == null) ? new ArrayList&lt;&gt;() : new ArrayList&lt;&gt;(sections);
+    }
+
+    // 5. Provide getters but NO setters
+    public String getTitle() {
+        return title;
+    }
+
+    // 6. Return defensive copy or unmodifiable wrapper in getters
+    public List&lt;String&gt; getSections() {
+        return Collections.unmodifiableList(sections);
+    }
+}</code></pre>
+
+  <h2>4. "Tell, Don't Ask" Rule Book</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 50%;">Anemic/Fragile Approach ("Ask")</th>
+      <th align="left" style="padding: 0.5rem; width: 50%;">Encapsulated Approach ("Tell")</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem; vertical-align: top;">
+<pre style="margin: 0; padding: 0.5rem; border: none; font-size: 0.8rem;"><code>// Client computes discounts manually
+double discount = 0.0;
+if (cart.getCustomer().isVip()) {
+    discount = cart.getSubTotal() * 0.10;
+}
+double total = cart.getSubTotal() - discount;</code></pre>
+      </td>
+      <td style="padding: 0.5rem; vertical-align: top;">
+<pre style="margin: 0; padding: 0.5rem; border: none; font-size: 0.8rem;"><code>// Client tells the cart to calculate total
+double total = cart.calculateDiscountedTotal();
+// (Logic is encapsulated inside ShoppingCart)</code></pre>
+      </td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem; vertical-align: top;">
+<pre style="margin: 0; padding: 0.5rem; border: none; font-size: 0.8rem;"><code>// Client increments state externally
+int score = player.getScore();
+score += 10;
+player.setScore(score);</code></pre>
+      </td>
+      <td style="padding: 0.5rem; vertical-align: top;">
+<pre style="margin: 0; padding: 0.5rem; border: none; font-size: 0.8rem;"><code>// Client triggers increment action
+player.incrementScore(10);
+// (Validations and math kept inside Player)</code></pre>
+      </td>
+    </tr>
+  </table>
+
+  <h2>5. Quick Check Best Practices</h2>
+  <ul>
+    <li><strong>Minimize Member Visibility:</strong> Default to <code>private</code> for fields. If subclasses need read access, prefer package-private or public getters over <code>protected</code> fields, keeping internal state protected.</li>
+    <li><strong>Avoid Dummy Getters/Setters:</strong> Never write a getter/setter unless it is actively required. Classes should expose behaviors, not structure.</li>
+    <li><strong>Assert State Invariants:</strong> Use <code>Objects.requireNonNull()</code> or check ranges at the boundaries (constructors and public methods) to fail-fast.</li>
+    <li><strong>Copy Collections Eagerly:</strong> Never trust collection parameters passed by external callers. Copy them into a local collection immediately.</li>
+  </ul>
+</body>
+</html>

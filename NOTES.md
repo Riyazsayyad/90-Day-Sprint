@@ -91,4 +91,8 @@
 
 ## Session 21 (2026-07-12)
 - User invoked `/teach Object Lifecycle in Java`
-- Lesson 5 (Object Lifecycle) created (as oop-0005.html): Instantiation steps, GC Root sets, reachability tracing, finalize() deprecation hazards (security finalizer attacks, slow performance loops), resurrection constraints, and reference strengths (Strong, Soft, Weak, Phantom).
+- Lesson 5 (Object Lifecycle) created (as oop-0005-object-lifecycle.html): Instantiation steps, GC Root sets, reachability tracing, finalize() deprecation hazards (security finalizer attacks, slow performance loops), resurrection constraints, and reference strengths (Strong, Soft, Weak, Phantom).
+
+## Session 22 (2026-07-12)
+- User invoked `/teach Teach me "Encapsulation in Java" from an interview and software engineering perspective.`
+- Lesson 6 (Encapsulation) created (as oop-0006-encapsulation.html): Bundling vs. information hiding, access modifiers, mutable state leaks and defensive copying, immutability requirements, Tell Don't Ask principle, DDD Aggregates vs. DTOs, and interview questions.

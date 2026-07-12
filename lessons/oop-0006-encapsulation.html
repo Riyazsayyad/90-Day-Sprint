@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 6 — Encapsulation in Java</title>
+  <meta name="description" content="Master Encapsulation in Java from a software engineering and interview perspective: representation hiding, mutable state leakage, immutability, Tell Don't Ask, and DDD aggregates.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="oop-0005-object-lifecycle.html">&larr; Lesson 5</a> &middot;
+    Lesson 6 of 6 &middot;
+    <a href="../reference/oop-0006-encapsulation.html">Encapsulation Reference</a>
+  </nav>
+
+  <h1>Encapsulation: Representation Hiding & Boundary Enforcement</h1>
+  <p class="meta">~12 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. Why Encapsulation Exists & The Problem It Solves</h2>
+  <p>In large-scale software systems, shared mutable state is the root of all evil. If client code can directly inspect and modify the internal variables of a class, two critical issues occur:</p>
+  <ul>
+    <li><strong>Broken Invariants:</strong> A class has business rules (invariants) that must remain true for its entire lifecycle. For example, a <code>ShoppingCart</code> cannot have a negative total, and an <code>Order</code> cannot transition to a "Shipped" status unless it is first "Paid". Direct access allows client code to bypass these validations.</li>
+    <li><strong>Tight Coupling (Implementation Dependency):</strong> If a class exposes its internal data structures (like an array or a list), client code compiles against that specific data structure. If you later optimize the class to use a <code>Map</code> or a database-backed cache, every single client class will break.</li>
+  </ul>
+  <p><strong>Encapsulation</strong> solves this by hiding the internal representation of data and exposing access only through a controlled, stable set of public operations (methods). This acts as a barrier, allowing a class to change its internal mechanisms without breaking client code.</p>
+
+  <h2>2. Encapsulation vs. Data Hiding</h2>
+  <p>While often used interchangeably in casual interviews, they are distinct concepts:</p>
+  <ul>
+    <li><strong>Encapsulation:</strong> The act of <em>bundling</em> data (fields) and the behaviors (methods) that operate on that data into a single unit (a Class). It is an architectural concept aimed at high cohesion.</li>
+    <li><strong>Data Hiding (Information Hiding):</strong> The process of <em>restricting access</em> to the internal representation details of that bundled object. It is a security/robustness concept aimed at low coupling, enforced via access modifiers.</li>
+  </ul>
+  <div class="callout">
+    <strong>Key takeaway:</strong> You can have encapsulation without data hiding (e.g. a class with all public fields), but it is a weak implementation. Data hiding is the enforcement mechanism that makes encapsulation effective.
+  </div>
+
+  <h2>3. Access Modifiers & Package Boundaries</h2>
+  <p>Java provides four levels of access control to establish boundaries around classes and their members:</p>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem;">Modifier</th>
+      <th align="left" style="padding: 0.5rem;">Class</th>
+      <th align="left" style="padding: 0.5rem;">Package</th>
+      <th align="left" style="padding: 0.5rem;">Subclass</th>
+      <th align="left" style="padding: 0.5rem;">World</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>private</code></td>
+      <td style="padding: 0.5rem;">Yes</td>
+      <td style="padding: 0.5rem;">No</td>
+      <td style="padding: 0.5rem;">No</td>
+      <td style="padding: 0.5rem;">No</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><em>default</em> (package)</td>
+      <td style="padding: 0.5rem;">Yes</td>
+      <td style="padding: 0.5rem;">Yes</td>
+      <td style="padding: 0.5rem;">No</td>
+      <td style="padding: 0.5rem;">No</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>protected</code></td>
+      <td style="padding: 0.5rem;">Yes</td>
+      <td style="padding: 0.5rem;">Yes</td>
+      <td style="padding: 0.5rem;">Yes</td>
+      <td style="padding: 0.5rem;">No</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>public</code></td>
+      <td style="padding: 0.5rem;">Yes</td>
+      <td style="padding: 0.5rem;">Yes</td>
+      <td style="padding: 0.5rem;">Yes</td>
+      <td style="padding: 0.5rem;">Yes</td>
+    </tr>
+  </table>
+  <p>In enterprise design, utilizing package-private (default) access for helper classes or constructors allows you to hide classes inside a package, exposing only high-level interfaces to the rest of the application.</p>
+
+  <h2>4. The Getter/Setter Abuse & "Tell, Don't Ask"</h2>
+  <p>A very common misconception is that "encapsulation = private fields + getters + setters." If you auto-generate public getters and setters for every private field, you have created a class that is structurally identical to public fields: client code can still bypass the object's logic to change its state.</p>
+  <p>This leads to an **Anemic Domain Model** (objects are just passive bags of data, and business logic is scattered across client classes). Instead, apply the **Tell, Don't Ask** principle:</p>
+  <pre><code>// VIOLATION: Asking the object for its fields to perform external logic
+if (user.getRole().equals("ADMIN")) {
+    adminPanel.show(user.getId());
+}
+
+// ADHERENCE: Telling the object to do what needs to be done
+if (user.isAdmin()) {
+    adminPanel.show(user.getId());
+}</code></pre>
+
+  <h2>5. Mutable State Leakage & Defensive Copying</h2>
+  <p>If a getter returns a direct reference to a mutable internal field (such as a <code>java.util.List</code> or a <code>java.util.Date</code>), the private state escapes. External clients can modify the collection directly, bypassing all invariants:</p>
+  <pre><code>// VULNERABLE: Direct reference leak
+public List&lt;Item&gt; getItems() {
+    return this.items; 
+} // External code can run getItems().clear()
+
+// SECURE: Defensive copying or unmodifiable wrapper
+public List&lt;Item&gt; getItems() {
+    return Collections.unmodifiableList(this.items);
+}</code></pre>
+  <p>When mutable objects are passed into constructors, you must copy them to prevent the caller from retaining a reference and altering it later:</p>
+  <pre><code>// Secure constructor using defensive copying
+public Order(List&lt;Item&gt; items) {
+    this.items = new ArrayList&lt;&gt;(items); // Copying to establish local ownership
+}</code></pre>
+
+  <h2>6. Immutable Classes: The Ultimate Encapsulation</h2>
+  <p>An immutable object cannot have its state modified after construction. It is inherently thread-safe and safe to share without copying. Creating an immutable class requires:</p>
+  <ol>
+    <li>Declaring the class as <code>final</code> to prevent subclass overrides from adding mutability.</li>
+    <li>Making all fields <code>private</code> and <code>final</code>.</li>
+    <li>No setter methods.</li>
+    <li>Applying defensive copying for any mutable fields in constructors and getters.</li>
+  </ol>
+
+  <h2>7. Real-World Example: Secure ShoppingCart</h2>
+  <p>Here is an implementation of a <code>ShoppingCart</code> aggregate that enforces invariants (positive quantities, total calculation logic) and prevents state leakage:</p>
+  <pre><code>import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+public final class ShoppingCart {
+    private final List&lt;CartItem&gt; items = new ArrayList&lt;&gt;();
+    private double totalPrice = 0.0;
+
+    public void addItem(CartItem item) {
+        if (item == null) {
+            throw new IllegalArgumentException("Item cannot be null");
+        }
+        items.add(item);
+        recalculateTotal();
+    }
+
+    public void removeItem(CartItem item) {
+        if (items.remove(item)) {
+            recalculateTotal();
+        }
+    }
+
+    // Expose read-only view to prevent external mutation
+    public List&lt;CartItem&gt; getItems() {
+        return Collections.unmodifiableList(items);
+    }
+
+    public double getTotalPrice() {
+        return totalPrice;
+    }
+
+    private void recalculateTotal() {
+        this.totalPrice = items.stream()
+                               .mapToDouble(item -> item.getPrice() * item.getQuantity())
+                               .sum();
+    }
+}</code></pre>
+
+  <h2>8. Encapsulation in Enterprise Systems</h2>
+  <p>In enterprise software architectures (like Domain-Driven Design), encapsulation is applied at the level of **Aggregates** and **Domain Models**:</p>
+  <ul>
+    <li><strong>Domain Models:</strong> Contain business logic and validations. They guarantee that an object represents a valid business state at all times (e.g. validating order status changes).</li>
+    <li><strong>Data Transfer Objects (DTOs):</strong> Are intentionally non-encapsulated bags of data (often records in modern Java) designed solely to transport data over networks. They have no invariants to enforce.</li>
+  </ul>
+
+  <h2>9. Common Misconceptions</h2>
+  <ul>
+    <li><em>"Encapsulation is just writing private fields and public getters/setters."</em> <strong>No.</strong> Exposing raw fields via getters/setters breaks encapsulation. Real encapsulation hides the data format and exposes behavior.</li>
+    <li><em>"Encapsulation hurts execution speed."</em> <strong>False.</strong> The JVM's Just-In-Time (JIT) compiler aggressively inlines simple getter/setter methods, eliminating the method-call overhead.</li>
+  </ul>
+
+  <h2>10. Key Interview Questions</h2>
+  <div class="callout">
+    <strong>Q: What is the difference between Encapsulation and Abstraction?</strong>
+    Encapsulation is about <strong>hiding details</strong> and grouping data/behavior to protect internals. Abstraction is about <strong>hiding complexity</strong> by exposing a simpler interface (e.g., using an Interface to hide implementation classes).
+  </div>
+  <div class="callout">
+    <strong>Q: How do you prevent subversion of encapsulation via Reflection?</strong>
+    Java's module system (JPMS) can block deep reflection access across module boundaries. Within standard code, you can use SecurityManager (deprecated) or compile with options that restrict <code>setAccessible(true)</code>.
+  </div>
+
+  <h2>Retrieval Practice — Encapsulation Violations</h2>
+  <p>Test your understanding of encapsulation design:</p>
+
+  <div class="quiz" id="quiz-encapsulation-leak">
+    <p class="quiz-question">Which of the following practices most directly violates encapsulation?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">Returning references to mutable internal class lists.</button></li>
+      <li><button data-answer="wrong">Restricting field access with the private keyword.</button></li>
+      <li><button data-answer="wrong">Providing public getter methods for final variables.</button></li>
+      <li><button data-answer="wrong">Validating input values inside the class constructors.</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary Sources & Reading</h2>
+  <ul>
+    <li>Read <em>Effective Java (3rd Edition)</em> by Joshua Bloch: Item 15 ("Minimize the accessibility of class and members") and Item 50 ("Make defensive copies when needed").</li>
+    <li>Review the Oracle Java Tutorials on <a href="https://docs.oracle.com/javase/tutorial/java/javaOO/accesscontrol.html">Controlling Access to Members of a Class</a>.</li>
+  </ul>
+
+  <p class="teacher-note">
+    <strong>Want to trace how a specific mutable domain object should be refactored?</strong> Share your code in the chat, and we will rewrite it to enforce perfect encapsulation!
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-encapsulation-leak', {
+      correct: 'Correct! Returning a direct reference to a mutable internal list (like ArrayList) allows clients to bypass your class methods and modify or empty your list directly, breaking your class invariants.',
+      wrong: 'Incorrect. Making fields private, validating constructor values, or using getters for final variables are all standard practices that support encapsulation. Think about what lets external code break invariants.'
+    });
+  </script>
+</body>
+</html>
