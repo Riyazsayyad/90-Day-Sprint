@@ -100,3 +100,7 @@
 ## Session 23 (2026-07-12)
 - User invoked `/teach Teach me "Inheritance in Java" from an interview and software engineering perspective.`
 - Lesson 7 (Inheritance) created (as oop-0007-inheritance.html): Code reuse, IS-A contract, constructor chaining and compiler super() rules, overriding contracts, dynamic method dispatch, single inheritance, the Diamond Problem, and vtable lookups.
+
+## Session 24 (2026-07-13)
+- User invoked `/teach Teach me "Polymorphism in Java" from an interview and software engineering perspective.`
+- Lesson 8 (Polymorphism) created (as oop-0008-polymorphism.html): Early vs late binding, overloading vs overriding differences, upcasting and downcasting, traditional vs modern instanceof pattern matching, framework dependencies (DI / Template Method), and vtable mechanics.

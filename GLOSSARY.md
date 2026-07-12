@@ -300,6 +300,25 @@ _Avoid_: lookup hashmap
 The ambiguity conflict arising when a class inherits different implementations of the same method from multiple parents.
 _Avoid_: multiple definition error
 
+## Polymorphism Terms
+
+**Polymorphism**:
+The ability of different classes to respond uniquely to the same method invocation, enabling uniform treatment of varied types.
+_Avoid_: multiple forms wrapper
+
+**Upcasting**:
+Casting a subclass reference to a superclass type (implicit and always safe).
+_Avoid_: parent assignment casting
+
+**Downcasting**:
+Casting a superclass reference back to a subclass type (explicit and unsafe without checks).
+_Avoid_: type forcing
+
+**Pattern Matching (for instanceof)**:
+A language feature (Java 16+) that automatically binds a cast variable to a scope if the type check succeeds, eliminating explicit casting boilerplates.
+_Avoid_: smart casting
+
+
 
 
 

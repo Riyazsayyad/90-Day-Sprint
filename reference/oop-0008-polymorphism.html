@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Polymorphism & Binding — Reference</title>
+  <meta name="description" content="Quick reference guide for static vs dynamic binding, covariant casting, and pattern matching instanceof rules.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0008-polymorphism.html">&larr; Lesson 8</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Java Polymorphism & Binding Reference</h1>
+  <p class="meta">Study Reference for Binding Types, Reference Casting, and Pattern Matching Syntax</p>
+
+  <h2>1. Overloading vs. Overriding Contracts</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 22%;">Feature</th>
+      <th align="left" style="padding: 0.5rem; width: 39%;">Method Overloading (Static)</th>
+      <th align="left" style="padding: 0.5rem; width: 39%;">Method Overriding (Dynamic)</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Resolution</strong></td>
+      <td style="padding: 0.5rem;">Compile time (early binding).</td>
+      <td style="padding: 0.5rem;">Runtime (late binding).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Method Name</strong></td>
+      <td style="padding: 0.5rem;">Must be identical.</td>
+      <td style="padding: 0.5rem;">Must be identical.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Parameters</strong></td>
+      <td style="padding: 0.5rem;">Must be different (count or types).</td>
+      <td style="padding: 0.5rem;">Must be exactly identical.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Return Type</strong></td>
+      <td style="padding: 0.5rem;">Can be different.</td>
+      <td style="padding: 0.5rem;">Must be identical or covariant.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Exceptions</strong></td>
+      <td style="padding: 0.5rem;">Can throw different exceptions.</td>
+      <td style="padding: 0.5rem;">Cannot expand checked exceptions list.</td>
+    </tr>
+  </table>
+
+  <h2>2. Dynamic Dispatch Architecture (vtable lookup)</h2>
+  <pre><code>
+    Stack Frame                Heap Memory                   Metaspace (Class Metadata)
+  +-------------+          +------------------+             +--------------------------+
+  |  gateway   | ------>  |   StripeGateway  |             | StripeGateway.class      |
+  | (Reference) |          |------------------|             |--------------------------|
+  |  [Type:     |          |  [Klass Word]    | ----------> |  [vtable]                |
+  |  Payment-   |          |  [Instance Data] |             |  - processPayment() ---->| Ptr to Stripe's
+  |  Gateway]   |          +------------------+             |  - toString()            | implementation
+  +-------------+                                           +--------------------------+
+  </code></pre>
+  <p>During compilation, the compiler only verifies that the reference type (<code>PaymentGateway</code>) contains the method. At runtime, the JVM uses the heap object's <strong>Klass Word</strong> header reference to locate the class vtable in Metaspace and execute the overridden method address.</p>
+
+  <h2>3. Reference Casting Rules</h2>
+  <ul>
+    <li><strong>Upcasting (Safe & Implicit):</strong>
+      <pre><code>NotificationSender sender = new EmailSender(); // Implicitly upcast</code></pre>
+      Allows uniform treatment of subclass instances. You can only call methods defined in the <code>NotificationSender</code> interface.
+    </li>
+    <li><strong>Downcasting (Explicit & Conditional):</strong>
+      <pre><code>// UNSAFE: Throws ClassCastException if sender is not EmailSender
+EmailSender email = (EmailSender) sender; 
+
+// SAFE (Traditional):
+if (sender instanceof EmailSender) {
+    EmailSender email = (EmailSender) sender;
+    email.sendHtmlEmail();
+}</code></pre>
+    </li>
+    <li><strong>Modern Pattern Matching (Java 16+):</strong>
+      <pre><code>// SAFE (Modern):
+if (sender instanceof EmailSender email) {
+    email.sendHtmlEmail(); // Variable 'email' is auto-scoped
+}</code></pre>
+    </li>
+  </ul>
+
+  <h2>4. Core Framework Patterns Utilizing Polymorphism</h2>
+  <ul>
+    <li><strong>Dependency Injection (DI):</strong> Client classes depend on interfaces, while the framework injections supply concrete implementations at runtime, allowing adapters swapping without breaking core logic.</li>
+    <li><strong>Template Method Pattern:</strong> Framework classes define basic algorithm structures (e.g. Spring's <code>JdbcTemplate</code>), letting developers override specific hooks to inject custom queries.</li>
+  </ul>
+</body>
+</html>

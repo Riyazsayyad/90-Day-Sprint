@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 8 — Polymorphism in Java</title>
+  <meta name="description" content="Master Polymorphism in Java from a software engineering and interview perspective: compile-time vs runtime polymorphism, overloading vs overriding, dynamic method dispatch, casting, pattern matching, and framework design.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="oop-0007-inheritance.html">&larr; Lesson 7</a> &middot;
+    Lesson 8 of 8 &middot;
+    <a href="../reference/oop-0008-polymorphism.html">Polymorphism Reference</a>
+  </nav>
+
+  <h1>Polymorphism: Static Binding, Dynamic Dispatch, & Casting</h1>
+  <p class="meta">~12 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. Why Polymorphism Exists</h2>
+  <p>Derived from Greek meaning "many forms", **Polymorphism** is the ability of different classes to respond uniquely to the same method call. It decouples the client from specific implementations, allowing you to write code that operates on abstract parent classes or interfaces while executing specialized subclass behaviors at runtime.</p>
+  <p>Without polymorphism, software systems become rigid: adding a new subclass would require modifying every client method to check types and execute custom routines. Polymorphism supports the **Open/Closed Principle (OCP)**—classes are open for extension (by adding subclasses) but closed for modification.</p>
+
+  <h2>2. Compile-Time vs. Runtime Polymorphism</h2>
+  <p>Java supports two distinct forms of polymorphism resolved at different lifecycle stages:</p>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Characteristic</th>
+      <th align="left" style="padding: 0.5rem; width: 38%;">Compile-Time (Static)</th>
+      <th align="left" style="padding: 0.5rem; width: 37%;">Runtime (Dynamic)</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Mechanism</strong></td>
+      <td style="padding: 0.5rem;">Method Overloading.</td>
+      <td style="padding: 0.5rem;">Method Overriding & Dynamic Dispatch.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Resolution Time</strong></td>
+      <td style="padding: 0.5rem;">During compilation.</td>
+      <td style="padding: 0.5rem;">During execution (JVM runtime).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Binding Type</strong></td>
+      <td style="padding: 0.5rem;">Static binding (Early binding).</td>
+      <td style="padding: 0.5rem;">Dynamic binding (Late binding).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Speed</strong></td>
+      <td style="padding: 0.5rem;">Marginally faster (no runtime lookup).</td>
+      <td style="padding: 0.5rem;">Requires vtable pointer dereferencing.</td>
+    </tr>
+  </table>
+
+  <h2>3. Upcasting vs. Downcasting</h2>
+  <p>Casting allows you to change the type of reference through which you view a heap object. It does not alter the actual object in memory:</p>
+  <ul>
+    <li><strong>Upcasting (Implicit):</strong> Casting a subclass reference to a superclass type (e.g. <code>List&lt;String&gt; list = new ArrayList&lt;&gt;();</code>). It is always safe and handled automatically by the compiler. You lose access to child-specific methods.</li>
+    <li><strong>Downcasting (Explicit):</strong> Casting a parent reference back to a child type (e.g. <code>ArrayList&lt;String&gt; al = (ArrayList&lt;String&gt;) list;</code>). It is unsafe because the parent reference might point to a different subclass, throwing a <code>ClassCastException</code> at runtime.</li>
+  </ul>
+
+  <h2>4. Safe Casting: instanceof & Pattern Matching</h2>
+  <p>Historically, to downcast safely, developers performed an explicit type check followed by an explicit cast:</p>
+  <pre><code>// Traditional Java approach
+if (obj instanceof String) {
+    String s = (String) obj; // Redundant boilerplate cast
+    System.out.println(s.toLowerCase());
+}</code></pre>
+  <p>In modern Java (introduced in Java 16), **Pattern Matching for instanceof** eliminates this boilerplate. If the type check succeeds, it binds the cast object to a scope variable automatically:</p>
+  <pre><code>// Modern Java approach
+if (obj instanceof String s) {
+    System.out.println(s.toLowerCase()); // Safe, no explicit cast needed
+}</code></pre>
+
+  <h2>5. Real-World Example: Notification Dispatcher</h2>
+  <p>Polymorphism is the core structural pattern of framework systems (like Spring Boot's Dependency Injection). It decouples the dispatcher service from specialized adapters:</p>
+  <pre><code>public interface NotificationSender {
+    void send(String recipient, String message);
+}
+
+// Implementations representing "Many Forms"
+public class EmailSender implements NotificationSender {
+    @Override
+    public void send(String recipient, String msg) {
+        System.out.println("Sending Email to " + recipient + ": " + msg);
+    }
+}
+
+public class SmsSender implements NotificationSender {
+    @Override
+    public void send(String recipient, String msg) {
+        System.out.println("Sending SMS to " + recipient + ": " + msg);
+    }
+}
+
+// Client Service decoupled from concrete implementations
+public class NotificationService {
+    private final List&lt;NotificationSender&gt; senders;
+
+    public NotificationService(List&lt;NotificationSender&gt; senders) {
+        this.senders = senders; // Polymorphic collection
+    }
+
+    public void dispatch(String recipient, String msg) {
+        for (NotificationSender sender : senders) {
+            sender.send(recipient, msg); // Dynamic method dispatch
+        }
+    }
+}</code></pre>
+
+  <h2>6. Why Frameworks Rely on Polymorphism</h2>
+  <p>Frameworks like Spring Boot are designed to handle code they have never seen. By defining interfaces and base classes, frameworks manage object lifecycles and trigger operations polymorphically.
+  <br>For example, Spring's <code>ApplicationContext</code> manages dependency injection by looking up classes that implement a specific interface (e.g. <code>Repository</code>) and injecting them dynamically at runtime.</p>
+
+  <h2>7. Common Misconceptions</h2>
+  <ul>
+    <li><em>"Casting changes the type of the heap object."</em> <strong>No.</strong> Casting only changes the reference variable type (the perspective). An object created as a <code>Dog</code> remains a <code>Dog</code> on the heap, even if cast to <code>Animal</code>.</li>
+    <li><em>"Method overloading is determined at runtime based on the argument type."</em> <strong>No.</strong> Overload resolution occurs entirely at compile time based on the declared reference types of the arguments.</li>
+  </ul>
+
+  <h2>8. Key Interview Questions</h2>
+  <div class="callout">
+    <strong>Q: Why does Java resolve overloading at compile time but overriding at runtime?</strong>
+    Overloading relies on method signature variations (different parameters). The compiler must select a distinct method signature during compilation to write the correct bytecode. Overriding uses the exact same signature, so the compiler writes a generic method reference; the JVM vtable lookup dereferences the actual heap object type at runtime.
+  </div>
+  <div class="callout">
+    <strong>Q: What is a ClassCastException and how do you prevent it?</strong>
+    It is a runtime exception thrown when attempting to downcast a parent reference to a child subclass that the heap object does not actually implement. Prevent it using pattern matching <code>instanceof</code> checks before casting.
+  </div>
+
+  <h2>Retrieval Practice — Java Casting Rules</h2>
+  <p>Test your understanding of type casting mechanics in JVM heap memory:</p>
+
+  <div class="quiz" id="quiz-casting-heap">
+    <p class="quiz-question">Which of the following describes java type casting accurately?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">Casting changes reference types without altering heap objects.</button></li>
+      <li><button data-answer="wrong">Casting modifies actual objects located positioned inside heap memory.</button></li>
+      <li><button data-answer="wrong">Casting changes variable scope during the compilation process.</button></li>
+      <li><button data-answer="wrong">Casting triggers garbage collections of inactive heap objects.</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary Sources & Reading</h2>
+  <ul>
+    <li>Read <em>Effective Java (3rd Edition)</em> by Joshua Bloch: Item 64 ("Refer to objects by their interfaces").</li>
+    <li>Review Oracle Technical Documentation on <a href="https://docs.oracle.com/javase/specs/jls/se23/html/jls-15.html#jls-15.12.2">Compile-Time Step 2: Determine Method Signature</a>.</li>
+  </ul>
+
+  <p class="teacher-note">
+    <strong>Confused about compile-time vs runtime argument binding?</strong> Provide a snippet of overloaded and overridden methods and we will trace the JVM execution flow!
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-casting-heap', {
+      correct: 'Correct! Casting merely alters the compiler\'s type perspective of a reference pointer; it has absolutely no effect on the underlying object instance structure located on the heap.',
+      wrong: 'Incorrect. Casting does not mutate heap objects, modify variable scope rules, or trigger GC sweeps. Focus on the difference between heap objects and stack reference variables.'
+    });
+  </script>
+</body>
+</html>
