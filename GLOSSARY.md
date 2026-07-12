@@ -278,6 +278,29 @@ _Avoid_: getter queries
 The practice of creating duplicates of mutable input parameters or internal fields to prevent external clients from modifying private state.
 _Avoid_: instance cloning
 
+## Inheritance Terms
+
+**Inheritance**:
+A mechanism where a new class (subclass) is derived from an existing class (superclass), inheriting its fields and methods.
+_Avoid_: implementation cloning
+
+**Method Overriding**:
+Redefining a superclass method in a subclass with the exact same name, arguments, and return type.
+_Avoid_: method overloading, method hiding
+
+**Dynamic Method Dispatch**:
+A mechanism where a call to an overridden method is resolved at runtime based on the actual heap object type, enabling runtime polymorphism.
+_Avoid_: static dispatch
+
+**vtable (Virtual Method Table)**:
+An internal JVM table structures mapped to each class in Metaspace, storing pointers to virtual method addresses for O(1) resolution.
+_Avoid_: lookup hashmap
+
+**Diamond Problem**:
+The ambiguity conflict arising when a class inherits different implementations of the same method from multiple parents.
+_Avoid_: multiple definition error
+
+
 
 
 

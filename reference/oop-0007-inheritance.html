@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inheritance & Polymorphism — Reference</title>
+  <meta name="description" content="Quick reference guide for constructor chaining order, method overriding vs overloading, static hiding, and covariant return types.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0007-inheritance.html">&larr; Lesson 7</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Java Inheritance & Dynamic Dispatch Reference</h1>
+  <p class="meta">Study Reference for Initialization Order, Overriding Contracts, and Dispatch Mechanics</p>
+
+  <h2>1. Object Initialization Sequence</h2>
+  <p>When executing <code>new Child()</code>, the JVM processes class initialization in this exact order:</p>
+  <pre><code>
+   +---------------------------------------------+
+   |  1. Metaspace Check / Class Loading         | (Recursively loads parent and child classes)
+   +----------------------+----------------------+
+                          |
+                          v
+   +----------------------+----------------------+
+   |  2. Heap Memory Allocation & Zeroing        | (Allocates combined memory; zeros all fields)
+   +----------------------+----------------------+
+                          |
+                          v
+   +----------------------+----------------------+
+   |  3. Parent Instance Variables & Init Blocks | (Initializes parent-specific instance fields)
+   +----------------------+----------------------+
+                          |
+                          v
+   +----------------------+----------------------+
+   |  4. Parent Constructor Execution            | (Parent constructor body executes)
+   +----------------------+----------------------+
+                          |
+                          v
+   +----------------------+----------------------+
+   |  5. Child Instance Variables & Init Blocks  | (Initializes child-specific instance fields)
+   +----------------------+----------------------+
+                          |
+                          v
+   +----------------------+----------------------+
+   |  6. Child Constructor Execution             | (Child constructor body executes)
+   +----------------------+----------------------+
+  </code></pre>
+
+  <h2>2. Overriding vs. Overloading vs. Hiding</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 20%;">Property</th>
+      <th align="left" style="padding: 0.5rem; width: 27%;">Method Overriding</th>
+      <th align="left" style="padding: 0.5rem; width: 27%;">Method Overloading</th>
+      <th align="left" style="padding: 0.5rem; width: 26%;">Method Hiding (Static)</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Scope</strong></td>
+      <td style="padding: 0.5rem;">Parent and Child classes.</td>
+      <td style="padding: 0.5rem;">Same class (or subclasses).</td>
+      <td style="padding: 0.5rem;">Parent and Child classes.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Signature</strong></td>
+      <td style="padding: 0.5rem;">Must be identical.</td>
+      <td style="padding: 0.5rem;">Name matches, arguments differ.</td>
+      <td style="padding: 0.5rem;">Must be identical.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Resolution</strong></td>
+      <td style="padding: 0.5rem;">Runtime (dynamic dispatch).</td>
+      <td style="padding: 0.5rem;">Compile time (static typing).</td>
+      <td style="padding: 0.5rem;">Compile time (reference type).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Access modifier</strong></td>
+      <td style="padding: 0.5rem;">Cannot be more restrictive.</td>
+      <td style="padding: 0.5rem;">Can be anything.</td>
+      <td style="padding: 0.5rem;">Cannot be more restrictive.</td>
+    </tr>
+  </table>
+
+  <h2>3. Overriding Verification Cheat Sheet</h2>
+  <p>Before overriding a method, verify that the subclass signature compiles against these rules:</p>
+  <ul>
+    <li><strong>Return Type:</strong> Must be identical, or covariant (e.g. parent returns <code>Number</code>; child returns <code>Integer</code>).</li>
+    <li><strong>Exception throws list:</strong> Overridden method throws cannot expand parent throws.
+      <pre><code>// Parent Method declaration
+protected void writeData() throws IOException;
+
+// VALID CHILD OVERRIDES
+public void writeData(); // Throws nothing
+public void writeData() throws FileNotFoundException; // Narrower exception
+
+// INVALID CHILD OVERRIDES
+public void writeData() throws Exception; // Broader checked exception
+public void writeData() throws SQLException; // New unrelated checked exception</code></pre>
+    </li>
+    <li><strong>Visibility:</strong> Subclass method access modifiers must be equal to or broader than parent (e.g., if parent is <code>protected</code>, child must be <code>protected</code> or <code>public</code>).</li>
+  </ul>
+
+  <h2>4. Constructor Chaining Code Template</h2>
+  <pre><code>public class Parent {
+    private final String type;
+
+    // Parameterized constructor (No default constructor exists)
+    public Parent(String type) {
+        this.type = type;
+    }
+}
+
+public class Child extends Parent {
+    private final int value;
+
+    // Subclass constructor must chain explicitly
+    public Child(String type, int value) {
+        super(type); // Must be the FIRST statement
+        this.value = value;
+    }
+}</code></pre>
+
+  <h2>5. Design Guidelines</h2>
+  <ul>
+    <li><strong>Liskov Substitution Principle:</strong> Subclasses must compile and behave exactly like their parent type. If client code needs to write <code>instanceof Child</code> checks, your hierarchy violates LSP.</li>
+    <li><strong>Favor Composition over Inheritance:</strong> Inherited structures are fragile because changes to a parent class can break subclass internal invariants. Use inheritance only when a true IS-A relationship exists.</li>
+    <li><strong>Design for Extension or Prohibit It:</strong> Declare classes <code>final</code> to prevent extensions unless you specifically outline extension boundaries. Keep overridable methods minimum.</li>
+    <li><strong>Avoid calling overridable methods in constructors:</strong> Doing so exposes uninitialized child subclass state during initialization, causing NullPointerExceptions.</li>
+  </ul>
+</body>
+</html>

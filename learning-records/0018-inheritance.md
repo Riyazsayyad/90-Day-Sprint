@@ -1,0 +1,7 @@
+# Inheritance & Dynamic Dispatch instruction track
+
+The user requested a lesson on "Inheritance in Java" from an interview and software engineering perspective (via `/teach Teach me "Inheritance in Java" from an interview and software engineering perspective.`). This covers why inheritance exists (code reuse, polymorphism), the IS-A contract (LSP), constructor chaining sequences and compiler default insertions, method overriding rules (signature, covariant returns, access modifiers, exceptions throws limitations), Dynamic Method Dispatch (runtime polymorphism, compile-time reference limits vs heap execution, JVM vtable mechanics), single inheritance boundaries, the Diamond Problem class-level and interface-level default method conflicts, why constructors cannot be inherited or overridden, interview questions (static hiding, overridden calls in constructors), best practices (composition vs inheritance, final by default), and real-world UIComponent rendering hierarchies.
+
+**Evidence:** Explicit user request: `/teach Teach me "Inheritance in Java" from an interview and software engineering perspective.`
+
+**Implications:** Ground the student in correctly building class hierarchies that respect Liskov Substitution Principle and avoid fragile base class issues. Explain internal initialization orders (superclass constructor executing before subclass fields populate) to prevent bugs from calling overridable methods in constructors. Lay foundations for runtime execution mechanics (virtual table lookups in the JVM).

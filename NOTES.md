@@ -96,3 +96,7 @@
 ## Session 22 (2026-07-12)
 - User invoked `/teach Teach me "Encapsulation in Java" from an interview and software engineering perspective.`
 - Lesson 6 (Encapsulation) created (as oop-0006-encapsulation.html): Bundling vs. information hiding, access modifiers, mutable state leaks and defensive copying, immutability requirements, Tell Don't Ask principle, DDD Aggregates vs. DTOs, and interview questions.
+
+## Session 23 (2026-07-12)
+- User invoked `/teach Teach me "Inheritance in Java" from an interview and software engineering perspective.`
+- Lesson 7 (Inheritance) created (as oop-0007-inheritance.html): Code reuse, IS-A contract, constructor chaining and compiler super() rules, overriding contracts, dynamic method dispatch, single inheritance, the Diamond Problem, and vtable lookups.

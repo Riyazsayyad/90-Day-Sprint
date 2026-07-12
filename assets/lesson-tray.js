@@ -7,6 +7,7 @@
     { num: '04', file: 'oop-0004-constructors.html', title: 'Constructors in Java', meta: '10 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
     { num: '05', file: 'oop-0005-object-lifecycle.html', title: 'Object Lifecycle in Java', meta: '10 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
     { num: '06', file: 'oop-0006-encapsulation.html', title: 'Encapsulation in Java', meta: '12 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
+    { num: '07', file: 'oop-0007-inheritance.html', title: 'Inheritance in Java', meta: '12 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
     
     // Module 01: Collections Internals
     { num: '01', file: '0001-what-is-a-functional-interface.html', title: 'What Is a Functional Interface?', meta: '5 min read &bull; Core Java', module: 'Collections Internals', moduleNum: '01' },

@@ -8,6 +8,8 @@
   Official guide on access modifiers (private, default, protected, public) and package boundaries.
 - [Joshua Bloch: Effective Java](https://www.oreilly.com/library/view/effective-java/9780134686097/)
   Authoritative guidance on encapsulation and immutability. Focus on Item 15 (Minimize accessibility) and Item 50 (Defensive copying).
+- [Oracle: Inheritance and Subclasses](https://docs.oracle.com/javase/tutorial/java/IandI/subclasses.html)
+  Official guide covering class hierarchies, overriding, hiding, super keyword, and Object methods.
 - [Bjarne Stroustrup: What is Object-Oriented Programming?](https://www.stroustrup.com/whatis.pdf)
   Core theoretical foundations: defining classes, inheritance hierarchies, and dynamic binding from a system architecture perspective.
 

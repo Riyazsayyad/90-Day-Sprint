@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 7 — Inheritance in Java</title>
+  <meta name="description" content="Master Inheritance in Java from a software engineering and interview perspective: constructor chaining, method overriding, dynamic method dispatch, single inheritance limits, the diamond problem, and vtables.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="oop-0006-encapsulation.html">&larr; Lesson 6</a> &middot;
+    Lesson 7 of 7 &middot;
+    <a href="../reference/oop-0007-inheritance.html">Inheritance Reference</a>
+  </nav>
+
+  <h1>Inheritance: Hierarchy, Chaining, & Method Dispatch</h1>
+  <p class="meta">~12 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. Why Inheritance Exists & The IS-A Relationship</h2>
+  <p>In object-oriented system design, **Inheritance** is the mechanism by which one class acquires the state (fields) and behavior (methods) of another class. It serves two primary architectural goals:</p>
+  <ul>
+    <li><strong>Code Reuse:</strong> Subclasses inherit verified, tested code from parent classes, eliminating duplicate logic.</li>
+    <li><strong>Polymorphic Typing (The IS-A Contract):</strong> By extending a class, you establish a semantic contract: a subclass instance *is-a* type of the superclass. A <code>StripeGateway</code> *is-a* <code>PaymentGateway</code>.</li>
+  </ul>
+  <p>According to the <strong>Liskov Substitution Principle (LSP)</strong>, a subclass must be completely substitutable for its superclass without breaking client expectations. If extending a class violates the IS-A contract, prefer **Composition** (wrapping a reference to another class) instead.</p>
+
+  <h2>2. Constructor Chaining under the Hood</h2>
+  <p>Subclasses do not inherit constructors (which are specific to initializing their own declaring class). However, subclass constructors must chain to a parent constructor to guarantee that the inherited parent state is fully initialized first. Java enforces these rules:</p>
+  <ul>
+    <li><strong>First Line Restriction:</strong> The first statement of a subclass constructor must be an explicit call to another constructor in the same class (using <code>this()</code>) or to the superclass constructor (using <code>super()</code>).</li>
+    <li><strong>Compiler Default insertion:</strong> If you do not write an explicit call, the compiler automatically inserts a no-argument <code>super()</code> call as the first line. If the parent class defines a parameterized constructor and lacks a default no-argument constructor, a compilation error occurs unless you write <code>super(...)</code> explicitly.</li>
+  </ul>
+
+  <h2>3. Method Overriding Rules</h2>
+  <p><strong>Method Overriding</strong> allows a subclass to provide a specific implementation for a method already defined in its superclass. To override a method, the subclass version must adhere to these strict contracts:</p>
+  <ol>
+    <li><strong>Same Signature:</strong> Must have the exact same name and parameter list. Use the <code>@Override</code> annotation to force the compiler to validate this.</li>
+    <li><strong>Covariant Return Type:</strong> The return type can be a subclass (subtype) of the type declared in the parent method.</li>
+    <li><strong>Access Modifiers:</strong> Access cannot be more restrictive (e.g. you cannot override a <code>protected</code> method and make it <code>private</code>).</li>
+    <li><strong>Exception List:</strong> The overridden method cannot throw new or broader checked exceptions, though it can throw fewer, narrower, or unchecked exceptions.</li>
+  </ol>
+  <p><em>Note:</em> Methods declared as <code>private</code>, <code>final</code>, or <code>static</code> cannot be overridden.</p>
+
+  <h2>4. Dynamic Method Dispatch & The vtable</h2>
+  <p>Also known as Runtime Polymorphism, **Dynamic Method Dispatch** is the mechanism by which a call to an overridden method is resolved at runtime rather than compile time.
+  <br>The reference variable type determines which methods are accessible at compile time, but the actual object type on the heap determines which overridden implementation executes at runtime:</p>
+  <pre><code>PaymentGateway gateway = new StripeGateway(); // Reference = Parent; Heap = Child
+gateway.processPayment(100.0); // Executes StripeGateway's overridden method</code></pre>
+  <p>Under the hood, the JVM executes this lookup using a <strong>vtable (Virtual Method Table)</strong>. Every class loaded into Metaspace has a vtable listing pointers to its virtual methods. If a subclass overrides a parent method, the JVM replaces the parent's method pointer with the subclass method pointer in the subclass vtable, enabling O(1) runtime method lookup.</p>
+
+  <h2>5. Single Inheritance & The Diamond Problem</h2>
+  <p>Java classes support **Single Inheritance** (a class can extend at most one class) to prevent ambiguity. In languages with multiple inheritance, the **Diamond Problem** occurs when class <code>A</code> defines a method, classes <code>B</code> and <code>C</code> override it, and class <code>D</code> extends both <code>B</code> and <code>C</code>. If <code>D</code> calls the method, which parent implementation should it run?</p>
+  <p>To avoid this conflict, Java forbids class-level multiple inheritance. However, Java allows multiple inheritance of interfaces. If default method implementations conflict across interfaces, the compiler forces the subclass to override the conflicting method and resolve it explicitly:</p>
+  <pre><code>public class Device implements Camera, Scanner {
+    @Override
+    public void start() {
+        Camera.super.start(); // Explicit resolution of default method conflict
+    }
+}</code></pre>
+
+  <h2>6. Why Constructors Cannot Be Inherited or Overridden</h2>
+  <ul>
+    <li><strong>No Inheritance:</strong> Constructors initialize the specific fields of the class they are declared in. If constructors were inherited, a subclass could run a parent constructor that knows nothing about the subclass's new fields, leaving them half-initialized.</li>
+    <li><strong>No Overriding:</strong> Overriding requires matching method signatures (which includes matching the name). A constructor must be named exactly after its declaring class. Because a subclass and superclass have different names, a subclass constructor can never have the same name as a superclass constructor, making overriding syntactically impossible.</li>
+  </ul>
+
+  <h2>7. Real-World Example: UI Component Rendering</h2>
+  <p>Here is an enterprise class hierarchy demonstrating method overriding, constructor chaining, and dynamic dispatch:</p>
+  <pre><code>public abstract class UIComponent {
+    private final String id;
+    private boolean visible = true;
+
+    protected UIComponent(String id) {
+        this.id = id; // Parent state initialized
+    }
+
+    public void render() {
+        if (visible) {
+            drawBorder();
+            drawContent();
+        }
+    }
+
+    protected void drawBorder() {
+        System.out.println("Drawing generic component border");
+    }
+
+    protected abstract void drawContent(); // Child must implement
+}
+
+public class UIButton extends UIComponent {
+    private final String label;
+
+    public UIButton(String id, String label) {
+        super(id); // Explicit constructor chaining
+        this.label = label; // Child state initialized
+    }
+
+    @Override
+    protected void drawContent() {
+        System.out.println("Rendering Button Label: " + label);
+    }
+
+    @Override
+    protected void drawBorder() {
+        System.out.println("Drawing custom rounded button border"); // Override
+    }
+}</code></pre>
+
+  <h2>8. Key Interview Questions</h2>
+  <div class="callout">
+    <strong>Q: Can you override static methods in Java?</strong>
+    No. If a subclass defines a static method with the same signature as a superclass static method, it is called <strong>Method Hiding</strong>, not overriding. The method called is determined statically at compile time based on the reference type, not the heap object type.
+  </div>
+  <div class="callout">
+    <strong>Q: What happens if a superclass constructor calls an overridable method?</strong>
+    If a parent constructor calls an overridden method, the subclass overridden implementation runs *before* the subclass constructor has initialized its own fields. If the overridden method accesses subclass fields, they will return default null/zero values, leading to severe bugs or <code>NullPointerException</code>.
+  </div>
+
+  <h2>Retrieval Practice — Constructor Calls</h2>
+  <p>Test your understanding of method execution during object initialization:</p>
+
+  <div class="quiz" id="quiz-constructor-override">
+    <p class="quiz-question">What occurs if a superclass constructor calls an overridden method?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">The subclass override runs before subclass fields populate.</button></li>
+      <li><button data-answer="wrong">The parent method executes instead of subclass overrides.</button></li>
+      <li><button data-answer="wrong">The compiler throws an error during compilation processing.</button></li>
+      <li><button data-answer="wrong">The program execution fails during memory allocation loops.</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary Sources & Reading</h2>
+  <ul>
+    <li>Read <em>Effective Java (3rd Edition)</em> by Joshua Bloch: Item 18 ("Favor composition over inheritance") and Item 19 ("Design and document for inheritance or else prohibit it").</li>
+    <li>Review the Oracle Java Tutorials on <a href="https://docs.oracle.com/javase/tutorial/java/IandI/subclasses.html">Inheritance and Subclassing</a>.</li>
+  </ul>
+
+  <p class="teacher-note">
+    <strong>Unsure if your domain model should use extension or composition?</strong> Share your inheritance hierarchy in the chat and we'll analyze the LSP tradeoffs!
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-constructor-override', {
+      correct: 'Correct! The subclass overridden method runs immediately during the parent constructor initialization, which executes before the child constructor has had a chance to initialize its own instance fields.',
+      wrong: 'Incorrect. The compiler does not prevent this call, nor does it crash the JVM allocation loop directly. The parent method does not run; the child override runs, but on uninitialized subclass fields.'
+    });
+  </script>
+</body>
+</html>
