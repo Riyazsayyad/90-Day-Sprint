@@ -1,21 +1,29 @@
 (function() {
   const lessons = [
-    { num: '01', file: '0001-what-is-a-functional-interface.html', title: 'What Is a Functional Interface?', meta: '5 min read &bull; Core Java' },
-    { num: '02', file: '0002-lambda-expressions.html', title: 'Lambda Expressions', meta: '6 min read &bull; Functional Java' },
-    { num: '03', file: '0003-predicate-function-consumer-supplier.html', title: 'Predicate, Function, Consumer, & Supplier', meta: '8 min read &bull; Utility interfaces' },
-    { num: '04', file: '0004-hashmap-buckets-and-put.html', title: 'HashMap Internals: Buckets & put()', meta: '10 min read &bull; Map Structures' },
-    { num: '05', file: '0005-resize-and-load-factor.html', title: 'HashMap Internals: Resize & Load Factor', meta: '7 min read &bull; Scaling Maps' },
-    { num: '06', file: '0006-hashmap-treeify.html', title: 'HashMap Internals: Treeify Threshold', meta: '8 min read &bull; Red-Black Trees' },
-    { num: '07', file: '0007-arraylist-internals.html', title: 'ArrayList Internals & Resizing', meta: '12 min read &bull; Lists' },
-    { num: '08', file: '0008-linkedlist-internals.html', title: 'LinkedList Internals & Deque', meta: '10 min read &bull; Lists & Queues' },
-    { num: '09', file: '0009-hashset-internals.html', title: 'HashSet Internals & HashMap Backing', meta: '6 min read &bull; Sets' },
-    { num: '10', file: '0010-treeset-internals.html', title: 'TreeSet Internals & Red-Black Tree', meta: '11 min read &bull; Sorted Sets' },
-    { num: '11', file: '0011-priorityqueue-internals.html', title: 'PriorityQueue Internals & Binary Heap', meta: '14 min read &bull; Heaps' },
-    { num: '12', file: '0012-comparable-vs-comparator.html', title: 'Comparable vs. Comparator', meta: '6 min read &bull; Sorting Contracts' },
-    { num: '13', file: '0013-collections-utility.html', title: 'The Collections Utility Class', meta: '6 min read &bull; Static Utilities' },
-    { num: '14', file: '0014-java-iterator.html', title: 'Java Iterator Internals', meta: '8 min read &bull; Traversals' },
-    { num: '15', file: '0015-java-listiterator.html', title: 'Java ListIterator Internals', meta: '8 min read &bull; Traversals' },
-    { num: '16', file: '0016-failfast-failsafe.html', title: 'Fail-Fast vs. Fail-Safe Iteration', meta: '8 min read &bull; Traversals' }
+    // Module 00: Core Java & OOP
+    { num: '01', file: 'oop-0001-why-object-oriented-programming.html', title: 'Why Object-Oriented Programming?', meta: '10 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
+    { num: '02', file: 'oop-0002-class-vs-object.html', title: 'Class vs. Object', meta: '10 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
+    { num: '03', file: 'oop-0003-stack-vs-heap.html', title: 'Stack vs. Heap Memory Layout', meta: '10 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
+    { num: '04', file: 'oop-0004-constructors.html', title: 'Constructors in Java', meta: '10 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
+    { num: '05', file: 'oop-0005-object-lifecycle.html', title: 'Object Lifecycle in Java', meta: '10 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
+    
+    // Module 01: Collections Internals
+    { num: '01', file: '0001-what-is-a-functional-interface.html', title: 'What Is a Functional Interface?', meta: '5 min read &bull; Core Java', module: 'Collections Internals', moduleNum: '01' },
+    { num: '02', file: '0002-lambda-expressions.html', title: 'Lambda Expressions', meta: '6 min read &bull; Functional Java', module: 'Collections Internals', moduleNum: '01' },
+    { num: '03', file: '0003-predicate-function-consumer-supplier.html', title: 'Predicate, Function, Consumer, & Supplier', meta: '8 min read &bull; Utility interfaces', module: 'Collections Internals', moduleNum: '01' },
+    { num: '04', file: '0004-hashmap-buckets-and-put.html', title: 'HashMap Internals: Buckets & put()', meta: '10 min read &bull; Map Structures', module: 'Collections Internals', moduleNum: '01' },
+    { num: '05', file: '0005-resize-and-load-factor.html', title: 'HashMap Internals: Resize & Load Factor', meta: '7 min read &bull; Scaling Maps', module: 'Collections Internals', moduleNum: '01' },
+    { num: '06', file: '0006-hashmap-treeify.html', title: 'HashMap Internals: Treeify Threshold', meta: '8 min read &bull; Red-Black Trees', module: 'Collections Internals', moduleNum: '01' },
+    { num: '07', file: '0007-arraylist-internals.html', title: 'ArrayList Internals & Resizing', meta: '12 min read &bull; Lists', module: 'Collections Internals', moduleNum: '01' },
+    { num: '08', file: '0008-linkedlist-internals.html', title: 'LinkedList Internals & Deque', meta: '10 min read &bull; Lists & Queues', module: 'Collections Internals', moduleNum: '01' },
+    { num: '09', file: '0009-hashset-internals.html', title: 'HashSet Internals & HashMap Backing', meta: '6 min read &bull; Sets', module: 'Collections Internals', moduleNum: '01' },
+    { num: '10', file: '0010-treeset-internals.html', title: 'TreeSet Internals & Red-Black Tree', meta: '11 min read &bull; Sorted Sets', module: 'Collections Internals', moduleNum: '01' },
+    { num: '11', file: '0011-priorityqueue-internals.html', title: 'PriorityQueue Internals & Binary Heap', meta: '14 min read &bull; Heaps', module: 'Collections Internals', moduleNum: '01' },
+    { num: '12', file: '0012-comparable-vs-comparator.html', title: 'Comparable vs. Comparator', meta: '6 min read &bull; Sorting Contracts', module: 'Collections Internals', moduleNum: '01' },
+    { num: '13', file: '0013-collections-utility.html', title: 'The Collections Utility Class', meta: '6 min read &bull; Static Utilities', module: 'Collections Internals', moduleNum: '01' },
+    { num: '14', file: '0014-java-iterator.html', title: 'Java Iterator Internals', meta: '8 min read &bull; Traversals', module: 'Collections Internals', moduleNum: '01' },
+    { num: '15', file: '0015-java-listiterator.html', title: 'Java ListIterator Internals', meta: '8 min read &bull; Traversals', module: 'Collections Internals', moduleNum: '01' },
+    { num: '16', file: '0016-failfast-failsafe.html', title: 'Fail-Fast vs. Fail-Safe Iteration', meta: '8 min read &bull; Traversals', module: 'Collections Internals', moduleNum: '01' }
   ];
 
   function init() {
@@ -24,7 +32,15 @@
 
     // Detect current file from URL
     const pathParts = window.location.pathname.split('/');
-    let currentFile = pathParts[pathParts.length - 1] || '0001-what-is-a-functional-interface.html';
+    let currentFile = pathParts[pathParts.length - 1] || 'oop-0001-why-object-oriented-programming.html';
+
+    // Find the active lesson object to identify its module
+    const activeLesson = lessons.find(l => l.file === currentFile) || lessons[0];
+    const currentModule = activeLesson.module;
+    const currentModuleNum = activeLesson.moduleNum;
+
+    // Filter lessons belonging to the active module
+    const moduleLessons = lessons.filter(l => l.module === currentModule);
 
     // 1. Create and inject backdrop
     const backdrop = document.createElement('div');
@@ -57,8 +73,8 @@
     header.className = 'lesson-tray-header';
     header.innerHTML = `
       <div class="lesson-tray-title-group">
-        <h2>Collections Internals</h2>
-        <p>Module 1 &bull; 16 Lessons</p>
+        <h2>${currentModule}</h2>
+        <p>Module ${currentModuleNum} &bull; ${moduleLessons.length} ${moduleLessons.length === 1 ? 'Lesson' : 'Lessons'}</p>
       </div>
       <button class="lesson-tray-close" id="lessonTrayClose" aria-label="Close tray">
         <svg viewBox="0 0 24 24">
@@ -77,7 +93,7 @@
 
     // Build the list items
     let activeItem = null;
-    lessons.forEach(lesson => {
+    moduleLessons.forEach(lesson => {
       const li = document.createElement('li');
       const isActive = currentFile === lesson.file;
       

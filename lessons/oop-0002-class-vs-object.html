@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 2 — Class vs. Object</title>
+  <meta name="description" content="Master the difference between Class and Object in Java: memory layout, new keyword internals, class loading vs instantiation, and interview questions.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="oop-0001-why-object-oriented-programming.html">&larr; Lesson 1</a> &middot;
+    Lesson 2 of 4 &middot;
+    <a href="../reference/oop-0002-class-vs-object.html">Class/Object Reference</a>
+  </nav>
+
+  <h1>Class vs. Object: Runtime and Memory Mechanics</h1>
+  <p class="meta">~10 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. Why Java Needs Classes</h2>
+  <p>Java is a statically-typed language. The compiler must verify type safety, calculate memory offsets, and check method signatures before your code runs. A <strong>Class</strong> serves as the compile-time schema that guarantees this structure:</p>
+  <ul>
+    <li><strong>Structural Contract:</strong> It defines what variables (state) and methods (behavior) will exist in any future instance.</li>
+    <li><strong>Type Verification:</strong> It allows the compiler to enforce rules, preventing errors such as calling a method that does not exist.</li>
+    <li><strong>Metadata Generation:</strong> It compiles into a <code>.class</code> file, providing bytecode instructions and class structural metadata that the JVM reads at runtime.</li>
+  </ul>
+
+  <h2>2. What a Class Really Represents</h2>
+  <p>At compile time, a class is a source-code template.
+  <br>At runtime, a class is represented as a metadata structure stored in the JVM's <strong>Metaspace</strong>. The JVM instantiates a single instance of <code>java.lang.Class</code> for each loaded class. This class object holds:
+  <ul>
+    <li>The blueprint layout (offsets of instance fields, types of variables).</li>
+    <li>The **vtable (virtual method table)**, which lists addresses of executable method bytecodes.</li>
+    <li>Static variables (class-level state shared by all instances).</li>
+  </ul>
+
+  <h2>3. What an Object Really Is in Memory</h2>
+  <p>An <strong>Object</strong> is a concrete entity that resides on the <strong>Heap</strong>. Physically, it is a contiguous chunk of memory structured as follows:</p>
+  <ul>
+    <li><strong>Object Header:</strong> Consists of:
+      <ul>
+        <li><em>Mark Word:</em> Holds identity hashcode, GC age metadata, and thread synchronization lock information.</li>
+        <li><em>Klass Word:</em> A pointer to the class metadata stored in the Metaspace, allowing the JVM to identify the object's type at runtime.</li>
+      </ul>
+    </li>
+    <li><strong>Instance Data:</strong> The actual values of the instance fields defined by the class.</li>
+    <li><strong>Padding:</strong> Extra empty bytes added to ensure the object's size is a multiple of 8 bytes, aligning with CPU cache lines.</li>
+  </ul>
+
+  <h2>4. Why Objects Are Created Using <code>new</code></h2>
+  <p>The <code>new</code> keyword is a dynamic heap-allocation command. When executed, the JVM performs these steps:</p>
+  <ol>
+    <li>Calculates the memory size required for the object based on class metadata.</li>
+    <li>Allocates a contiguous block of memory on the Heap.</li>
+    <li>Fills the Object Header (linking the Klass Word to the Metaspace class metadata).</li>
+    <li>Initializes instance variables to their default values (e.g., <code>0</code>, <code>false</code>, <code>null</code>).</li>
+    <li>Invokes the constructor to populate custom fields and returns the memory address (reference pointer).</li>
+  </ol>
+
+  <h2>5. Class Loading vs. Object Instantiation</h2>
+  <p>It is vital to distinguish between loading class schemas and instantiating row objects:</p>
+  <ul>
+    <li><strong>Class Loading (Once):</strong> The JVM loads class bytecode into Metaspace via class loaders, executing <code>static</code> initialization blocks. This happens the first time a class is referenced.</li>
+    <li><strong>Object Instantiation (Many):</strong> Every invocation of <code>new</code> allocates fresh heap space, sets default instance values, runs instance initializers, and runs the constructor.</li>
+  </ul>
+
+  <h2>6. Reference Variables vs. Actual Objects</h2>
+  <p>In Java, variables never hold objects directly. They hold **references** (pointers to memory addresses):</p>
+  <pre><code>Car myCar = new Car();</code></pre>
+  <ul>
+    <li><strong><code>myCar</code>:</strong> The reference variable, usually allocated on the Stack. It stores only a 32-bit or 64-bit address.</li>
+    <li><strong><code>new Car()</code>:</strong> The actual object, allocated on the Heap, housing the car's state data.</li>
+  </ul>
+  <p>Multiple reference variables can point to the exact same object on the heap, similar to how two remote controls can operate a single television. Changes made via one reference variable are visible through the other.</p>
+
+  <h2>7. How Multiple Objects Share the Same Class</h2>
+  <p>If you instantiate 1,000 objects of the class <code>User</code>, the JVM does not replicate the bytecode of the methods 1,000 times.
+  <br>Instead, all 1,000 objects have a header pointing to the <strong>single `User` class definition</strong> in Metaspace. When a method is called:
+  <pre><code>userObj.login();</code></pre>
+  <p>The JVM uses the object's header to locate the class vtable in Metaspace, resolves the method address, and executes the bytecode, passing the address of <code>userObj</code> as an implicit first parameter (representing <code>this</code>).</p>
+
+  <h2>8. High-Level Analogies</h2>
+  <p>Instead of just using the generic "blueprint" analogy, consider these models:</p>
+  <ul>
+    <li><strong>Database Schema vs. Database Row:</strong> The class is the table schema (defining columns, constraints, data types), which occupies no table space. The object is a row of data inserted into that table.</li>
+    <li><strong>Recipe vs. Baked Cake:</strong> The class is a recipe (instructions, list of inputs). You cannot eat the recipe. The object is the cake baked on the counter. Multiple cakes share the same recipe but exist as distinct physical objects.</li>
+  </ul>
+
+  <h2>9. Key Interview Questions</h2>
+  <div class="callout">
+    <strong>Q: Does a Java class occupy memory at runtime?</strong>
+    Yes. While it does not consume heap space for instance variables, the JVM loads class metadata (bytecode, static fields, and vtable structures) into the <strong>Metaspace</strong>, and instantiates a <code>java.lang.Class</code> metadata object.
+  </div>
+  <div class="callout">
+    <strong>Q: What is the size of an empty object on the Heap?</strong>
+    In a standard 64-bit JVM, an empty object occupies <strong>16 bytes</strong>: 8 bytes for the Mark Word (locking/GC), 4 or 8 bytes for the Klass Word (class pointer), and padding to align to the nearest 8-byte boundary.
+  </div>
+
+  <h2>Retrieval Practice — Memory Reference</h2>
+  <p>Test your understanding of Java reference variable contents:</p>
+
+  <div class="quiz" id="quiz-ref-var">
+    <p class="quiz-question">What does a reference variable hold in Java?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">It stores the object heap reference value</button></li>
+      <li><button data-answer="wrong">It holds class schema metadata structures</button></li>
+      <li><button data-answer="wrong">It keeps stack execution active variables</button></li>
+      <li><button data-answer="wrong">It houses raw primitive stack type value!</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary Sources & Reading</h2>
+  <ul>
+    <li>Read the JVM Specification on <a href="https://docs.oracle.com/javase/specs/jvms/se23/html/jvms-2.html#jvms-2.7">Representation of Objects</a>.</li>
+    <li>Explore Baeldung's guide on <a href="https://www.baeldung.com/java-class-loading">Class Loading in Java</a>.</li>
+  </ul>
+
+  <p class="teacher-note">
+    <strong>Confused about the Klass pointer or vtable resolution?</strong> Ask your AI coach! Provide a short code sample and ask where each part lives in the JVM memory.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-ref-var', {
+      correct: 'Correct! A reference variable stores only the memory address pointing to the object\'s location on the Heap, not the actual object data itself.',
+      wrong: 'Incorrect. The reference variable does not hold schema layouts, execution frames, or primitive data values. Recall how references locate objects on the Heap.'
+    });
+  </script>
+</body>
+</html>

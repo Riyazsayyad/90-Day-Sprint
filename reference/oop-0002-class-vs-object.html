@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Class vs Object — Reference</title>
+  <meta name="description" content="Quick reference guide for Classes and Objects in Java, detailing memory layout structures, JVM Metaspace loading, heap allocation, and pointers.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0002-class-vs-object.html">&larr; Lesson 2</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Class vs. Object Reference Guide</h1>
+  <p class="meta">Study Reference for Runtime Structure & Class Loader Stages</p>
+
+  <h2>1. Memory Allocation Zones (High-Level)</h2>
+  <p>The JVM manages three main spaces for executing program code and storing variables/objects:</p>
+  <ul>
+    <li><strong>Stack (Per Thread):</strong> Stores execution frames containing primitive local variables and object reference pointers. Quick, structured allocation/deallocation.</li>
+    <li><strong>Heap (Shared):</strong> Stores all actual objects, including arrays and instance variables. Governed by the Garbage Collector.</li>
+    <li><strong>Metaspace (Shared):</strong> Stores class schema information, static members, method bytecodes, constants pool, and the virtual method tables (vtables).</li>
+  </ul>
+
+  <h2>2. Object Header Structure</h2>
+  <p>Every object allocated on the heap is prefixed with an 8-to-16-byte metadata header:</p>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Component</th>
+      <th align="left" style="padding: 0.5rem; width: 25%;">Size (64-bit JVM)</th>
+      <th align="left" style="padding: 0.5rem; width: 50%;">Description</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Mark Word</strong></td>
+      <td style="padding: 0.5rem;">8 bytes (64 bits)</td>
+      <td style="padding: 0.5rem;">Holds synchronization lock flags, identity hashcode, thread bias pointers, and GC generational age bits.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Klass Word</strong></td>
+      <td style="padding: 0.5rem;">4 or 8 bytes</td>
+      <td style="padding: 0.5rem;">Pointer referencing the shared class schema metadata in the Metaspace (can be compressed to 4 bytes using Compressed OOPs).</td>
+    </tr>
+  </table>
+
+  <h2>3. Reference Variables vs. Heap Objects</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 30%;">Aspect</th>
+      <th align="left" style="padding: 0.5rem; width: 35%;">Reference Variable (Stack)</th>
+      <th align="left" style="padding: 0.5rem; width: 35%;">Actual Object (Heap)</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Stored Value</strong></td>
+      <td style="padding: 0.5rem;">Memory address (pointer) or <code>null</code>.</td>
+      <td style="padding: 0.5rem;">Object header metadata + instance data payload.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Allocation Target</strong></td>
+      <td style="padding: 0.5rem;">Method local stack frame.</td>
+      <td style="padding: 0.5rem;">Shared heap region.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Lifetime</strong></td>
+      <td style="padding: 0.5rem;">Bound to method execution scope.</td>
+      <td style="padding: 0.5rem;">Reclaimed by Garbage Collector when unreachable.</td>
+    </tr>
+  </table>
+
+  <h2>4. Structural Sequences</h2>
+  <h3>Class Loading Phase (Once)</h3>
+  <ol>
+    <li><strong>Loading:</strong> Locates and reads the binary <code>.class</code> file into memory.</li>
+    <li><strong>Linking:</strong>
+      <ul>
+        <li><em>Verification:</em> Ensures bytecode complies with JVM safety and security rules.</li>
+        <li><em>Preparation:</em> Allocates default memory values for static fields.</li>
+        <li><em>Resolution:</em> Resolves symbolic references to direct memory addresses.</li>
+      </ul>
+    </li>
+    <li><strong>Initialization:</strong> Executes static blocks (e.g. <code>static { ... }</code>) and assigns actual values to static fields.</li>
+  </ol>
+
+  <h3>Instantiation Phase (On <code>new</code>)</h3>
+  <ol>
+    <li>JVM allocates required object byte size in heap.</li>
+    <li>Sets Mark Word and references Klass Word in object header.</li>
+    <li>Fills all instance fields with primitive default values.</li>
+    <li>Executes parent and child initialization routines (fields assign, instance blocks).</li>
+    <li>Executes the constructor body and returns the pointer address to the caller variable.</li>
+  </ol>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 1 — Why Object-Oriented Programming?</title>
+  <meta name="description" content="Learn why Object-Oriented Programming is used: procedural limits, OOP pillars, Java design choices, real-world maintenance, and interview prep.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    Lesson 1 of 4 &middot;
+    <a href="oop-0002-class-vs-object.html">Lesson 2 &rarr;</a> &middot;
+    <a href="../reference/oop-0001-why-object-oriented-programming.html">OOP Reference</a>
+  </nav>
+
+  <h1>Why Object-Oriented Programming? An Engineering Perspective</h1>
+  <p class="meta">~10 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. The Procedural Paradigm & Its Maintenance Pitfalls</h2>
+  <p>In procedural programming (e.g., C, Pascal), code is structured around functions that execute sequences of actions. Data is separated from behavior, stored in structures (like <code>struct</code>) and passed around. While this works for smaller programs, it fails to scale due to several core problems:</p>
+  <ul>
+    <li><strong>Global State Vulnerabilities:</strong> Data is often exposed globally so multiple functions can access it. Any function can inadvertently mutate shared state, creating side-effects that are extremely difficult to trace and debug.</li>
+    <li><strong>High Coupling / Rigid Data Structures:</strong> Functions are tightly coupled to the layout of the data they process. If a data structure changes (e.g., a field is added, removed, or changed from an <code>int</code> to a <code>double</code>), every function interacting with that structure must be refactored.</li>
+    <li><strong>Copy-Paste Reuse:</strong> Code reuse is achieved by duplicating logic or writing monolithic functions with complex conditional checks, leading to spaghetti code.</li>
+  </ul>
+
+  <h2>2. How OOP Solves These Problems</h2>
+  <p>Object-Oriented Programming (OOP) shifts the focus from actions to data. It binds data and the behaviors that act upon it into a single, cohesive unit: the <strong>Object</strong>. OOP relies on four core pillars to address procedural weaknesses:</p>
+  <ul>
+    <li><strong>Encapsulation:</strong> Bundles variables and methods together. By using access modifiers (like <code>private</code>), OOP hides internal representation details and restricts direct access, enforcing a strict boundary. This prevents arbitrary, external mutations and makes data structures safe to refactor.</li>
+    <li><strong>Abstraction:</strong> Hides underlying complexity and only exposes essential features via clean, simplified interfaces (like a steering wheel hiding the internal internal-combustion engine mechanics).</li>
+    <li><strong>Inheritance:</strong> Establishes a hierarchical relationship to reuse common code and model taxonomies. (Though modern software design emphasizes using <em>Composition over Inheritance</em> to avoid deep hierarchies).</li>
+    <li><strong>Polymorphism:</strong> Enables a single interface to represent different underlying forms. In Java, this is executed via <strong>Dynamic Dispatch</strong> (runtime method lookup), allowing systems to remain open for extension but closed for modification.</li>
+  </ul>
+
+  <h2>3. Why Java Chose OOP</h2>
+  <p>In the mid-1990s, James Gosling and the Green Team designed Java to tackle the challenges of consumer electronics and large enterprise networks. They chose OOP for several reasons:</p>
+  <ul>
+    <li><strong>Memory Safety & Security:</strong> Java removed explicit pointer manipulation (a major source of crashes and exploits in C/C++), replacing it with reference-managed objects and automated garbage collection.</li>
+    <li><strong>Manageable Complexity:</strong> For large systems involving hundreds of developers, OOP's structural boundaries (classes, packages, interfaces) allow teams to work on modular components independently without name conflicts or state corruption.</li>
+    <li><strong>Standardized Execution:</strong> By routing all code execution through class definitions, Java simplified compilation, loading, and runtime optimization via the JVM.</li>
+  </ul>
+
+  <h2>4. Real-World Maintenance Scenarios</h2>
+  <p>To understand the power of OOP, look at how it simplifies software updates in real-world systems:</p>
+
+  <h3>Scenario A: E-Commerce Payment Gateways</h3>
+  <p>Imagine you write an checkout module. In a procedural system, adding a new payment vendor requires editing the main payment function and inserting complex branch paths:</p>
+  <pre><code>// Procedural Approach (Rigid and fragile)
+void processPayment(Order order, String type) {
+    if (type.equals("stripe")) {
+        // Stripe integration code
+    } else if (type.equals("paypal")) {
+        // PayPal integration code
+    } else if (type.equals("applepay")) {
+        // Apple Pay integration code
+    }
+}</code></pre>
+  <p>In an OOP system, you define a polymorphic contract:</p>
+  <pre><code>public interface PaymentProcessor {
+    void process(Order order);
+}
+
+// Adding Apple Pay requires writing a new class, NOT modifying existing classes
+public class ApplePayProcessor implements PaymentProcessor {
+    @Override
+    public void process(Order order) {
+        // Apple Pay integration logic
+    }
+}</code></pre>
+  <p>By relying on <strong>Abstraction</strong> and <strong>Polymorphism</strong>, you satisfy the Open/Closed Principle: the core system is closed to changes but open to extensions.</p>
+
+  <h2>5. "Everything is an Object" (and Java's Pragmatic Compromise)</h2>
+  <p>Java models classes beneath a single root class: <code>java.lang.Object</code>. This provides a universal contract. Every object inherits methods such as <code>equals()</code>, <code>hashCode()</code>, and <code>toString()</code>, facilitating standard behavior in collections, logging, and reflection.</p>
+  <p>However, <strong>Java is not a pure object-oriented language</strong>. To maximize CPU execution speeds, Java retains <strong>primitive types</strong> (<code>int</code>, <code>char</code>, <code>boolean</code>, <code>double</code>, etc.) which are stored on the Stack and do not incur heap allocation overhead or pointer dereference costs. Java bridges this gap using <strong>wrapper classes</strong> (like <code>Integer</code>, <code>Character</code>) and <strong>autoboxing</strong>, allowing primitives to be treated as objects when necessary (such as in Collections).</p>
+
+  <h2>6. Key Interview Questions</h2>
+  <div class="callout">
+    <strong>Q: What is the difference between Encapsulation and Abstraction?</strong>
+    Encapsulation is about <em>information hiding</em> and safety: it bundles data and methods while restricting direct access to prevent corruption. Abstraction is about <em>complexity hiding</em>: it hides structural details behind a simple interface so clients do not have to worry about how it is built.
+  </div>
+  <div class="callout">
+    <strong>Q: Why is inheritance often criticized in modern software engineering?</strong>
+    Inheritance creates a tight coupling between the parent and child classes (a "white-box" relationship). If the parent class changes, it can silently break child classes (known as the Fragile Base Class problem). Modern design favors <strong>composition</strong> because it is dynamic, safer, and keeps classes decoupled.
+  </div>
+
+  <h2>Retrieval Practice — OOP Design</h2>
+  <p>Test your understanding of Java's OOP paradigm structure:</p>
+
+  <div class="quiz" id="quiz-pure-oop">
+    <p class="quiz-question">Why is Java not considered a pure object-oriented language?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">It uses primitive values for efficiency.</button></li>
+      <li><button data-answer="wrong">It rejects multiple inheritance of types</button></li>
+      <li><button data-answer="wrong">It requires compiler passes before run.</button></li>
+      <li><button data-answer="wrong">It executes only inside virtual systems!</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary Sources & Reading</h2>
+  <ul>
+    <li>Read the classic paper: <em>"Object-Oriented Programming"</em> by Bjarne Stroustrup, highlighting the shift from procedural data structures.</li>
+    <li>Consult the Oracle Java Documentation on <a href="https://docs.oracle.com/javase/tutorial/java/concepts/">OOP Concepts</a>.</li>
+  </ul>
+
+  <p class="teacher-note">
+    <strong>Confused about any of the OOP pillars?</strong> Reach out to your AI coach in Cursor! Paste your code examples or describe the concept you want to dive deeper into.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-pure-oop', {
+      correct: 'Correct! Java retains 8 primitive data types (int, double, char, etc.) that are not objects, which avoids heap allocations and optimizes runtime execution speeds.',
+      wrong: 'Incorrect. This option does not explain Java\'s deviation from pure object-oriented paradigms. Consider how Java handles basic numerical types.'
+    });
+  </script>
+</body>
+</html>

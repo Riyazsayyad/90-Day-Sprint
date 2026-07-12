@@ -61,7 +61,34 @@
 - Completed Module 01: Collections Internals.
 - Activated Module 00: OOP Fundamentals to begin the OOP track.
 
+## Session 15 (2026-07-11)
+- User invoked `/teach Teach me "Why Object-Oriented Programming?" from an interview and software engineering perspective.`
+- Lesson 1 (Why OOP) created (as oop-0001.html): Procedural pitfalls (global state, coupling), OOP core pillars (encapsulation, abstraction, inheritance, polymorphism), Java-specific choices (safety, JVM, java.lang.Object root), payments OCP integration example, primitive type performance compromises, and dynamic dispatch.
 
+## Session 16 (2026-07-11)
+- User invoked `/teach Class vs Object`
+- Lesson 2 (Class vs Object) created (as oop-0002.html): Class load schema metadata in Metaspace (java.lang.Class), Object memory layout in Heap (Mark Word, Klass Word, instance data, padding), new keyword allocation mechanics, reference variables on stack, and analogies (schema/row, recipe/cake).
 
+## Session 17 (2026-07-11)
+- User requested lessons in every new module to start numbering from 1 (instead of continuation). Renamed OOP lessons to `oop-0001-...` and `oop-0002-...`.
+- User requested adding Modules 06 (Databases & Persistence) and 07 (Performance Engineering) to the dashboard. Shifted subsequent locked modules to Modules 08, 09, 10. Updated progress tracker calculation to reflect 1 of 11 modules completed (9.1% progress).
 
+## Session 18 (2026-07-11)
+- User invoked `/teach Java Memory Model: Stack vs Heap`
+- Lesson 3 (Stack vs Heap) created (as oop-0003.html): Stack (thread-bound LIFO, primitives, reference pointers) vs. Heap (shared objects, instance variables), execution stack frames (local variable arrays, operand stack, frame data), local vs. instance variable scopes, new keyword memory trace, GC eligibility, StackOverflow vs OOM, and JIT Escape Analysis.
 
+## Session 19 (2026-07-11)
+- Reorganized curriculum based on user's new list of 11 modules (Modules 00 to 10).
+- Renamed Module 00 from "OOP Fundamentals" to "Core Java & OOP" (updated index.html, lesson-tray.js, MISSION.md, GLOSSARY.md).
+- Inserted new Module 02: "Streams API".
+- Shifted subsequent locked modules: Concurrency to 03, JVM & Memory to 04, Spring Boot to 05.
+- Merged the two database modules into Module 06: "Databases & Persistence (SQL + Hibernate)".
+- Kept Performance Engineering as Module 07, and shifted Distributed Systems, System Design, AI Engineering to Modules 08, 09, 10.
+
+## Session 20 (2026-07-12)
+- User invoked `/teach Constructors in Java`
+- Lesson 4 (Constructors) created (as oop-0004.html): Invariant safety, compiler default generator, overloading, chaining via this() and super() rules, execution sequence (loading vs initialization), static vs instance initializer blocks, private constructor usages, and non-overriding constraints.
+
+## Session 21 (2026-07-12)
+- User invoked `/teach Object Lifecycle in Java`
+- Lesson 5 (Object Lifecycle) created (as oop-0005.html): Instantiation steps, GC Root sets, reachability tracing, finalize() deprecation hazards (security finalizer attacks, slow performance loops), resurrection constraints, and reference strengths (Strong, Soft, Weak, Phantom).

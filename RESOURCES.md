@@ -1,6 +1,12 @@
-# Java Collections Internals — Resources
+# Riyaz Study Sprint — Resources
 
 ## Knowledge
+
+- [Oracle: Object-Oriented Programming Concepts](https://docs.oracle.com/javase/tutorial/java/concepts/)
+  Authoritative tutorial covering the foundations: objects, classes, inheritance, interfaces, and packages.
+- [Bjarne Stroustrup: What is Object-Oriented Programming?](https://www.stroustrup.com/whatis.pdf)
+  Core theoretical foundations: defining classes, inheritance hierarchies, and dynamic binding from a system architecture perspective.
+
 
 - [Oracle: `ArrayList` javadoc](https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/ArrayList.html)
   Authoritative: capacity, growth strategy, performance guarantees for size/isEmpty/get/set/iterator/add. Use for: performance and structural invariants.
@@ -35,6 +41,8 @@
 
 ## Wisdom (Communities)
 
+- [Stack Overflow — OOP tag](https://stackoverflow.com/questions/tagged/oop)
+  Architectural patterns, encapsulation boundaries, polymorphism questions, and design tradeoffs.
 - [Stack Overflow — java-arraylist tag](https://stackoverflow.com/questions/tagged/arraylist+java)
   Edge cases, resizing costs, performance comparison of ArrayList vs LinkedList. Use for: structural disputes or specific usage performance issues.
 - [Stack Overflow — java-linkedlist tag](https://stackoverflow.com/questions/tagged/linkedlist+java)

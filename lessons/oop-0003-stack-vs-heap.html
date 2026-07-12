@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 3 — Stack vs. Heap Memory Layout</title>
+  <meta name="description" content="Learn Java Memory Model basics: Stack vs Heap division, stack frames, lifetimes, GC eligibility, StackOverflow vs OOM, and escape analysis.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="oop-0002-class-vs-object.html">&larr; Lesson 2</a> &middot;
+    Lesson 3 of 4 &middot;
+    <a href="oop-0004-composition-vs-inheritance.html">Lesson 4 &rarr;</a> &middot;
+    <a href="../reference/oop-0003-stack-vs-heap.html">Stack/Heap Reference</a>
+  </nav>
+
+  <h1>Java Memory Model: Stack vs. Heap</h1>
+  <p class="meta">~10 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. Why Java Separates Stack and Heap Memory</h2>
+  <p>The JVM separates memory into distinct zones to optimize performance, manage resource lifetimes, and support thread safety:</p>
+  <ul>
+    <li><strong>Stack:</strong> Optimized for speed and immediate execution context. It runs on a LIFO (Last-In-First-Out) model bound directly to executing threads. Deallocation is automatic and instant when a method returns, avoiding fragmentation.</li>
+    <li><strong>Heap:</strong> Optimized for sharing and dynamic allocation lifetimes. Since objects need to survive beyond the methods that create them, they are stored on the Heap, accessible by all threads. Reclamation is managed asynchronously by the Garbage Collector.</li>
+  </ul>
+
+  <h2>2. What Is Stored in the Stack?</h2>
+  <p>Stack memory is allocated per thread. It stores:</p>
+  <ul>
+    <li><strong>Primitive local variables:</strong> Actual values of primitive types (e.g., <code>int x = 5;</code>) declared inside methods.</li>
+    <li><strong>Reference variables:</strong> Memory address references (e.g. <code>myObj</code>) pointing to objects located on the heap.</li>
+    <li><strong>Execution Stack Frames:</strong> Metadata representing nested method calls.</li>
+  </ul>
+
+  <h2>3. What Is Stored in the Heap?</h2>
+  <p>Heap memory is shared across all threads. It stores:</p>
+  <ul>
+    <li><strong>All Objects:</strong> Concrete instances of classes, regardless of where they are created. This includes all arrays (since arrays are treated as objects in Java).</li>
+    <li><strong>Instance variables:</strong> Member variables declared within a class (e.g. <code>private int age;</code>). Even if an instance variable is a primitive, it sits inside the object shell on the Heap.</li>
+  </ul>
+
+  <h2>4. Method Call Stack & Stack Frames</h2>
+  <p>Every time a thread invokes a method, the JVM pushes a new **Stack Frame** onto that thread's call stack. A frame is a temporary storage block containing:</p>
+  <ul>
+    <li><strong>Local Variable Array:</strong> Indexed slots containing method parameters and local variables.</li>
+    <li><strong>Operand Stack:</strong> A workspace used to perform intermediate evaluation steps (e.g., adding numbers).</li>
+    <li><strong>Frame Data:</strong> Reference to the runtime constant pool, return method instructions, and exception dispatch handlers.</li>
+  </ul>
+  <p>When a method finishes, its stack frame is popped off and discarded, instantly reclaiming the local variable slots without GC involvement.</p>
+
+  <h2>5. Local Variables vs. Instance Variables</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 30%;">Feature</th>
+      <th align="left" style="padding: 0.5rem; width: 35%;">Local Variables</th>
+      <th align="left" style="padding: 0.5rem; width: 35%;">Instance Variables</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Declaration</strong></td>
+      <td style="padding: 0.5rem;">Inside a method scope.</td>
+      <td style="padding: 0.5rem;">Inside class scope (outside methods).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Location</strong></td>
+      <td style="padding: 0.5rem;">Stack frame.</td>
+      <td style="padding: 0.5rem;">Heap (inside parent object).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Defaults</strong></td>
+      <td style="padding: 0.5rem;">None. Must be initialized before use.</td>
+      <td style="padding: 0.5rem;">Initialized to default values (0, false, null).</td>
+    </tr>
+  </table>
+
+  <h2>6. Trace Code Execution & Memory</h2>
+  <p>Analyze how the JVM maps execution step-by-step:</p>
+  <pre><code>void run() {
+    int age = 25;
+    User user = new User("Alice");
+}</code></pre>
+  <p>At execution runtime:</p>
+  <ol>
+    <li>The JVM pushes <code>run()</code> frame to the Stack.</li>
+    <li><code>age</code> (primitive 25) is written directly into local slot 1 on the Stack.</li>
+    <li>A <code>new User</code> object is allocated on the Heap, carrying its instance variables (like name).</li>
+    <li>The reference variable <code>user</code> is created in stack slot 2, storing the heap memory address (e.g. <code>0x7f9a</code>).</li>
+  </ol>
+
+  <h2>7. Object Lifetime & GC Eligibility</h2>
+  <p>An object survives on the Heap as long as it is reachable from active roots (such as local variables in active stack frames, static variables, or JNI references).
+  <br>An object becomes **eligible for Garbage Collection** the moment it has zero strong references pointing to it, or it becomes isolated in an unreachable reference group (island of isolation).</p>
+  <pre><code>User user = new User("Bob"); // Reachable
+user = null; // Original Bob object is now eligible for GC</code></pre>
+
+  <h2>8. StackOverflowError vs. OutOfMemoryError</h2>
+  <ul>
+    <li><strong>StackOverflowError (SOE):</strong> Occurs when the Stack runs out of space, typically due to deep or infinite recursion. Each nested call pushes a frame; if calls never return, the stack boundary is breached. Controlled by JVM flag <code>-Xss</code>.</li>
+    <li><strong>OutOfMemoryError (OOM):</strong> Occurs when the Heap space is exhausted. This happens if you instantiate too many objects that remain referenced (a memory leak), preventing the GC from reclaiming them. Controlled by JVM flag <code>-Xmx</code>.</li>
+  </ul>
+
+  <h2>9. Escape Analysis Optimization</h2>
+  <p>In modern JVMs, the JIT (Just-In-Time) compiler analyzes object allocations to optimize performance.
+  <br>If an object is created within a method and **never escapes** its scope (meaning it is not returned, passed to other threads, or stored in instance fields):
+  <ul>
+    <li>The JIT compiler can optimize this via **Scalar Replacement**, allocating individual instance fields directly on the Stack rather than creating the actual object shell on the Heap.</li>
+    <li>This bypasses heap allocation entirely, removing Garbage Collection pressure and speeding up execution.</li>
+  </ul>
+
+  <h2>10. Key Interview Questions</h2>
+  <div class="callout">
+    <strong>Q: Does Java pass variables by value or by reference?</strong>
+    Java is strictly <strong>pass-by-value</strong>. For primitives, it passes a copy of the actual value. For objects, it passes a copy of the reference address. The reference variable itself resides on the Stack, and its address value is cloned when passed.
+  </div>
+  <div class="callout">
+    <strong>Q: Where do static variables reside?</strong>
+    Static variables belong to the class template, not to any single instance. They are stored inside the <code>java.lang.Class</code> instance allocated in the <strong>Metaspace</strong> (under modern JVMs).
+  </div>
+
+  <h2>Retrieval Practice — Instance Variables</h2>
+  <p>Test your understanding of where instance variables live:</p>
+
+  <div class="quiz" id="quiz-inst-var">
+    <p class="quiz-question">Where are instance variables of an object stored in Java?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">They reside in heap memory allocated objects!</button></li>
+      <li><button data-answer="wrong">They are stored inside stack execution frames!</button></li>
+      <li><button data-answer="wrong">They are located inside shared JVM metaspaces!</button></li>
+      <li><button data-answer="wrong">They are held on registers during compilation!</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary Sources & Reading</h2>
+  <ul>
+    <li>Review the Oracle Tech Article on <a href="https://docs.oracle.com/javase/specs/jvms/se23/html/jvms-2.html#jvms-2.5.2">JVM Stacks</a>.</li>
+    <li>Read details about JIT <a href="https://www.oracle.com/technical-resources/articles/java/architect-evans-pt1.html">Escape Analysis optimizations</a>.</li>
+  </ul>
+
+  <p class="teacher-note">
+    <strong>Stuck on stack frames or recursion depth?</strong> Ask your AI coach in Cursor! Share your recursive method and we can map out its frame allocations.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-inst-var', {
+      correct: 'Correct! Instance variables are member elements of an object shell, meaning they reside on the Heap inside their parent object regardless of their data types.',
+      wrong: 'Incorrect. Member variables belong to object bodies, which are heap allocations. They are not stored in stack execution frames, shared metaspaces, or registers.'
+    });
+  </script>
+</body>
+</html>

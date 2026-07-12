@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 5 — Object Lifecycle in Java</title>
+  <meta name="description" content="Master the Object Lifecycle in Java: class loading to GC reclamation, instantiation steps, finalize() deprecation hazards, resurrection, and reference strengths (soft, weak, phantom).">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="oop-0004-constructors.html">&larr; Lesson 4</a> &middot;
+    Lesson 5 of 5 &middot;
+    <a href="../reference/oop-0005-object-lifecycle.html">Object Lifecycle Reference</a>
+  </nav>
+
+  <h1>Object Lifecycle in Java: Allocation to Reclamation</h1>
+  <p class="meta">~10 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. The Five Stages of the Object Lifecycle</h2>
+  <p>Every Java object passes through five distinct phases in JVM memory:</p>
+  <ol>
+    <li><strong>Class Loading:</strong> The JVM loads, links, and initializes class bytecode in Metaspace (executing <code>static</code> members). This must occur once before instantiation can proceed.</li>
+    <li><strong>Instantiation & Allocation:</strong> The <code>new</code> bytecode allocates memory on the Heap (often utilizing thread-safe Thread Local Allocation Buffers) and runs initializers and constructors to build the object.</li>
+    <li><strong>Active Usage:</strong> The object is referenced by active variables and accessed by threads to execute business logic.</li>
+    <li><strong>GC Eligibility:</strong> The object loses all strong reachability paths from GC Roots, rendering it dead in the eyes of the memory collector.</li>
+    <li><strong>GC Reclamation:</strong> The Garbage Collector identifies the unreachable object, runs finalize (if overriding and not yet run), sweeps its heap space, and returns the memory address to the free list.</li>
+  </ol>
+
+  <h2>2. Object Instantiation Step-by-Step</h2>
+  <p>When you invoke <code>new Car()</code>, the JVM executes a strict sequence under the hood:</p>
+  <ul>
+    <li><strong>Metaspace Check:</strong> Verifies if the class metadata is loaded. If not, triggers class loading.</li>
+    <li><strong>Heap Sizing & Allocation:</strong> Computes the required object size (header + fields + padding) and allocates heap space.</li>
+    <li><strong>Memory Zeroing:</strong> Fills all instance fields with their default values (e.g. <code>0</code>, <code>false</code>, <code>null</code>) to ensure structural safety.</li>
+    <li><strong>Header Setup:</strong> Writes the Mark Word (locking/GC age) and Klass Word (pointer to Metaspace class schema).</li>
+    <li><strong>Custom Initialization:</strong> Runs direct field assignments, instance initialization blocks, and the constructor body.</li>
+  </ol>
+
+  <h2>3. Reachability & GC Roots</h2>
+  <p>The Garbage Collector determines if an object is alive by tracing reachability.
+  <br>The trace starts from **GC Roots** (references that are directly accessible outside the heap, such as local variables in active thread stacks, static class variables, and JNI handles).
+  <br>If there is no path of strong references connecting active GC Roots to an object, that object is declared unreachable and becomes eligible for GC.
+  <p>
+  <pre><code>User user = new User("Alice"); // Root references Alice
+user = null; // Reference broken; Alice is eligible for GC</code></pre>
+
+  <h2>4. finalize() Deprecation & Security Hazards</h2>
+  <p>Historically, the <code>finalize()</code> method was overridden to clean up resources (like closing files or database connections). However, <strong>it is deprecated (since Java 9) and removed in recent JDKs</strong>. Here is why finalize is considered a major design hazard:</p>
+  <ul>
+    <li><strong>No Timing Guarantees:</strong> The JVM does not guarantee *when* or even *if* the finalizer will execute. Resources can leak indefinitely under low GC activity.</li>
+    <li><strong>Performance Degradation:</strong> Objects overriding <code>finalize()</code> are added to a JVM finalization queue. This forces the GC to keep them alive for at least one extra collection cycle, causing heap pressure.</li>
+    <li><strong>Single-Thread Bottleneck:</strong> Finalizers execute on a single, low-priority JVM system thread. If one finalize method hangs or blocks, the entire queue backs up, leading to <code>OutOfMemoryError</code>.</li>
+    <li><strong>Finalizer Attacks (Security):</strong> A malicious subclass can override <code>finalize()</code>. If instantiation fails in the parent constructor, the half-created object is still subject to finalization. The overridden finalizer can save a reference (<code>this</code>) to static variables, resurrecting a compromised object.</li>
+  </ul>
+  <p><strong>Alternative:</strong> Implement <code>AutoCloseable</code> and clean up resources using <strong>try-with-resources</strong> statements, or utilize <code>java.lang.ref.Cleaner</code>.</p>
+
+  <h2>5. Object Resurrection</h2>
+  <p>If an object overrides <code>finalize()</code>, it has one opportunity to save itself from reclamation. In the finalizer body, if it assigns <code>this</code> to an active reference, it becomes reachable again:</p>
+  <pre><code>@Override
+protected void finalize() {
+    activeInstances.add(this); // Resurrected!
+}</code></pre>
+  <p><em>Key Caveat:</em> The JVM runs <code>finalize()</code> **at most once** per object. If the resurrected object later becomes unreachable again, the finalizer is not re-run; the object is swept immediately.</p>
+
+  <h2>6. High-Level Reference Strengths</h2>
+  <p>To control GC behavior, Java provides four reference strengths via package <code>java.lang.ref</code>:</p>
+  <ol>
+    <li><strong>Strong Reference:</strong> Standard variable references (e.g. <code>Object obj = new Object();</code>). The GC never collects strongly reachable objects.</li>
+    <li><strong>Soft Reference:</strong> (`SoftReference`). Collected only when the JVM runs out of heap memory and is about to throw an OOM. Ideal for memory-sensitive caches.</li>
+    <li><strong>Weak Reference:</strong> (`WeakReference`). Collected during the very next GC run, regardless of memory capacity. Used in metadata maps (like <code>WeakHashMap</code>).</li>
+    <li><strong>Phantom Reference:</strong> (`PhantomReference`). Its <code>get()</code> method always returns <code>null</code>. Combined with <code>ReferenceQueue</code> to schedule post-mortem resource cleanup after the object is completely freed from memory.</li>
+  </ol>
+
+  <h2>7. Key Interview Questions</h2>
+  <div class="callout">
+    <strong>Q: What is a finalizer attack, and how do you prevent it?</strong>
+    It occurs when a subclass overrides <code>finalize()</code> to resurrect a partially initialized object whose constructor failed. To prevent this, declare your class as <code>final</code>, or write a final, empty <code>finalize()</code> method in your class to block overrides.
+  </div>
+  <div class="callout">
+    <strong>Q: How does a WeakHashMap prevent memory leaks?</strong>
+    In a <code>WeakHashMap</code>, the keys are stored as weak references. If a key object is no longer referenced elsewhere in the application, the GC reclaims it, and the map automatically cleans up the corresponding entry.
+  </div>
+
+  <h2>Retrieval Practice — Finalize Warnings</h2>
+  <p>Test your understanding of finalize behavior:</p>
+
+  <div class="quiz" id="quiz-lifecycle-finalize">
+    <p class="quiz-question">Why is the finalize method deprecated in Java?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">It introduces performance delays and security concerns!</button></li>
+      <li><button data-answer="wrong">It executes immediately during regular collection loops</button></li>
+      <li><button data-answer="wrong">It requires compilation steps before program execution!</button></li>
+      <li><button data-answer="wrong">It executes solely inside standard thread environments</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary Sources & Reading</h2>
+  <ul>
+    <li>Read the JDK Javadoc on <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/lang/ref/package-summary.html">java.lang.ref Reference Objects</a>.</li>
+    <li>Review Oracle Guidelines on avoiding <a href="https://docs.oracle.com/javase/specs/jls/se23/html/jls-12.html#jls-12.6">Finalization hazards</a>.</li>
+  </ul>
+
+  <p class="teacher-note">
+    <strong>Confused about Soft vs Weak reference collection timing?</strong> Ask your AI coach! Provide your cache requirements and we can pick the best reference type.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-lifecycle-finalize', {
+      correct: 'Correct! The finalize method causes severe garbage collection delays, lacks execution guarantees, and exposes classes to security finalizer attacks, leading to its complete deprecation.',
+      wrong: 'Incorrect. The finalize method does not run immediately or reliably, nor does it affect compilation or thread scoping in this way. Think of finalization delay queue problems.'
+    });
+  </script>
+</body>
+</html>

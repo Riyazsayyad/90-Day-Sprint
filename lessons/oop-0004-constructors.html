@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 4 — Constructors in Java</title>
+  <meta name="description" content="Master Constructors in Java: compiler default generation rules, overloading, chaining with this() and super(), execution flow, non-overriding limits, and interview questions.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="oop-0003-stack-vs-heap.html">&larr; Lesson 3</a> &middot;
+    Lesson 4 of 4 &middot;
+    <a href="../reference/oop-0004-constructors.html">Constructor Reference</a>
+  </nav>
+
+  <h1>Constructors in Java: Initialization Mechanics</h1>
+  <p class="meta">~10 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. Why Constructors Exist</h2>
+  <p>In software engineering, objects should never exist in a half-initialized or invalid state. A <strong>Constructor</strong> is a special block of code executed during instantiation to establish the object's **invariants** (essential properties that must always be valid):</p>
+  <ul>
+    <li><strong>State Initialization:</strong> It populates instance variables with initial values.</li>
+    <li><strong>Invariant Enforcement:</strong> It validates parameters (e.g., throwing an exception if a bank account is created with a negative balance).</li>
+    <li><strong>Self-Registration:</strong> It allows objects to register themselves in registries or pools during setup.</li>
+  </ul>
+
+  <h2>2. Default Constructor vs. User-Defined Constructor</h2>
+  <p>The distinction between default and written constructors is a classic interview topic:</p>
+  <ul>
+    <li><strong>Default Constructor:</strong> If a class contains **no constructors at all**, the Java compiler automatically generates a no-argument constructor at compile time. It has an empty body and calls <code>super()</code>.</li>
+    <li><strong>User-Defined Constructor:</strong> As soon as you write a single constructor (whether parameterized or no-arg), the compiler **ceases to generate the default constructor**.</li>
+  </ul>
+  <div class="callout">
+    <strong>Warning:</strong> If you write <code>public MyClass(String name) { ... }</code>, callers can no longer execute <code>new MyClass()</code> unless you explicitly write a no-arg constructor yourself.
+  </div>
+
+  <h2>3. Constructor Overloading & Chaining</h2>
+  <p><strong>Overloading:</strong> A class can declare multiple constructors if they differ in parameter lists (types, order, or quantity).</p>
+  <p><strong>Chaining:</strong> To prevent code duplication, constructors can invoke one another using the <code>this()</code> helper:</p>
+  <pre><code>public class User {
+    private String username;
+    private String role;
+
+    // Parameterized constructor
+    public User(String username, String role) {
+        this.username = username;
+        this.role = role;
+    }
+
+    // Chained constructor (no-arg)
+    public User() {
+        this("Guest", "READ_ONLY"); // Must be the first statement!
+    }
+}</code></pre>
+  <p>Similarly, child classes invoke parent constructors using <code>super()</code>.
+  <br><em>Crucial Rule:</em> Both <code>this()</code> and <code>super()</code> must be the **first line** of a constructor. Therefore, they can never be used in the same constructor block.</p>
+
+  <h2>4. Constructor Execution Flow & Inheritance</h2>
+  <p>When you instantiate a child class, constructors execute in a strict hierarchy. The JVM follows this sequence:</p>
+  <ol>
+    <li>Executes parent static initializers, then child static initializers (if not already loaded).</li>
+    <li>Executes parent instance initializers and instance variables.</li>
+    <li>Runs parent constructor body.</li>
+    <li>Executes child instance initializers and instance variables.</li>
+    <li>Runs child constructor body.</li>
+  </ol>
+  <p>Even if you don't write <code>super()</code>, Java inserts an implicit no-arg <code>super()</code> call on line 1 of the child constructor.</p>
+
+  <h2>5. Why Constructors Cannot Be Inherited or Overridden</h2>
+  <p>This is a frequent conceptual interview check:</p>
+  <ul>
+    <li><strong>No Inheritance:</strong> Constructors are not class members. A subclass has a different name than its superclass, so it cannot inherit a constructor whose name belongs to the parent.</li>
+    <li><strong>No Overriding:</strong> Overriding enables dynamic polymorphism (dynamic method lookup on existing objects). However, a constructor is called during object creation, before the object fully exists. Since we specify the exact class type during instantiation (e.g. <code>new Car()</code>), there is no dynamic dispatch, meaning overriding is impossible.</li>
+  </ul>
+
+  <h2>6. Initialization Blocks</h2>
+  <ul>
+    <li><strong>Static Initializer Block:</strong> Declared using <code>static { ... }</code>. Runs once when the class class loader loads it into memory. Used to set up static constants.</li>
+    <li><strong>Instance Initializer Block:</strong> Declared using anonymous braces <code>{ ... }</code>. Runs every time an object is instantiated, executing immediately after the superclass constructor returns, but before the child constructor body runs.</li>
+  </ul>
+
+  <h2>7. Common Misconceptions & Best Practices</h2>
+  <ul>
+    <li><strong>Misconception:</strong> "The constructor allocates memory." (No. The JVM's <code>new</code> bytecode allocates memory and fills the object header; the constructor is simply invoked to populate the empty state).</li>
+    <li><strong>Best Practice:</strong> Keep constructors clean. Avoid heavy network calls, database lookups, or file I/O inside constructors. If complex setup is required, use a <strong>Factory Method</strong>.</li>
+  </ul>
+
+  <h2>8. Key Interview Questions</h2>
+  <div class="callout">
+    <strong>Q: What happens if a parent class has only a parameterized constructor and a child has a no-arg constructor?</strong>
+    It will fail to compile. The child class implicitly attempts to call <code>super()</code> on line 1. Since the parent class lacks a no-arg constructor, the compiler throws an error. You must explicitly call <code>super(parameters)</code> in the child constructor.
+  </div>
+  <div class="callout">
+    <strong>Q: Can you declare a constructor as private?</strong>
+    Yes. Private constructors prevent external instantiation. This is standard in utility classes (containing only static methods, like <code>java.lang.Math</code>) or in Singleton implementations.
+  </div>
+
+  <h2>Retrieval Practice — Inheritance Limits</h2>
+  <p>Test your understanding of constructors and inheritance:</p>
+
+  <div class="quiz" id="quiz-constructors-override">
+    <p class="quiz-question">Why can constructors not be overridden in Java subclasses?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">Constructors are not inherited by any subclass</button></li>
+      <li><button data-answer="wrong">Constructors are not defined as normal methods</button></li>
+      <li><button data-answer="wrong">Constructors do not return regular values back</button></li>
+      <li><button data-answer="wrong">Constructors do not accept parameters in Java!</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary Sources & Reading</h2>
+  <ul>
+    <li>Read the Java Language Specification on <a href="https://docs.oracle.com/javase/specs/jls/se23/html/jls-8.html#jls-8.8">Constructor Declarations</a>.</li>
+    <li>Consult the guide on <a href="https://www.baeldung.com/java-initialization">Initialization Blocks in Java</a>.</li>
+  </ul>
+
+  <p class="teacher-note">
+    <strong>Stuck on constructor chaining?</strong> Reach out to your AI coach in Cursor! Share your class structure and we can help chain them efficiently.
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-constructors-override', {
+      correct: 'Correct! Overriding requires inheriting a parent member first. Since constructors are not inherited by subclasses, overriding them is syntactically impossible.',
+      wrong: 'Incorrect. While constructors have special rules, the root cause is that constructors are not inherited by subclasses, meaning they cannot be overridden.'
+    });
+  </script>
+</body>
+</html>

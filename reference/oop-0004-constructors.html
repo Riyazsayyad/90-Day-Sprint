@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Constructors & Initialization — Reference</title>
+  <meta name="description" content="Quick reference guide for Java constructors and class initialization, detailing constructor chaining, execution sequences under inheritance, and initialization blocks.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0004-constructors.html">&larr; Lesson 4</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Java Constructors & Initialization Reference</h1>
+  <p class="meta">Study Reference for Constructor Chaining & Block Execution Sequences</p>
+
+  <h2>1. Constructor Key Rules</h2>
+  <ul>
+    <li><strong>Name Match:</strong> Must exactly match the name of the class (case-sensitive).</li>
+    <li><strong>No Return Type:</strong> Has no return type, not even <code>void</code>. Adding <code>void</code> turns it into a standard method.</li>
+    <li><strong>Modifiers:</strong> Can use access modifiers (<code>public</code>, <code>protected</code>, <code>private</code>, package-private), but cannot be declared with <code>static</code>, <code>final</code>, <code>abstract</code>, or <code>synchronized</code>.</li>
+  </ul>
+
+  <h2>2. Initialization Blocks vs. Constructors</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Feature</th>
+      <th align="left" style="padding: 0.5rem; width: 38%;">Static Initializer Block</th>
+      <th align="left" style="padding: 0.5rem; width: 37%;">Instance Initializer Block</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Execution Trigger</strong></td>
+      <td style="padding: 0.5rem;">Loaded once per class load into the JVM.</td>
+      <td style="padding: 0.5rem;">Runs every time an object is instantiated.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Execution Order</strong></td>
+      <td style="padding: 0.5rem;">Runs during class loading, before any object creation.</td>
+      <td style="padding: 0.5rem;">Runs after <code>super()</code> returns, before child constructor body.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Access Scope</strong></td>
+      <td style="padding: 0.5rem;">Can only access static class variables and methods.</td>
+      <td style="padding: 0.5rem;">Can access both static and instance members.</td>
+    </tr>
+  </table>
+
+  <h2>3. Constructor Chaining Constraints</h2>
+  <ul>
+    <li><strong><code>this()</code>:</strong> Invokes another constructor in the same class to reuse logic. Must be the first statement in the constructor.</li>
+    <li><strong><code>super()</code>:</strong> Invokes a parent class constructor. Must be the first statement in the constructor.</li>
+    <li><strong>Exclusivity:</strong> Since both statements must occupy the first line, they are mutually exclusive. You can write either <code>this()</code> or <code>super()</code> inside a single constructor block, never both.</li>
+  </ul>
+
+  <h2>4. Inheritance Execution Checklist</h2>
+  <p>When executing <code>new Child()</code> where <code>Child extends Parent</code>:</p>
+  <pre><code>
+   Class Loading:
+   [1] Static Block of Parent runs (if not loaded)
+   [2] Static Block of Child runs (if not loaded)
+
+   Object Creation:
+   [3] Parent Instance variables & Initializers execute
+   [4] Parent Constructor body runs
+   [5] Child Instance variables & Initializers execute
+   [6] Child Constructor body runs
+  </code></pre>
+  <p><strong>Note:</strong> Instance variable initialization values (e.g. <code>private int x = 10;</code>) are compiled directly into the constructor prefix space, executing immediately after the <code>super()</code> call returns.</p>
+</body>
+</html>

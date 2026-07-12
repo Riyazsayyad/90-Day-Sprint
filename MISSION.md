@@ -1,4 +1,4 @@
-# Mission: OOP Fundamentals
+# Mission: Core Java & OOP
 
 ## Why
 You want to master key object-oriented programming fundamentals, including encapsulation, inheritance, polymorphism, abstraction, interface design guidelines, and fundamental SOLID principles.

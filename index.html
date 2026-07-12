@@ -24,7 +24,7 @@
         <div class="progress-stats-box">
           <div class="progress-header">
             <span class="progress-label">Sprint Progress</span>
-            <span class="progress-percent">11.1% Complete</span>
+            <span class="progress-percent">9.1% Complete</span>
           </div>
           <div class="progress-bar-container">
             <div class="progress-bar-fill" id="progressFill"></div>
@@ -40,7 +40,7 @@
     <main>
       <div class="modules-grid">
         
-        <!-- Module 0: OOP Fundamentals -->
+        <!-- Module 00: Core Java & OOP -->
         <div class="module-card active" id="oopCard">
           <div class="card-header">
             <div class="icon-wrapper">
@@ -52,13 +52,13 @@
           </div>
           <div class="card-body">
             <div class="card-num">Module 00</div>
-            <h3 class="card-title">OOP Fundamentals</h3>
+            <h3 class="card-title">Core Java & OOP</h3>
             <p class="card-desc">Master encapsulation, inheritance, polymorphism, abstraction, interface design guidelines, and fundamental SOLID principles.</p>
           </div>
           <div class="card-footer">
-            <span class="card-progress-text">0 / 4 Lessons</span>
+            <span class="card-progress-text">0 / 5 Lessons</span>
             <span class="active-action">
-              Start Module
+              View Lessons
               <svg viewBox="0 0 24 24">
                 <path d="M5 12h14M12 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
@@ -66,7 +66,7 @@
           </div>
         </div>
 
-        <!-- Module 1: Collections -->
+        <!-- Module 01: Collections -->
         <div class="module-card active" id="collectionsCard">
           <div class="card-header">
             <div class="icon-wrapper">
@@ -92,7 +92,39 @@
           </div>
         </div>
 
-        <!-- Module 2: Concurrency -->
+        <!-- Module 02: Streams API -->
+        <div class="module-card locked">
+          <div class="card-header">
+            <div class="icon-wrapper">
+              <svg viewBox="0 0 24 24">
+                <path d="M4 17h16M4 12h16M4 7h16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="8" cy="7" r="2" fill="currentColor"/>
+                <circle cx="16" cy="12" r="2" fill="currentColor"/>
+                <circle cx="12" cy="17" r="2" fill="currentColor"/>
+              </svg>
+            </div>
+            <span class="badge locked-badge">Locked</span>
+          </div>
+          <div class="card-body">
+            <div class="card-num">Module 02</div>
+            <h3 class="card-title">Streams API</h3>
+            <p class="card-desc">Master Java's declarative stream pipelines. Understand intermediate vs terminal ops, lazy execution, collector strategies, and parallel performance.</p>
+            
+            <div class="upcoming-topics">
+              <ul>
+                <li>Lazy Evaluation & Pipelines</li>
+                <li>Custom Collectors & Grouping By</li>
+                <li>Optional API Best Practices</li>
+                <li>Parallel Streams & ForkJoinPool</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="card-progress-text">Upcoming</span>
+          </div>
+        </div>
+
+        <!-- Module 03: Concurrency -->
         <div class="module-card locked">
           <div class="card-header">
             <div class="icon-wrapper">
@@ -103,7 +135,7 @@
             <span class="badge locked-badge">Locked</span>
           </div>
           <div class="card-body">
-            <div class="card-num">Module 02</div>
+            <div class="card-num">Module 03</div>
             <h3 class="card-title">Concurrency & Threads</h3>
             <p class="card-desc">Understand how threads interact, work with executors, locks, virtual threads, and write high-performance concurrent code.</p>
             
@@ -121,7 +153,7 @@
           </div>
         </div>
 
-        <!-- Module 3: JVM & Memory -->
+        <!-- Module 04: JVM & Memory -->
         <div class="module-card locked">
           <div class="card-header">
             <div class="icon-wrapper">
@@ -133,7 +165,7 @@
             <span class="badge locked-badge">Locked</span>
           </div>
           <div class="card-body">
-            <div class="card-num">Module 03</div>
+            <div class="card-num">Module 04</div>
             <h3 class="card-title">JVM & Memory Management</h3>
             <p class="card-desc">Deep-dive into the Java Virtual Machine. Uncover garbage collection configurations, class loaders, JIT, and Heap/Stack tuning.</p>
             
@@ -151,7 +183,7 @@
           </div>
         </div>
 
-        <!-- Module 4: Spring Boot Internals -->
+        <!-- Module 05: Spring Boot Internals -->
         <div class="module-card locked">
           <div class="card-header">
             <div class="icon-wrapper">
@@ -162,7 +194,7 @@
             <span class="badge locked-badge">Locked</span>
           </div>
           <div class="card-body">
-            <div class="card-num">Module 04</div>
+            <div class="card-num">Module 05</div>
             <h3 class="card-title">Spring Boot Internals</h3>
             <p class="card-desc">Look under the hood of Spring. Master the Bean Lifecycle, custom Starters, transactional layers, and Reactive WebFlux setups.</p>
             
@@ -180,28 +212,28 @@
           </div>
         </div>
 
-        <!-- Module 5: Database & Hibernate -->
+        <!-- Module 06: Databases & Persistence -->
         <div class="module-card locked">
           <div class="card-header">
             <div class="icon-wrapper">
               <svg viewBox="0 0 24 24">
-                <ellipse cx="12" cy="5" rx="9" ry="3"/>
-                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5M3 12c0 1.66 4 3 9 3s9-1.34 9-3" stroke-linecap="round" stroke-linejoin="round"/>
+                <ellipse cx="12" cy="5" rx="9" ry="3" stroke="currentColor" fill="none" stroke-width="2"/>
+                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5M3 12c0 1.66 4 3 9 3s9-1.34 9-3" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </div>
             <span class="badge locked-badge">Locked</span>
           </div>
           <div class="card-body">
-            <div class="card-num">Module 05</div>
-            <h3 class="card-title">Database & Hibernate</h3>
-            <p class="card-desc">Tackle databases effectively. Study Hibernate entity state tracking, caching, index patterns, and transaction levels.</p>
+            <div class="card-num">Module 06</div>
+            <h3 class="card-title">Databases & Persistence (SQL + Hibernate)</h3>
+            <p class="card-desc">Master database systems and object-relational mapping. Study SQL indexing, transaction isolations, connection pools, and Hibernate state tracking.</p>
             
             <div class="upcoming-topics">
               <ul>
-                <li>Persistence Context & Dirty Checking</li>
-                <li>Avoiding N+1 and Infinite Fetch Issues</li>
-                <li>Multi-level Caching Architectures</li>
-                <li>Isolation Levels & Pessimistic Locking</li>
+                <li>B-Trees, Indexes, and Query Plans</li>
+                <li>ACID, Isolation Levels, and MVCC</li>
+                <li>Database Connection Pools</li>
+                <li>ORM & Hibernate State Cycles</li>
               </ul>
             </div>
           </div>
@@ -210,7 +242,38 @@
           </div>
         </div>
 
-        <!-- Module 6: Distributed Systems -->
+        <!-- Module 07: Performance Engineering -->
+        <div class="module-card locked">
+          <div class="card-header">
+            <div class="icon-wrapper">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" fill="none" stroke-width="2"/>
+                <path d="M12 12l4-4" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
+                <path d="M6 12a6 6 0 0 1 6-6" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <span class="badge locked-badge">Locked</span>
+          </div>
+          <div class="card-body">
+            <div class="card-num">Module 07</div>
+            <h3 class="card-title">Performance Engineering</h3>
+            <p class="card-desc">Learn how to design, analyze, and optimize performance. Study hardware mechanics, cache optimization, load testing, and latency profiles.</p>
+            
+            <div class="upcoming-topics">
+              <ul>
+                <li>Benchmarking & Latency Distribution</li>
+                <li>Memory Hierarchy & CPU Caches</li>
+                <li>Profiling Tools & Flame Graphs</li>
+                <li>Thread Contention & Locking Overheads</li>
+              </ul>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="card-progress-text">Upcoming</span>
+          </div>
+        </div>
+
+        <!-- Module 08: Distributed Systems -->
         <div class="module-card locked">
           <div class="card-header">
             <div class="icon-wrapper">
@@ -226,7 +289,7 @@
             <span class="badge locked-badge">Locked</span>
           </div>
           <div class="card-body">
-            <div class="card-num">Module 06</div>
+            <div class="card-num">Module 08</div>
             <h3 class="card-title">Distributed Systems</h3>
             <p class="card-desc">Architect for scale. Explore CAP theorem, consensus protocols like Raft, distributed caching, and event-driven backends.</p>
             
@@ -244,7 +307,7 @@
           </div>
         </div>
 
-        <!-- Module 7: System Design -->
+        <!-- Module 09: System Design -->
         <div class="module-card locked">
           <div class="card-header">
             <div class="icon-wrapper">
@@ -258,7 +321,7 @@
             <span class="badge locked-badge">Locked</span>
           </div>
           <div class="card-body">
-            <div class="card-num">Module 07</div>
+            <div class="card-num">Module 09</div>
             <h3 class="card-title">System Design</h3>
             <p class="card-desc">Design resilient real-world services. Map out rate-limiters, CDNs, database partitions, and load balancing mechanics.</p>
             
@@ -276,7 +339,7 @@
           </div>
         </div>
 
-        <!-- Module 8: AI Engineering -->
+        <!-- Module 10: AI Engineering -->
         <div class="module-card locked">
           <div class="card-header">
             <div class="icon-wrapper">
@@ -287,7 +350,7 @@
             <span class="badge locked-badge">Locked</span>
           </div>
           <div class="card-body">
-            <div class="card-num">Module 08</div>
+            <div class="card-num">Module 10</div>
             <h3 class="card-title">AI Engineering</h3>
             <p class="card-desc">Integrate AI into production. Deploy semantic search, construct RAG pipelines, and build autonomous agent networks.</p>
             
@@ -556,6 +619,97 @@
             <div class="lesson-info">
               <span class="lesson-title">Fail-Fast vs. Fail-Safe Iteration</span>
               <span class="lesson-meta">8 min read &bull; Traversals</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar OOP Lesson Drawer -->
+  <div class="drawer" id="oopDrawer">
+    <div class="drawer-header">
+      <div class="drawer-title-group">
+        <h2>Core Java & OOP</h2>
+        <p>Module 00 &bull; 5 Lessons</p>
+      </div>
+      <button class="close-btn" id="closeOopDrawerBtn" aria-label="Close lesson list">
+        <svg viewBox="0 0 24 24">
+          <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+    
+    <div class="drawer-content">
+      <div class="lesson-list">
+        
+        <!-- Lesson 1 -->
+        <a href="lessons/oop-0001-why-object-oriented-programming.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">01</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Why Object-Oriented Programming?</span>
+              <span class="lesson-meta">10 min read &bull; OOP Basics</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+        <!-- Lesson 2 -->
+        <a href="lessons/oop-0002-class-vs-object.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">02</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Class vs. Object</span>
+              <span class="lesson-meta">10 min read &bull; OOP Basics</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+        <!-- Lesson 3 -->
+        <a href="lessons/oop-0003-stack-vs-heap.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">03</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Stack vs. Heap Memory Layout</span>
+              <span class="lesson-meta">10 min read &bull; OOP Basics</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+        <!-- Lesson 4 -->
+        <a href="lessons/oop-0004-constructors.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">04</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Constructors in Java</span>
+              <span class="lesson-meta">10 min read &bull; OOP Basics</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+        <!-- Lesson 5 -->
+        <a href="lessons/oop-0005-object-lifecycle.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">05</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Object Lifecycle in Java</span>
+              <span class="lesson-meta">10 min read &bull; OOP Basics</span>
             </div>
           </div>
           <div class="lesson-arrow">

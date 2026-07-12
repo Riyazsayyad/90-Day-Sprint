@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OOP Paradigm & Motivation — Reference</title>
+  <meta name="description" content="Quick reference guide for Object-Oriented Programming: comparison with procedural, the four pillars, Java-specific design trade-offs, and interview review notes.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0001-why-object-oriented-programming.html">&larr; Lesson 1</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Object-Oriented Programming (OOP) Paradigm Reference</h1>
+  <p class="meta">Paradigm Comparison & Java Specifications</p>
+
+  <h2>1. Procedural vs. Object-Oriented Programming</h2>
+  <p>Software development paradigms structure code execution and state management differently. The table below highlights key operational contrasts:</p>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Dimension</th>
+      <th align="left" style="padding: 0.5rem; width: 38%;">Procedural Programming</th>
+      <th align="left" style="padding: 0.5rem; width: 37%;">Object-Oriented Programming</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Focus</strong></td>
+      <td style="padding: 0.5rem;">Algorithms, procedures, and sequential functions.</td>
+      <td style="padding: 0.5rem;">Data elements encapsulated with their associated behaviors (Objects).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>State Access</strong></td>
+      <td style="padding: 0.5rem;">Global or shared state; exposed directly to functions.</td>
+      <td style="padding: 0.5rem;">Strictly controlled via access modifiers (Encapsulation).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Coupling</strong></td>
+      <td style="padding: 0.5rem;">High. Small changes in data formats break multiple functions.</td>
+      <td style="padding: 0.5rem;">Low. Implementation details are hidden behind class abstractions.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Extension</strong></td>
+      <td style="padding: 0.5rem;">Requires modifying existing conditionals and code blocks.</td>
+      <td style="padding: 0.5rem;">Achieved via Polymorphism and dynamic dispatch (Open/Closed).</td>
+    </tr>
+  </table>
+
+  <h2>2. The Four Pillars of OOP</h2>
+  <ul>
+    <li><strong>Encapsulation:</strong> The wrapping of data (fields) and code (methods) into a single unit. Data is kept private, and access is allowed only through public getters/setters, safeguarding the object's internal state.</li>
+    <li><strong>Abstraction:</strong> Exposing only the essential interfaces of an object while hiding implementation details. In Java, this is realized using <code>interface</code> and <code>abstract class</code> structures.</li>
+    <li><strong>Inheritance:</strong> Reusing the properties and behaviors of a parent class in a child class. Modeled via the <code>extends</code> keyword. Inherited systems are often tightly coupled, leading to the design preference: <em>Favor Composition over Inheritance</em>.</li>
+    <li><strong>Polymorphism:</strong> The ability of a variable, function, or object to take on multiple forms.
+      <ul>
+        <li><em>Compile-time Polymorphism:</em> Method overloading (same method name, different signatures).</li>
+        <li><em>Runtime Polymorphism:</em> Method overriding and <strong>Dynamic Dispatch</strong>, where the JVM resolves the exact method implementation at runtime based on the actual object type, not the reference type.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>3. Why Java is Not a "Pure" OOP Language</h2>
+  <p>A pure OOP language requires every data type to be an object. Java breaks this purity requirement to optimize execution speeds on the CPU:</p>
+  <ul>
+    <li><strong>Primitive Types:</strong> Java retains eight primitive types: <code>byte</code>, <code>short</code>, <code>int</code>, <code>long</code>, <code>float</code>, <code>double</code>, <code>boolean</code>, and <code>char</code>. Primitives hold values directly in memory (stack) rather than allocating wrapper envelopes on the Heap.</li>
+    <li><strong>Static Methods & Variables:</strong> Static elements belong to the class namespace itself, rather than any instantiated object, allowing execution outside of object contexts.</li>
+  </ul>
+
+  <h2>4. The Java Class Hierarchy Root: <code>java.lang.Object</code></h2>
+  <p>All Java classes implicitly extend <code>java.lang.Object</code>. This provides a baseline set of behaviors for every object instance in the system:</p>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 30%;">Method</th>
+      <th align="left" style="padding: 0.5rem; width: 70%;">Purpose & Contract</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>boolean equals(Object obj)</code></td>
+      <td style="padding: 0.5rem;">Indicates whether some other object is "equal to" this one. Must be overridden alongside <code>hashCode()</code>.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>int hashCode()</code></td>
+      <td style="padding: 0.5rem;">Returns a hash code value for the object, crucial for hash-based data structures (like <code>HashMap</code>).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>String toString()</code></td>
+      <td style="padding: 0.5rem;">Returns a string representation of the object, defaulting to classname@hashcode.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>Class&lt;?&gt; getClass()</code></td>
+      <td style="padding: 0.5rem;">Returns the runtime class representation, supporting reflection.</td>
+    </tr>
+  </table>
+</body>
+</html>

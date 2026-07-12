@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stack vs Heap — Reference</title>
+  <meta name="description" content="Quick reference guide for Stack and Heap memory allocations in Java, detailing stack frames, object lifetimes, and memory errors.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0003-stack-vs-heap.html">&larr; Lesson 3</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Java Stack vs. Heap Memory Reference</h1>
+  <p class="meta">Study Reference for JVM Runtime Allocations & Execution Boundaries</p>
+
+  <h2>1. Quick Paradigm Contrast</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Feature</th>
+      <th align="left" style="padding: 0.5rem; width: 38%;">Stack Memory</th>
+      <th align="left" style="padding: 0.5rem; width: 37%;">Heap Memory</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Access Scope</strong></td>
+      <td style="padding: 0.5rem;">Private. Thread-confined (each thread has its own Stack).</td>
+      <td style="padding: 0.5rem;">Global. Shared across all threads.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Allocation Style</strong></td>
+      <td style="padding: 0.5rem;">LIFO structured. Pushed/popped automatically by execution.</td>
+      <td style="padding: 0.5rem;">Dynamic. Allocated via <code>new</code> anywhere on the heap.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Lifetime</strong></td>
+      <td style="padding: 0.5rem;">Automatic. Reclaimed when method frame pops.</td>
+      <td style="padding: 0.5rem;">Reclaimed asynchronously by Garbage Collection.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Speed</strong></td>
+      <td style="padding: 0.5rem;">Extremely fast. Directly indexed via CPU instructions.</td>
+      <td style="padding: 0.5rem;">Slower. Subject to pointer lookup and GC overhead.</td>
+    </tr>
+  </table>
+
+  <h2>2. Inside a Stack Frame</h2>
+  <p>For every method call, the JVM creates a Stack Frame containing:</p>
+  <ul>
+    <li><strong>Local Variable Array:</strong> Indexed slots containing parameters (slot 0 contains <code>this</code> for instance methods) and local variables. Primitives store values; references store heap addresses.</li>
+    <li><strong>Operand Stack:</strong> A LIFO stack workspace used to calculate execution operations. For example, to calculate <code>2 + 3</code>, the JVM pushes 2 and 3, executes addition, and pops 5.</li>
+    <li><strong>Frame Data:</strong> Contains constants pool resolutions, normal method completion codes, and exception dispatch mappings.</li>
+  </ul>
+
+  <h2>3. Memory Layout Visual Diagram</h2>
+  <pre><code>
++-----------------------------------+        +----------------------------------------+
+|           STACK (Thread)          |        |               HEAP (Shared)            |
+|                                   |        |                                        |
+|  [ run() method frame ]           |        |   User Object (address: 0x7f9a)        |
+|    - local slot 0: this           |        |   +--------------------------------+   |
+|    - local slot 1: age = 25       |        |   | Header: Klass pointer, Mark    |   |
+|    - local slot 2: user ---------->--------+-->| Name reference: (points to Bob)|   |
+|                                   |        |   +--------------------------------+   |
++-----------------------------------+        +----------------------------------------+
+  </code></pre>
+
+  <h2>4. Error Scopes: SOE vs. OOM</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Property</th>
+      <th align="left" style="padding: 0.5rem; width: 38%;">StackOverflowError (SOE)</th>
+      <th align="left" style="padding: 0.5rem; width: 37%;">OutOfMemoryError (OOM)</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Error Source</strong></td>
+      <td style="padding: 0.5rem;">Call stack depth exceeds limits.</td>
+      <td style="padding: 0.5rem;">Heap allocation space exhausted.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Trigger Reason</strong></td>
+      <td style="padding: 0.5rem;">Infinite recursion or excessively deep method trees.</td>
+      <td style="padding: 0.5rem;">Instantiating objects without freeing references (leak).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Config Flag</strong></td>
+      <td style="padding: 0.5rem;"><code>-Xss&lt;size&gt;</code> (e.g. <code>-Xss1m</code>)</td>
+      <td style="padding: 0.5rem;"><code>-Xmx&lt;size&gt;</code> (e.g. <code>-Xmx2g</code>)</td>
+    </tr>
+  </table>
+
+  <h2>5. JIT Escape Analysis</h2>
+  <p>During runtime compiling optimizations, the JIT analyzer determines if an allocated object escapes a method's namespace:</p>
+  <ul>
+    <li><strong>No Escape:</strong> If the object stays strictly inside the declaring method (no returns or writes to outer fields), the JIT compiler can optimize this via **Scalar Replacement** (allocating instance fields directly onto the Stack).</li>
+    <li><strong>Escape:</strong> If the object is returned, passed to threads, or saved to fields, it escapes and must be instantiated on the Heap.</li>
+  </ul>
+</body>
+</html>

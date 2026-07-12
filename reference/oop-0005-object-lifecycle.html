@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Object Lifecycle & Reference Types — Reference</title>
+  <meta name="description" content="Quick reference guide for Java object lifecycle stages, reachability, reference types, and resource cleanup alternatives.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0005-object-lifecycle.html">&larr; Lesson 5</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Java Object Lifecycle & Reference Types Reference</h1>
+  <p class="meta">Study Reference for GC Reachability, Reference Strengths, and Cleanup Hazards</p>
+
+  <h2>1. Object Lifecycle Overview</h2>
+  <pre><code>
+   +------------------+
+   |  Class Loaded    |  (Loaded in Metaspace; static members initialized)
+   +--------+---------+
+            |
+            v
+   +--------+---------+
+   |   Allocation     |  (Heap memory secured; default field values written)
+   +--------+---------+
+            |
+            v
+   +--------+---------+
+   |  Initialization  |  (Instance variables & initializer blocks run; constructor executes)
+   +--------+---------+
+            |
+            v
+   +--------+---------+
+   |  Active Usage    |  (Object reachable from GC Roots; methods executed)
+   +--------+---------+
+            |
+            v
+   +--------+---------+
+   |  GC Eligible     |  (No strong paths from GC Roots remain)
+   +--------+---------+
+            |
+            v
+   +--------+---------+
+   |  GC Reclamation  |  (Swept from Heap; memory reclaimed)
+   +------------------+
+  </code></pre>
+
+  <h2>2. Reference Strength Types Comparison</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 20%;">Reference Type</th>
+      <th align="left" style="padding: 0.5rem; width: 30%;">GC Collection Condition</th>
+      <th align="left" style="padding: 0.5rem; width: 50%;">Primary Use Cases & Characteristics</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Strong</strong></td>
+      <td style="padding: 0.5rem;">Never collected while reachable.</td>
+      <td style="padding: 0.5rem;">Standard variables. Hard memory references.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Soft</strong></td>
+      <td style="padding: 0.5rem;">Collected only when OutOfMemoryError is imminent.</td>
+      <td style="padding: 0.5rem;">Memory-sensitive cache buffers. Reclaimed to prevent OOM.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Weak</strong></td>
+      <td style="padding: 0.5rem;">Collected during the next GC cycle.</td>
+      <td style="padding: 0.5rem;">Metadata tables (e.g. <code>WeakHashMap</code>). Cleared immediately when strong references drop.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Phantom</strong></td>
+      <td style="padding: 0.5rem;">Collected after object is finalized/freed.</td>
+      <td style="padding: 0.5rem;">Post-mortem resource cleanup. Combined with <code>ReferenceQueue</code>. <code>get()</code> always returns <code>null</code>.</td>
+    </tr>
+  </table>
+
+  <h2>3. Resource Cleanup Alternatives</h2>
+  <p>Resource cleanup is critical in backend systems. The table below details modern alternatives to finalizers:</p>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Characteristic</th>
+      <th align="left" style="padding: 0.5rem; width: 38%;">finalize() Method (Deprecated)</th>
+      <th align="left" style="padding: 0.5rem; width: 37%;">AutoCloseable & try-with-resources</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Control</strong></td>
+      <td style="padding: 0.5rem;">JVM / Garbage Collector decides timing.</td>
+      <td style="padding: 0.5rem;">Developer manages scope; execution is deterministic.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Performance</strong></td>
+      <td style="padding: 0.5rem;">High overhead (adds objects to queue; extra GC cycle).</td>
+      <td style="padding: 0.5rem;">Extremely low overhead. Incurs standard method call execution costs.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Security</strong></td>
+      <td style="padding: 0.5rem;">Vulnerable to Finalizer Attacks (object resurrection).</td>
+      <td style="padding: 0.5rem;">Secure. State is closed and exceptions are handled safely.</td>
+    </tr>
+  </table>
+</body>
+</html>
