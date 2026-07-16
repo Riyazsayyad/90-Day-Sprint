@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>java.lang.Object — Reference</title>
+  <meta name="description" content="Quick reference guide for java.lang.Object: equals and hashCode contracts, synchronization monitors, headers, and clean boilerplate designs.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0010-object-class.html">&larr; Lesson 10</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>java.lang.Object Cheat Sheet & Reference</h1>
+  <p class="meta">Core Contracts, JVM Memory Structures, and Synchronization States</p>
+
+  <h2>1. Memory Footprint of an Object</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Header Component</th>
+      <th align="left" style="padding: 0.5rem; width: 25%;">Size (64-bit JVM)</th>
+      <th align="left" style="padding: 0.5rem; width: 50%;">Information Tracked</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Mark Word</strong></td>
+      <td style="padding: 0.5rem;">8 bytes (64 bits)</td>
+      <td style="padding: 0.5rem;">Identity Hashcode (25 bits), GC age (4 bits), Biased lock flag (1 bit), Lock state flags (2 bits).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Klass Word</strong></td>
+      <td style="padding: 0.5rem;">8 bytes (4 if compressed)</td>
+      <td style="padding: 0.5rem;">Pointer to Class Metadata in Metaspace (enabling `getClass()` and type checks).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Instance Data</strong></td>
+      <td style="padding: 0.5rem;">Variable</td>
+      <td style="padding: 0.5rem;">Primitive values and object references declared in class hierarchy.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Padding</strong></td>
+      <td style="padding: 0.5rem;">0 to 7 bytes</td>
+      <td style="padding: 0.5rem;">Aligns total object size to a multiple of 8 bytes for 64-bit alignment performance.</td>
+    </tr>
+  </table>
+
+  <h2>2. equals() and hashCode() Contract Checklist</h2>
+  <p>To implement proper equality checks, ensure your class complies with the following:</p>
+  <ul>
+    <li><strong>Symmetry:</strong> If <code>a.equals(b)</code>, then <code>b.equals(a)</code>. Be careful when comparing base classes and subclasses.</li>
+    <li><strong>Consistent HashCode:</strong> If you override <code>equals()</code>, you **must** override <code>hashCode()</code> to avoid breaking collections.</li>
+    <li><strong>Lombok/Records Alternative:</strong> Prefer Java records to auto-generate proper implementations.</li>
+  </ul>
+  <pre><code>// Safe Boilerplate implementation using java.util.Objects
+@Override
+public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    User user = (User) o;
+    return Objects.equals(id, user.id) && Objects.equals(name, user.name);
+}
+
+@Override
+public int hashCode() {
+    return Objects.hash(id, name);
+}</code></pre>
+
+  <h2>3. Thread Synchronization: Monitor States</h2>
+  <pre><code>
+  Object Monitor queues tracking thread state transitions:
+  
+  +-------------------------------------------------------------+
+  |                        1. ENTRY SET                         |
+  |  Threads blocked waiting to acquire the monitor lock.       |
+  +------------------------------+------------------------------+
+                                 |
+                                 | (Acquires lock)
+                                 v
+  +-------------------------------------------------------------+
+  |                      2. ACTIVE THREAD                       |
+  |  Thread executing synchronized block.                       |
+  +------------------------------+------------------------------+
+                                 |
+           (Calls wait())        |        (Calls notify())
+                 +---------------+---------------+
+                 |                               |
+                 v                               v
+  +------------------------------+  +---------------------------+
+  |         3. WAIT SET          |  | Wakes up arbitrary thread |
+  | Threads suspended; lock      |  | and moves it back to      |
+  | is temporarily released.     |  | the Entry Set.            |
+  +------------------------------+  +---------------------------+
+  </code></pre>
+
+  <h2>4. Core Object Methods Summary</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 35%;">Method Signature</th>
+      <th align="left" style="padding: 0.5rem; width: 15%;">Modifier</th>
+      <th align="left" style="padding: 0.5rem; width: 50%;">Behavior and Warnings</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>boolean equals(Object obj)</code></td>
+      <td style="padding: 0.5rem;">Virtual</td>
+      <td style="padding: 0.5rem;">Compares references by default. Must override with <code>hashCode()</code> consistently.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>int hashCode()</code></td>
+      <td style="padding: 0.5rem;">Virtual native</td>
+      <td style="padding: 0.5rem;">Returns a pseudo-random value cached in object header. Must align with equals contract.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>String toString()</code></td>
+      <td style="padding: 0.5rem;">Virtual</td>
+      <td style="padding: 0.5rem;">Returns string description. Override to assist logging. Prevent PII leaks.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>Class<?> getClass()</code></td>
+      <td style="padding: 0.5rem;">Final native</td>
+      <td style="padding: 0.5rem;">Reads Klass Word pointer. Primary entry point for Reflection. Cannot be overridden.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>Object clone()</code></td>
+      <td style="padding: 0.5rem;">Protected native</td>
+      <td style="padding: 0.5rem;">Shallow copy. Avoid using. Prefer copy constructors/records.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>void finalize()</code></td>
+      <td style="padding: 0.5rem;">Protected</td>
+      <td style="padding: 0.5rem;"><strong>DEPRECATED.</strong> Do not use. Use Try-With-Resources or Cleaners.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>void wait(), notify(), notifyAll()</code></td>
+      <td style="padding: 0.5rem;">Final (native)</td>
+      <td style="padding: 0.5rem;">Coordinators for synchronization. Must own object monitor to call.</td>
+    </tr>
+  </table>
+</body>
+</html>

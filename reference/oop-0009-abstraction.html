@@ -25,28 +25,33 @@
     </tr>
     <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
       <td style="padding: 0.5rem;"><strong>Focus</strong></td>
-      <td style="padding: 0.5rem;"><em>Hiding complexity</em> (what an object does).</td>
-      <td style="padding: 0.5rem;"><em>Hiding data</em> (how an object protects its state).</td>
+      <td style="padding: 0.5rem;"><em>Hiding complexity</em> (what an object does). Exposing a simplified model.</td>
+      <td style="padding: 0.5rem;"><em>Hiding data</em> (how an object protects its state). Restricting direct field modifications.</td>
     </tr>
     <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
       <td style="padding: 0.5rem;"><strong>Level</strong></td>
-      <td style="padding: 0.5rem;">Design level (focus on interfaces/contracts).</td>
-      <td style="padding: 0.5rem;">Implementation level (focus on classes/modifiers).</td>
+      <td style="padding: 0.5rem;">Design level (conceptual boundaries).</td>
+      <td style="padding: 0.5rem;">Implementation level (structural restrictions).</td>
     </tr>
     <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
       <td style="padding: 0.5rem;"><strong>Enforced by</strong></td>
-      <td style="padding: 0.5rem;">Interfaces, Abstract classes, Public API signatures.</td>
-      <td style="padding: 0.5rem;"><code>private</code> fields, validation logic, final variables.</td>
+      <td style="padding: 0.5rem;">Interfaces, Abstract classes, Public API signatures, Facades.</td>
+      <td style="padding: 0.5rem;"><code>private</code> fields, validation logic in setters, defensive copying.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Analogy</strong></td>
+      <td style="padding: 0.5rem;">Steering wheel, gas pedal, brake pedal interface.</td>
+      <td style="padding: 0.5rem;">The metal engine casing enclosing pistons, spark plugs, and gears.</td>
     </tr>
   </table>
 
-  <h2>2. Concrete Class vs. Abstract Class vs. Interface</h2>
+  <h2>2. Type Comparison: Concrete Class vs. Abstract Class vs. Interface</h2>
   <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
     <tr style="border-bottom:1px solid #ddd;">
       <th align="left" style="padding: 0.5rem; width: 22%;">Feature</th>
       <th align="left" style="padding: 0.5rem; width: 26%;">Concrete Class</th>
       <th align="left" style="padding: 0.5rem; width: 26%;">Abstract Class</th>
-      <th align="left" style="padding: 0.5rem; width: 26%;">Interface (Java 8+)</th>
+      <th align="left" style="padding: 0.5rem; width: 26%;">Interface (Java 8/9+)</th>
     </tr>
     <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
       <td style="padding: 0.5rem;"><strong>Instantiation</strong></td>
@@ -64,57 +69,69 @@
       <td style="padding: 0.5rem;"><strong>Instance Variables</strong></td>
       <td style="padding: 0.5rem;">Yes.</td>
       <td style="padding: 0.5rem;">Yes.</td>
-      <td style="padding: 0.5rem;">No (only constants).</td>
+      <td style="padding: 0.5rem;">No (only static final constants).</td>
     </tr>
     <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
-      <td style="padding: 0.5rem;"><strong>Multiple Inheritance</strong></td>
+      <td style="padding: 0.5rem;"><strong>Constructors</strong></td>
+      <td style="padding: 0.5rem;">Yes.</td>
+      <td style="padding: 0.5rem;">Yes (invoked via <code>super()</code> chaining).</td>
       <td style="padding: 0.5rem;">No.</td>
-      <td style="padding: 0.5rem;">No.</td>
-      <td style="padding: 0.5rem;">Yes, multiple interfaces.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Inheritance</strong></td>
+      <td style="padding: 0.5rem;">Single class inheritance.</td>
+      <td style="padding: 0.5rem;">Single class inheritance.</td>
+      <td style="padding: 0.5rem;">Multiple interface inheritance.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Method Bodies</strong></td>
+      <td style="padding: 0.5rem;">All methods must have bodies.</td>
+      <td style="padding: 0.5rem;">Both abstract and concrete methods allowed.</td>
+      <td style="padding: 0.5rem;">Abstract, <code>default</code>, <code>static</code>, and <code>private</code>.</td>
     </tr>
   </table>
 
   <h2>3. Skeletal Implementation Pattern</h2>
-  <p>Combine interfaces and abstract classes to provide maximum API flexibility:</p>
-  <pre><code>// 1. The Pure behavioral interface
+  <p>Joshua Bloch's design strategy from <em>Effective Java</em> combining the flexibility of interfaces with the code-reuse advantages of abstract classes:</p>
+  <pre><code>// 1. Pure interface contract defining capabilities
 public interface DocumentProcessor {
     void load(String path);
     void extractText();
     void save();
 }
 
-// 2. The Abstract Skeletal class containing common logic
+// 2. Skeletal Abstract class implementing the interface to host shared boilerplate
 public abstract class AbstractDocumentProcessor implements DocumentProcessor {
     protected String path;
 
     @Override
     public void load(String path) {
-        this.path = path; // Common initialization logic
-        System.out.println("Document loaded from: " + path);
+        this.path = path;
+        System.out.println("Common Step: Document loaded from: " + path);
     }
 
-    // save() and extractText() remain abstract for specific formats
+    // extractText() and save() are left abstract for subclass overrides
 }
 
-// 3. Concrete implementations (Simple and focused)
+// 3. Concrete subclass extends the skeletal base class
 public class PdfProcessor extends AbstractDocumentProcessor {
     @Override
     public void extractText() {
-        System.out.println("Extracting PDF text from: " + path);
+        System.out.println("Reading PDF format at: " + path);
     }
 
     @Override
     public void save() {
-        System.out.println("Saving PDF document state");
+        System.out.println("Writing PDF metadata to disk.");
     }
 }</code></pre>
 
   <h2>4. Abstraction Best Practices</h2>
   <ul>
-    <li><strong>Program to an Interface:</strong> Always reference objects by their interface or abstract parent type rather than concrete classes (e.g. <code>List&lt;String&gt; names = new ArrayList&lt;&gt;();</code>).</li>
-    <li><strong>Interface Segregation Principle:</strong> Clients should not be forced to implement methods they do not use. Prefer small, highly cohesive interfaces (e.g. <code>Runnable</code>, <code>Comparable</code>) over massive "fat" interfaces.</li>
-    <li><strong>Use Skeleton Abstractions:</strong> When designing custom framework modules, always provide a clean interface for maximum client flexibility, paired with an abstract class to provide default helper logic.</li>
-    <li><strong>Prevent Direct Constructor Calls:</strong> If a class is only meant to be a base template, declare it <code>abstract</code> even if it doesn't declare any abstract methods.</li>
+    <li><strong>Program to an Interface:</strong> Reference variables using parent interface types rather than concrete implementation types (e.g. <code>Map&lt;String, User&gt; map = new HashMap&lt;&gt;();</code>). This permits swapping implementation classes without modifying client code.</li>
+    <li><strong>Interface Segregation Principle (ISP):</strong> Break bulky, "fat" interfaces down into smaller, highly cohesive, single-method contracts (like <code>Comparable</code>, <code>Runnable</code>, or <code>AutoCloseable</code>) to avoid forcing clients to implement useless placeholder methods.</li>
+    <li><strong>Avoid Leaky Abstractions:</strong> Do not include vendor or implementation-specific details in interface signatures. For example, rather than declaring <code>void write(MySqlRowData row)</code>, declare <code>void write(Row row)</code>. Avoid throwing low-level database exceptions (<code>SQLException</code>) directly; instead, wrap them in custom runtime exceptions (<code>DataAccessException</code>).</li>
+    <li><strong>Prefer Composition over Inheritance:</strong> Inherit interface contracts, but think twice before inheriting large class implementation chains. Use abstract classes mainly as skeletal adapters or templates.</li>
   </ul>
 </body>
 </html>

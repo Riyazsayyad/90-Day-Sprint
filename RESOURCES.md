@@ -10,6 +10,8 @@
   Authoritative guidance on encapsulation and immutability. Focus on Item 15 (Minimize accessibility) and Item 50 (Defensive copying).
 - [Oracle: Inheritance and Subclasses](https://docs.oracle.com/javase/tutorial/java/IandI/subclasses.html)
   Official guide covering class hierarchies, overriding, hiding, super keyword, and Object methods.
+- [Oracle: Object Class API](https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/lang/Object.html)
+  Official API reference detailing monitor locks, identity hashcode, equals rules, and finalization deprecation.
 - [Oracle: Polymorphism](https://docs.oracle.com/javase/tutorial/java/IandI/polymorphism.html)
   Official guide covering runtime polymorphism, method dispatch, and object reference mechanics.
 - [Oracle: Abstract Methods and Classes](https://docs.oracle.com/javase/tutorial/java/IandI/abstract.html)

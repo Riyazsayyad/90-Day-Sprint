@@ -108,3 +108,13 @@
 ## Session 25 (2026-07-13)
 - User invoked `/teach Teach me "Abstraction in Java" from an interview and software engineering perspective.`
 - Lesson 9 (Abstraction) created (as oop-0009-abstraction.html): Hiding complexity vs hiding state details, abstract classes vs interfaces properties, API contract designs, skeletal implementation frameworks, and framework dependency abstractions.
+
+## Session 26 (2026-07-14)
+- User invoked `/teach Teach me "Abstraction in Java" from an interview and software engineering perspective.` (Session follow-up).
+- Expanded Lesson 9 (oop-0009-abstraction.html) and reference sheet (oop-0009-abstraction.html) to cover all 10 topics in comprehensive detail, including design rationale, abstraction vs encapsulation, abstract classes (fields/constructors), interfaces (Java 8/9+), API separation, JDK real-world examples, misconceptions, best practices, interview questions, and framework extensibility.
+
+## Session 27 (2026-07-17)
+- User invoked `/teach Teach me "java.lang.Object" from an interview and software engineering perspective.`
+- Created Lesson 10 (oop-0010-object-class.html) and reference sheet (oop-0010-object-class.html) covering implicit inheritance, object headers, standard method contracts, wait/notify monitor models, generics erasure, and framework reflection usage.
+- Created learning record 21 (0021-java-lang-object.md).
+- Updated index.html and oop-0009-abstraction.html navigation lines to link to the new lesson.

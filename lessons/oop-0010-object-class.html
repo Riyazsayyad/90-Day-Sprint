@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 10 — java.lang.Object Root Class</title>
+  <meta name="description" content="Master java.lang.Object from a software engineering and interview perspective: object headers, equals and hashCode contracts, monitors, clone issues, finalize deprecation, type erasure, and framework reflection.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="oop-0009-abstraction.html">&larr; Lesson 9</a> &middot;
+    Lesson 10 of 10 &middot;
+    <a href="../reference/oop-0010-object-class.html">Object Reference</a>
+  </nav>
+
+  <h1>The Root of Java: Mechanics of java.lang.Object</h1>
+  <p class="meta">~15 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. Why Every Class Extends Object</h2>
+  <p>In Java, any class that does not explicitly declare a parent class automatically extends <code>java.lang.Object</code>. The compiler (<code>javac</code>) inserts this inheritance into the compiled bytecode. This creates a <strong>unified type system</strong> where every class is guaranteed to share a standard baseline of state and behavior, such as reference comparisons, string formatting, synchronization, and runtime reflection.</p>
+
+  <h2>2. Object Header Memory Layout</h2>
+  <p>In the JVM, objects on the heap have a physical memory footprint consisting of an object header, instance variables, and padding. The object header maps directly to the behaviors exposed by <code>java.lang.Object</code>:</p>
+  <ul>
+    <li><strong>Mark Word (8 bytes on 64-bit):</strong> Tracks runtime metadata including identity hashcode (calculated and cached once), garbage collection age, and lock indicators (biased, thin, fat, monitor). This directly supports <code>hashCode()</code> and thread coordination (<code>wait()</code>/<code>notify()</code>).</li>
+    <li><strong>Klass Word (4/8 bytes):</strong> Pointer referencing the class's type metadata in JVM Metaspace. This is accessed when calling <code>getClass()</code> or validating type conversions with <code>instanceof</code>.</li>
+  </ul>
+
+  <h2>3. The Inherited Methods & Contracts</h2>
+  
+  <h3>equals(Object obj) & hashCode()</h3>
+  <p>The default implementation of <code>equals()</code> checks reference equality (<code>this == obj</code>). When overriding, you must maintain its reflexive, symmetric, transitive, and consistent mathematical contracts.
+  <br>The contract of <code>hashCode()</code> dictates that if two objects are equal according to <code>equals()</code>, they <strong>must</strong> return the exact same integer hashcode. If you override `equals()`, you must override `hashCode()`. Failing to do so breaks hash-based collections (like <code>HashMap</code> and <code>HashSet</code>) because elements will be distributed to different bucket paths and become irretrievable.</p>
+
+  <h3>toString() & getClass()</h3>
+  <p><code>toString()</code> defaults to returning <code>ClassName@HexHashCode</code>. Overriding it is a software engineering best practice to produce diagnostic logs, but be careful not to log sensitive PII.
+  <br><code>getClass()</code> is a final native method returning the <code>Class<?></code> metadata descriptor of the instance, acting as the primary entry point for runtime reflection.</p>
+
+  <h3>clone() & finalize()</h3>
+  <p><code>clone()</code> performs a shallow bitwise copy of instance variables but is widely considered a flawed design. It bypasses constructor chaining, requires implementing the <code>Cloneable</code> marker interface, and throws a checked exception. Copy constructors are the modern alternative.
+  <br><code>finalize()</code> was deprecated in Java 9 and is marked for removal. It degrades GC performance because finalizable objects must be queued, has no guarantees on when it will run, and exposes applications to security vulnerabilities (finalizer injection attacks).</p>
+
+  <h3>wait(), notify(), & notifyAll()</h3>
+  <p>These final methods handle inter-thread communication. In the JVM, every heap object has an associated <strong>Monitor</strong>. A thread must own the target object's monitor lock (by executing within a <code>synchronized</code> block) before calling `wait()`, `notify()`, or `notifyAll()`. Otherwise, the JVM throws an <code>IllegalMonitorStateException</code>.
+  <ul>
+    <li><code>wait()</code> suspends the thread and releases the lock, placing the thread in the monitor's <strong>Wait Set</strong>.</li>
+    <li><code>notify()</code> selects one arbitrary thread from the Wait Set and places it in the <strong>Entry Set</strong> to compete for the monitor lock.</li>
+    <li><code>notifyAll()</code> awakens all waiting threads. Use <code>notifyAll()</code> by default to avoid deadlocks from missed signals.</li>
+  </ul>
+  </p>
+
+  <h2>4. Polymorphism & Collections Type Erasure</h2>
+  <p>Because `Object` is the root of the type hierarchy, it makes Java's dynamic method dispatch possible. A call to an overridden method on an `Object` reference is resolved at runtime using the concrete class vtable.</p>
+  <p>JDK collections store elements internally within raw <code>Object[]</code> arrays to enable generic layouts. Due to **Type Erasure**, the compiler replaces generic types with their bounds (typically <code>Object</code>) during compilation, inserting implicit casts when retrieving elements. This design maintains backward binary compatibility with pre-generics Java versions.</p>
+
+  <h2>5. How Object Influences Frameworks</h2>
+  <ul>
+    <li><strong>Spring Dependency Injection:</strong> Container singletons are stored internally in type-erased <code>Map<String, Object></code> caches, resolving specific injection targets at runtime using <code>getClass()</code> reflection.</li>
+    <li><strong>Jackson JSON Parser:</strong> Inspects class structures via <code>getClass()</code> and calls field getters to transform raw heap state into serialized JSON text.</li>
+    <li><strong>Hibernate Dirty Checking:</strong> Hibernate copies database-mapped objects during retrieval and uses <code>equals()</code> during flush events to determine if an entity has changed, dynamically generating database <code>UPDATE</code> statements.</li>
+  </ul>
+
+  <h2>Callout Questions for Interviews</h2>
+  <div class="callout">
+    <strong>Q1: Why do wait() and notify() belong to Object, not Thread?</strong>
+    <p>Wait and notify operate on locks, and locks in Java are associated with shared heap resources (objects) rather than execution threads. Threads synchronize on objects, so the signaling queues (Wait Set and Entry Set) reside inside the object's monitor structure.</p>
+  </div>
+  <div class="callout">
+    <strong>Q2: If wait() is called, does the thread release all locks it holds?</strong>
+    <p>No. The thread only releases the monitor lock of the object on which <code>wait()</code> was invoked. Any other monitor locks held by that thread in outer synchronized blocks remain locked, which can lead to deadlocks if other threads need them.</p>
+  </div>
+  <div class="callout">
+    <strong>Q3: How does getClass() differ from the instanceof operator?</strong>
+    <p>The <code>instanceof</code> operator checks if an object is of a specific class type or any of its subclasses (polymorphic comparison). Comparing <code>getClass() == Target.class</code> checks for strict type equivalence, rejecting subclasses.</p>
+  </div>
+
+  <h2>Retrieval Practice — Header Structures</h2>
+  <p>Test your understanding of object headers and memory layout:</p>
+
+  <div class="quiz" id="quiz-object-header">
+    <p class="quiz-question">Which memory region in the object header tracks locks and identity hashcode?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="correct">The Mark Word header field</button></li>
+      <li><button data-answer="wrong">The Klass Word header field</button></li>
+      <li><button data-answer="wrong">The Padding Word header field</button></li>
+      <li><button data-answer="wrong">The Metadata Word header field</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Primary Sources & Reading</h2>
+  <ul>
+    <li>Read <em>Effective Java (3rd Edition)</em> by Joshua Bloch: Chapter 3 ("Methods Common to All Objects") covering equals, hashCode, toString, and clone guidelines.</li>
+    <li>Review Oracle Technical Docs on the <a href="https://docs.oracle.com/javase/tutorial/java/IandI/subclasses.html">Inheritance and Subclasses</a> hierarchy.</li>
+  </ul>
+
+  <p class="teacher-note">
+    <strong>Overriding equals and hashCode in a custom entity?</strong> Paste your class definition here, and let's review its compliance with equals symmetry and hashCode bucket distribution constraints!
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-object-header', {
+      correct: 'Correct! The Mark Word header field is an 8-byte region on 64-bit JVMs that stores locks, GC age metadata, and the cached identity hashcode.',
+      wrong: 'Incorrect. The options represent other regions. The Klass Word points to class metadata, padding aligns to 8 bytes, and there is no Metadata Word in headers.'
+    });
+  </script>
+</body>
+</html>
