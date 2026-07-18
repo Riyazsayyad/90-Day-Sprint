@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>this and super — Reference</title>
+  <meta name="description" content="Quick reference guide for Java this and super keywords: constructor chaining, field hiding vs overriding rules, dynamic dispatch, and constructor lifecycle safety.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0013-this-super.html">&larr; Lesson 13</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>this & super Cheat Sheet</h1>
+  <p class="meta">Constructor Chaining Invariants, Resolution Matrix, and Thread Safety Guards</p>
+
+  <h2>1. Context & Scope Matrix</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 20%;">Keyword</th>
+      <th align="left" style="padding: 0.5rem; width: 30%;">Instance Context (Non-Static)</th>
+      <th align="left" style="padding: 0.5rem; width: 30%;">Class Context (Static)</th>
+      <th align="left" style="padding: 0.5rem; width: 20%;">Typical Use Case</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong><code>this</code></strong></td>
+      <td style="padding: 0.5rem;">Allowed. Points to the current executing heap instance.</td>
+      <td style="padding: 0.5rem;"><strong>Forbidden.</strong> Causes compiler error.</td>
+      <td style="padding: 0.5rem;">Resolve variable shadowing, Builder patterns.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong><code>super</code></strong></td>
+      <td style="padding: 0.5rem;">Allowed. Refers to parent class layer components.</td>
+      <td style="padding: 0.5rem;"><strong>Forbidden.</strong> Causes compiler error.</td>
+      <td style="padding: 0.5rem;">Access hidden fields or execute parent overridden methods.</td>
+    </tr>
+  </table>
+
+  <h2>2. Constructor Chaining Rules</h2>
+  <ul>
+    <li><strong>Chaining Placement:</strong> <code>this()</code> or <code>super()</code> must be the first line of the constructor body.</li>
+    <li><strong>Mutual Exclusion:</strong> You cannot place both <code>this()</code> and <code>super()</code> in the same constructor.</li>
+    <li><strong>Compiler Default behavior:</strong> If neither is declared, compiler inserts an implicit no-argument <code>super()</code> call.</li>
+    <li><strong>Safety Guarantee:</strong> Initializes state top-down (Object down to child subclass) to prevent child logic from accessing uninitialized parent state.</li>
+  </ul>
+
+  <h2>3. Field Hiding vs. Method Overriding</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Feature</th>
+      <th align="left" style="padding: 0.5rem; width: 35%;">Fields (Variables)</th>
+      <th align="left" style="padding: 0.5rem; width: 40%;">Methods</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Resolution Type</strong></td>
+      <td style="padding: 0.5rem;"><strong>Static</strong> (Compile-time)</td>
+      <td style="padding: 0.5rem;"><strong>Dynamic</strong> (Runtime lookup)</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Determinant</strong></td>
+      <td style="padding: 0.5rem;">The **Reference Type** of the variable.</td>
+      <td style="padding: 0.5rem;">The actual **Concrete Object type** on heap.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Hiding/Overriding</strong></td>
+      <td style="padding: 0.5rem;">Subclass field hides parent field. Both exist in memory.</td>
+      <td style="padding: 0.5rem;">Subclass method overrides parent method. Parent method bypassed.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>External Access</strong></td>
+      <td style="padding: 0.5rem;">Access hidden parent via cast: <code>((Parent) child).field</code>.</td>
+      <td style="padding: 0.5rem;">Cannot bypass overridden method from external calls.</td>
+    </tr>
+  </table>
+
+  <h2>4. Critical Lifecycle Safety Guards</h2>
+  
+  <h3>1. No Overridable Method Calls in Constructors</h3>
+  <p>Calling an overridable method in a constructor triggers it dynamically via the subclass before the subclass constructor has run. The overridden method runs against uninitialized subclass fields (which are still default/null), causing NullPointerExceptions or corrupt initial states.</p>
+
+  <h3>2. No "this" escaping during Construction</h3>
+  <p>Do not publish or share the <code>this</code> reference from inside a constructor (e.g., registering to a global listener or starting a thread). Other threads will obtain access to a partially-constructed object, violating thread safety and memory visibility guarantees.</p>
+
+  <h3>3. Spring AOP Proxy bypass</h3>
+  <p>Inside a Spring bean, calling <code>this.method()</code> bypasses transactional AOP interceptors because the invocation does not pass through the bean's surrounding proxy object. Autowire a self-reference or use AspectJ compiler integration if inner calls need transaction guards.</p>
+
+  <h2>5. Quick Code Reference</h2>
+  <pre><code class="language-java">class Base {
+    int id = 1;
+    void show() { System.out.println("Base"); }
+}
+
+class Sub extends Base {
+    int id = 2; // Hides Base.id
+    
+    @Override
+    void show() { 
+        super.show(); // 1. Calls Base.show()
+        System.out.println("Sub id: " + id); // 2. Sub.id (2)
+        System.out.println("Base id: " + super.id); // 3. Base.id (1)
+    }
+}</code></pre>
+</body>
+</html>

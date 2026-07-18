@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 13 — Java this and super Keywords</title>
+  <meta name="description" content="Master this and super in Java from an interview and software engineering perspective. Constructor chaining, field hiding, dynamic dispatch, constructor overridable hazards, and this-escape bugs.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="oop-0012-to-string.html">&larr; Lesson 12</a> &middot;
+    Lesson 13 of 13 &middot;
+    <a href="../reference/oop-0013-this-super.html">this/super Reference</a>
+  </nav>
+
+  <h1>Deep Dive: this and super in Java</h1>
+  <p class="meta">~25 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. What "this" and "super" Represent</h2>
+  <p>In Java, <code>this</code> and <code>super</code> are reserved keywords that act as special instance references within non-static contexts:</p>
+  <ul>
+    <li><strong><code>this</code> (Current Instance Reference):</strong> Points to the exact heap instance currently executing the code. It is used to resolve ambiguity between instance fields and local parameters, pass the current object as an argument, or return it in a fluent API (Builder pattern).</li>
+    <li><strong><code>super</code> (Parent instance Component):</strong> Points to the parent class portion of the current instance. It acts as a gateway to access overridden methods or hidden fields in the immediate parent class.</li>
+  </ul>
+  <div class="callout">
+    <strong>Key Rule:</strong> Neither <code>this</code> nor <code>super</code> can be referenced in static methods or static initializer blocks because static components are bound to the class metadata in Metaspace, not to any specific instance on the heap.
+  </div>
+
+  <h2>2. Constructor Chaining with this() and super()</h2>
+  <p>An object's lifecycle begins with memory allocation and constructor execution. Under inheritance, Java guarantees a strict **top-down initialization sequence** (from <code>Object</code> down to the leaf subclass).</p>
+
+  <h3>Chaining inside the same class via <code>this()</code></h3>
+  <p>To avoid code duplication (DRY principle), one constructor can delegate to another overloaded constructor in the same class using <code>this(arguments)</code>.</p>
+  <pre><code class="language-java">public class Product {
+    private final String name;
+    private final double price;
+
+    public Product(String name) {
+        this(name, 9.99); // Delegates to the two-parameter constructor
+    }
+
+    public Product(String name, double price) {
+        this.name = name;
+        this.price = price;
+    }
+}</code></pre>
+
+  <h3>Chaining to the parent class via <code>super()</code></h3>
+  <p>A subclass constructor must invoke a constructor of its parent class using <code>super(arguments)</code> to initialize parent state first.
+  <br>If no explicit <code>super()</code> or <code>this()</code> call is written, the Java compiler automatically inserts a default no-argument <code>super()</code> call as the very first statement.</p>
+
+  <h2>3. Why super() or this() Must Be the First Statement</h2>
+  <p>Java enforces that <code>super()</code> or <code>this()</code> must reside on the first line of a constructor.
+  <br><strong>The Reason:</strong> This guarantees that the parent class state is fully allocated and initialized <em>before</em> any subclass code executes. If subclass statements were allowed to run first, they might access or modify parent fields that haven't been initialized yet, leading to highly unpredictable states.</p>
+
+  <h2>4. Method Overriding vs. Field Hiding</h2>
+  <p>Understanding how methods and variables are resolved under inheritance is crucial for interview preparation:</p>
+  <ul>
+    <li><strong>Method Overriding (Polymorphic):</strong> Methods are resolved dynamically at runtime based on the actual concrete object type on the heap. This is called **Dynamic Method Dispatch** (using vtable lookups).</li>
+    <li><strong>Field Hiding (Static):</strong> Fields are <strong>not</strong> polymorphic. If a subclass declares a field with the exact same name as a parent class field, the parent field is **hidden**. The field accessed is determined statically at compile-time based on the **reference type** of the variable, not the heap object type.</li>
+  </ul>
+
+  <div class="callout">
+    <strong>Coding Trace:</strong>
+    <pre><code class="language-java">class Parent { String value = "ParentField"; }
+class Child extends Parent { String value = "ChildField"; }
+
+Parent p = new Child();
+System.out.println(p.value); // Prints "ParentField" (resolved by compile-time reference Parent)
+System.out.println(((Child)p).value); // Prints "ChildField" (explicit cast)</code></pre>
+  </div>
+
+  <h2>5. How "this" Behaves in Dynamic Dispatch</h2>
+  <p>If a parent class method is executed and contains a method call like <code>method()</code> (which is implicitly <code>this.method()</code>), Java performs dynamic dispatch on <code>this</code>.
+  <br>Even though the method code is defined in the parent class, <code>this</code> references the subclass instance on the heap. Thus, if the subclass overrides <code>method()</code>, the **subclass version will run**.</p>
+
+  <div class="callout">
+    <strong>Example:</strong>
+    <pre><code class="language-java">class Base {
+    public void show() { System.out.println("Base Show"); }
+    public void execute() { show(); } // Implicitly this.show()
+}
+class Derived extends Base {
+    @Override
+    public void show() { System.out.println("Derived Show"); }
+}
+
+Derived d = new Derived();
+d.execute(); // Prints "Derived Show" because dynamic dispatch resolves to Derived.show()</code></pre>
+  </div>
+
+  <h2>6. Calling Superclass Methods & Hidden Fields</h2>
+  <p>To bypass overriding or access hidden variables, use <code>super</code>:</p>
+  <ul>
+    <li><strong>Calling Overridden Method:</strong> <code>super.show()</code> executes the parent implementation directly.</li>
+    <li><strong>Accessing Hidden Field:</strong> <code>super.value</code> retrieves the hidden variable from the parent layer. Alternatively, you can cast <code>this</code> to the parent class: <code>((Parent) this).value</code>.</li>
+  </ul>
+
+  <h2>7. Calling Overridable Methods in Constructors (Critical Bug)</h2>
+  <p><strong>Strict Rule:</strong> **Never** invoke an overridable method from inside a constructor.</p>
+  <p>If you call a virtual (overridable) method in a parent constructor:
+  <ol>
+    <li>The parent constructor runs first (due to constructor chaining).</li>
+    <li>It invokes the method. Because of dynamic dispatch, the subclass overridden method runs.</li>
+    <li>The subclass method executes <strong>before the subclass constructor has run</strong> to initialize its own fields.</li>
+    <li>The subclass method accesses subclass fields, which are still at their default values (e.g. <code>null</code>, <code>0</code>, or <code>false</code>), leading to immediate <code>NullPointerException</code>s or structural bugs.</li>
+  </ol>
+  </p>
+
+  <h2>8. "this" Reference Escaping During Construction</h2>
+  <p>Another dangerous anti-pattern is **<code>this</code> escaping** in a constructor. This happens when the constructor publishes or shares the <code>this</code> reference before construction completes:</p>
+  <ul>
+    <li>Registering <code>this</code> as a listener/callback in a shared event bus.</li>
+    <li>Starting a new thread from inside the constructor that uses <code>this</code>.</li>
+    <li>Passing <code>this</code> to another object's constructor.</li>
+  </ul>
+  <p>If another thread or class accesses the escaped <code>this</code> reference, it will interact with a **partially constructed object**, creating race conditions and memory visibility issues that are incredibly hard to trace.</p>
+
+  <h2>9. Code Examples: Bad vs. Good</h2>
+
+  <h3>❌ The Buggy & Fragile Construction Pattern</h3>
+  <pre><code class="language-java">import java.util.ArrayList;
+import java.util.List;
+
+class ParentRegistry {
+    public static final List<ParentRegistry> list = new ArrayList<>();
+
+    public ParentRegistry() {
+        // VIOLATION 1: Calling overridable method inside constructor!
+        initData();
+        
+        // VIOLATION 2: "this" escaping! Publishing the object before constructor completes.
+        list.add(this); 
+    }
+
+    public void initData() {
+        System.out.println("Parent initialization");
+    }
+}
+
+class ChildRegistry extends ParentRegistry {
+    private String customConfig;
+
+    public ChildRegistry() {
+        super(); // implicit parent constructor call runs initData()
+        this.customConfig = "READY";
+    }
+
+    @Override
+    public void initData() {
+        // Accesses customConfig before ChildRegistry's constructor has assigned "READY"!
+        System.out.println("Config value: " + customConfig.toUpperCase()); 
+        // Throws NullPointerException! customConfig is null at this point.
+    }
+}</code></pre>
+
+  <h3>✅ The Production-Grade Safe Pattern</h3>
+  <p>To make the implementation robust:
+  <ul>
+    <li>Mark initialization methods as <code>final</code> or <code>private</code> to prevent them from being overridden and invoked prematurely during constructor chains.</li>
+    <li>Use a static factory method to register or publish objects <em>after</em> construction completes safely.</li>
+  </ul>
+  </p>
+  <pre><code class="language-java">import java.util.ArrayList;
+import java.util.List;
+
+class SafeRegistry {
+    public static final List<SafeRegistry> list = new ArrayList<>();
+    private final String status;
+
+    // Private/Protected constructor ensures instantiation is controlled
+    protected SafeRegistry(String status) {
+        this.status = status;
+        // Call a final/private method only - safe from subclass overriding
+        initInternal();
+    }
+
+    private final void initInternal() {
+        // Safe: This method cannot be overridden
+        System.out.println("Base initialization done");
+    }
+
+    // Static Factory Method prevents "this" escape during construction
+    public static SafeRegistry createAndRegister(String status) {
+        SafeRegistry instance = new SafeRegistry(status);
+        // Registration occurs ONLY after object is fully initialized
+        list.add(instance);
+        return instance;
+    }
+}</code></pre>
+
+  <h2>10. Spring & Framework Integration</h2>
+  <ul>
+    <li><strong>Spring Bean Initialization:</strong> Because Spring proxies beans to handle annotations like <code>@Transactional</code> or <code>@Async</code>, calling a method using <code>this.method()</code> inside a bean bypasses the Spring AOP proxy!
+      <br>If a transactional bean method calls <code>this.helperMethod()</code>, the transaction interceptor is ignored. To invoke proxy features, developers must inject the self-reference (e.g. via <code>@Autowired</code> on the bean itself or <code>AopContext.currentProxy()</code>).
+    </li>
+    <li><strong>Template Method Pattern:</strong> Base classes in frameworks (like Spring Security configs or JDBC templates) define abstract hook methods. Base constructors must never invoke these hooks. Instead, frameworks use post-construct lifecycle methods (like <code>@PostConstruct</code> or implementing <code>InitializingBean</code>) to safely initialize beans after constructors complete.</li>
+  </ul>
+
+  <h2>Retrieval Practice</h2>
+
+  <div class="quiz" id="quiz-constructor-order">
+    <p class="quiz-question">Why does the Java compiler throw an error if this() or super() is not the first line of a constructor?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="wrong">It reduces JVM execution speed and increases bytecode size.</button></li>
+      <li><button data-answer="correct">To guarantee parent state is initialized before subclass logic runs, ensuring safety.</button></li>
+      <li><button data-answer="wrong">Because static fields cannot be modified inside child class constructors.</button></li>
+      <li><button data-answer="wrong">To prevent multiple subclass instances from sharing the same parent reference.</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <div class="quiz" id="quiz-field-hiding">
+    <p class="quiz-question">If subclass overrides a method and hides a parent field, how is parent field access resolved from outside?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="wrong">It is resolved dynamically based on the concrete heap object type.</button></li>
+      <li><button data-answer="wrong">It is blocked entirely and triggers a compilation error.</button></li>
+      <li><button data-answer="correct">It is resolved statically based on the compile-time type of the variable reference.</button></li>
+      <li><button data-answer="wrong">The hidden field is deleted and only the child field exists in memory.</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Common Interview Questions</h2>
+  <div class="callout">
+    <strong>Q1: Can you use both this() and super() inside the same constructor?</strong>
+    <p>No. Both <code>this()</code> and <code>super()</code> must be the first statement of a constructor. Since you can only have one first statement, they are mutually exclusive. Calling <code>this()</code> delegates to another constructor which will eventually call <code>super()</code>, ensuring parent classes are initialized.</p>
+  </div>
+  <div class="callout">
+    <strong>Q2: Why is "this" escaping a problem in multithreaded environments?</strong>
+    <p>If the <code>this</code> reference escapes during construction, another thread can access the reference. Due to the Java Memory Model's visibility rules, the other thread might read default field values (like <code>null</code>) rather than the values assigned by the constructor, leading to data corruption or crashes.</p>
+  </div>
+  <div class="callout">
+    <strong>Q3: How does "this" behave inside nested or inner classes?</strong>
+    <p>Inside an inner class, the keyword <code>this</code> refers to the inner class instance itself. To reference the outer class instance, you must prefix it with the outer class name: <code>OuterClass.this</code>.</p>
+  </div>
+
+  <h2>Primary Sources & Reading</h2>
+  <ul>
+    <li>Review <em>Effective Java (3rd Edition)</em> by Joshua Bloch: Item 19 ("Design and document for inheritance or else prohibit it"), specifically detailing the hazards of calling overridable methods in constructors.</li>
+    <li>Java Language Specification (JLS): <a href="https://docs.oracle.com/javase/specs/jls/se17/html/jls-8.html#jls-8.8.7">Section 8.8.7 (Constructor Body)</a> on chaining rules.</li>
+  </ul>
+
+  <p class="teacher-note">
+    <strong>Not sure if your constructor chain is safe?</strong> Paste your class inheritance setup in the chat, and let's trace its bytecode initialization sequence!
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-constructor-order', {
+      correct: 'Correct! Enforcing initialization of parent state first prevents subclass logic from interacting with uninitialized parent fields, ensuring type safety.',
+      wrong: 'Incorrect. It is a fundamental memory/safety constraint of the language, not a performance or instance-sharing issue.'
+    });
+    initQuiz('quiz-field-hiding', {
+      correct: 'Correct! Fields do not support polymorphic dynamic lookup. The variable reference type determines which field is accessed at compile-time.',
+      wrong: 'Incorrect. Fields do not support dynamic dispatch, they are resolved statically. Casting will change the resolved field, and both fields exist in memory.'
+    });
+  </script>
+</body>
+</html>
