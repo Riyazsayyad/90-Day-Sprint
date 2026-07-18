@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 11 — Java equals() and hashCode() Contracts</title>
+  <meta name="description" content="Master equals() and hashCode() in Java from a software engineering and interview perspective. Detailed contracts, HashMap/HashSet mechanics, mutable key risks, records, framework integration, and best practices.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="oop-0010-object-class.html">&larr; Lesson 10</a> &middot;
+    Lesson 11 &middot;
+    <a href="oop-0012-to-string.html">Lesson 12 &rarr;</a> &middot;
+    <a href="../reference/oop-0011-equals-hashcode.html">equals/hashCode Reference</a>
+  </nav>
+
+  <h1>Deep Dive: equals() and hashCode() in Java</h1>
+  <p class="meta">~25 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <h2>1. Why java.lang.Object Provides equals() and hashCode()</h2>
+  <p>In Java, <code>java.lang.Object</code> is the common ancestor of all classes. By putting <code>equals(Object)</code> and <code>hashCode()</code> directly in the root class, Java establishes a universal capability: <strong>every object can be compared for equivalence and can represent itself as an integer hash.</strong></p>
+  <p>This allows Java's core library classes—specifically collections like <code>HashMap</code>, <code>HashSet</code>, and <code>Hashtable</code>—to work polymorphically with any class you ever write, without needing custom wrappers or explicit comparison adapters.</p>
+
+  <h2>2. Reference Equality (==) vs. Logical Equivalence (.equals())</h2>
+  <p>Understanding the difference between reference comparison and logical comparison is critical for bug-free code:</p>
+  <ul>
+    <li><strong><code>==</code> (Reference Equality):</strong> Compares memory addresses. It evaluates to <code>true</code> if and only if both variables point to the exact same object instance on the heap.</li>
+    <li><strong><code>equals()</code> (Logical Equivalence):</strong> Intended to check if two distinct objects are "meaningfully" equal. It compares the internal state (fields) of the objects.</li>
+  </ul>
+  <div class="callout">
+    <strong>Example:</strong>
+    <pre><code>String s1 = new String("Java");
+String s2 = new String("Java");
+System.out.println(s1 == s2);      // false (different heap instances)
+System.out.println(s1.equals(s2)); // true (same character data state)</code></pre>
+  </div>
+
+  <h2>3. Default Implementations in java.lang.Object</h2>
+  <p>If you do not override these methods, you inherit the default behavior from <code>java.lang.Object</code>:</p>
+  <ul>
+    <li><strong>Default <code>equals(Object obj)</code>:</strong> Checks reference equality using <code>==</code>.
+      <pre><code class="language-java">public boolean equals(Object obj) {
+    return (this == obj);
+}</code></pre>
+    </li>
+    <li><strong>Default <code>hashCode()</code>:</strong> A <code>public native int hashCode()</code>. The JVM generates this value, typically by mapping the memory address of the object to an integer (often using the <strong>identity hashcode</strong>, cached in the object's Mark Word header).</li>
+  </ul>
+
+  <h2>4. The Crucial Contracts and Why They Matter</h2>
+  <p>Java enforces strict mathematical rules on how these methods must behave. If your implementation violates these rules, collections will silently break, causing memory leaks, duplicate keys, and missing records that are impossible to find at runtime.</p>
+
+  <h3>The <code>equals(Object obj)</code> Contract</h3>
+  <p>For any non-null references <code>x</code>, <code>y</code>, and <code>z</code>, the implementation must be:</p>
+  <ol>
+    <li><strong>Reflexive:</strong> <code>x.equals(x)</code> must always return <code>true</code>.</li>
+    <li><strong>Symmetric:</strong> If <code>x.equals(y)</code> is <code>true</code>, then <code>y.equals(x)</code> must also be <code>true</code>.</li>
+    <li><strong>Transitive:</strong> If <code>x.equals(y)</code> is <code>true</code> and <code>y.equals(z)</code> is <code>true</code>, then <code>x.equals(z)</code> must be <code>true</code>.</li>
+    <li><strong>Consistent:</strong> Multiple invocations of <code>x.equals(y)</code> must return the same result, provided no information used in <code>equals</code> comparisons is modified.</li>
+    <li><strong>Non-nullity:</strong> <code>x.equals(null)</code> must always return <code>false</code>.</li>
+  </ol>
+
+  <h3>The <code>hashCode()</code> Contract</h3>
+  <ol>
+    <li>Whenever it is invoked on the same object more than once during an execution of a Java application, the <code>hashCode</code> method must consistently return the same integer (provided no information in <code>equals</code> is modified).</li>
+    <li>If two objects are equal according to the <code>equals(Object)</code> method, then calling the <code>hashCode</code> method on each of the two objects <strong>must produce the same integer result</strong>.</li>
+    <li>It is <em>not</em> required that if two objects are unequal, they must have different hashcodes. However, producing distinct integers for unequal objects improves the performance of hash tables.</li>
+  </ol>
+
+  <h2>5. How Hash-Based Collections Use equals() and hashCode()</h2>
+  <p>Let's demystify how a <code>HashMap</code> retrieves or inserts values. A <code>HashMap</code> uses an array of buckets internally. When you call <code>map.put(key, value)</code> or <code>map.get(key)</code>:</p>
+
+  <h3>Step 1: Hashing & Indexing</h3>
+  <p>The map first invokes <code>key.hashCode()</code> to obtain the raw hash. It then applies a supplemental hash function to prevent low-quality hashes from clustering, and performs a modulo-like bitwise operation to find the target bucket index:
+  <br><code>index = (n - 1) & hash</code> (where <code>n</code> is the bucket array length).</p>
+
+  <h3>Step 2: Bucket Search</h3>
+  <p>Once at the bucket, the map traverses the nodes (either a linked list or a red-black tree). To identify if the key already exists, it performs two comparisons on each node's key:
+  <ol>
+    <li>It compares the 32-bit hash integers: <code>node.hash == hash</code> (fast check).</li>
+    <li>If and only if the hashes match, it executes <code>node.key == key || node.key.equals(key)</code>.</li>
+  </ol>
+  </p>
+
+  <div class="callout">
+    <strong>Key Takeaway:</strong> Hash comparison acts as a fast guard. If two keys have different hashcodes, they are in different buckets, so <code>equals()</code> is never called! If hashcodes match, <code>equals()</code> is the final authority to prove equivalence.
+  </div>
+
+  <h2>6. Broken Implementations & What Happens</h2>
+
+  <h3>Case A: Override `equals()` but NOT `hashCode()`</h3>
+  <p>Suppose you have a <code>User</code> class and override <code>equals()</code> to check if usernames match, but you leave the default <code>hashCode()</code>.
+  <br>If you create two instances <code>new User("riyaz")</code> and <code>new User("riyaz")</code>, they are equal logically. But their default hashcodes will differ.
+  <br>When you store the first instance in a <code>HashSet</code>, it goes into Bucket 3.
+  <br>When you call <code>set.contains(new User("riyaz"))</code>, the second instance generates a different hash code (say, Bucket 7). The set searches Bucket 7, finds it empty, and returns <code>false</code>. You now have duplicates in your set!</p>
+
+  <h3>Case B: Override `hashCode()` but NOT `equals()`</h3>
+  <p>If you override <code>hashCode()</code> to return <code>42</code> for all instances, but leave default <code>equals()</code>:
+  <br>All instances land in the exact same bucket, causing severe collisions.
+  <br>When you call <code>map.get(new User("riyaz"))</code>, the map finds the bucket, hashes match (both are 42), and then calls <code>equals()</code>. Because <code>equals()</code> defaults to <code>==</code> reference comparison, it returns <code>false</code>. The map fails to find your user, rendering the data irretrievable.</p>
+
+  <h2>7. Performance Implications: Hash Collisions</h2>
+  <p>A poor hashcode distribution (e.g., returning a constant or ignoring important fields) maps many keys to the same bucket.
+  <br>In Java 8+, if a bucket's linked list size exceeds 8, the map converts it into a Red-Black Tree (<strong>treeification</strong>).
+  <ul>
+    <li><strong>Ideal Performance:</strong> O(1) constant time for operations when keys hash uniformly.</li>
+    <li><strong>Degraded Performance:</strong> O(log N) logarithmic time for treeified buckets, or O(N) linear time for untreeified linked lists.</li>
+  </ul>
+  </p>
+
+  <h2>8. The Danger of Mutable Keys</h2>
+  <p><strong>Crucial Rule:</strong> Never use mutable objects as keys in a hash-based collection, or at least never modify them after insertion.</p>
+  <p>If you insert an object into a <code>HashMap</code> and subsequently modify a field used in its <code>hashCode()</code> calculation:
+    <ol>
+      <li>The object's hashcode changes.</li>
+      <li>The object remains physically stored in the bucket corresponding to its <em>old</em> hashcode.</li>
+      <li>If you attempt to retrieve the object using the modified key, the map searches the bucket corresponding to the <em>new</em> hashcode, misses it, and returns <code>null</code>.</li>
+      <li>If you try to retrieve it using the old key values, the map computes the old hash, goes to the correct bucket, but then calls <code>equals()</code>. The fields have changed, so <code>equals()</code> returns <code>false</code>. The element is now a <strong>memory leak</strong>, stuck in the map forever!</li>
+    </ol>
+  </p>
+
+  <h2>9. Code Examples: Bad vs. Good</h2>
+
+  <h3>❌ The Buggy Implementation</h3>
+  <p>This class violates symmetry, transitivity, and breaks when added to collections due to a missing/bad hashCode.</p>
+  <pre><code class="language-java">public class BadEmployee {
+    private int id;
+    private String name;
+
+    public BadEmployee(int id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    // VIOLATION 1: Subclass check breaks symmetry if inheritance is used
+    @Override
+    public boolean equals(Object obj) {
+        if (obj instanceof BadEmployee) {
+            return this.id == ((BadEmployee) obj).id;
+        }
+        return false;
+    }
+
+    // VIOLATION 2: No hashCode overridden! 
+    // Inherits default identity hashCode, breaking HashMap lookups.
+}</code></pre>
+
+  <h3>✅ The Correct Modern Implementation (Java 7+)</h3>
+  <pre><code class="language-java">import java.util.Objects;
+
+public final class GoodEmployee {
+    private final int id;
+    private final String name;
+
+    public GoodEmployee(int id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        // 1. Optimize: Check if references are identical
+        if (this == obj) return true;
+
+        // 2. Check nullity and exact class match (avoids subclass symmetry issues)
+        if (obj == null || getClass() != obj.getClass()) return false;
+
+        // 3. Safe cast
+        GoodEmployee other = (GoodEmployee) obj;
+
+        // 4. Compare fields (using null-safe Objects.equals)
+        return this.id == other.id && 
+               Objects.equals(this.name, other.name);
+    }
+
+    @Override
+    public int hashCode() {
+        // Returns a hash derived from all fields checked in equals
+        return Objects.hash(id, name);
+    }
+}</code></pre>
+
+  <h2>10. Objects.equals() and Objects.hash()</h2>
+  <p>Introduced in Java 7, <code>java.util.Objects</code> provides static helpers that simplify implementation:
+  <ul>
+    <li><strong><code>Objects.equals(a, b)</code>:</strong> Handles null values gracefully. It returns <code>true</code> if both are null, <code>false</code> if only one is null, and delegates to <code>a.equals(b)</code> otherwise.</li>
+    <li><strong><code>Objects.hash(Object... values)</code>:</strong> Accepts a varargs array and computes a hash value. Internally, it calls <code>Arrays.hashCode()</code> which uses the formula: 
+      <br><code>h = 31 * h + (value == null ? 0 : value.hashCode())</code>.</li>
+  </ul>
+  </p>
+  <div class="callout">
+    <strong>Performance Tip:</strong> While <code>Objects.hash()</code> is elegant, it allocates a temporary array for the varargs argument and boxes primitives. In hot loops, write an inline hash computation to avoid garbage collection overhead.
+  </div>
+
+  <h2>11. Java Records (Java 14+)</h2>
+  <p>Java Records represent pure data carriers. When you declare a record:
+  <pre><code class="language-java">public record UserRecord(int id, String username) {}</code></pre>
+  The compiler automatically generates private final fields, accessor methods, and <strong>implicit, correct overrides of <code>equals()</code> and <code>hashCode()</code></strong>.
+  <br>The generated implementations compare all components declared in the record header. If you need special rules (e.g., ignoring a field), you can manually override them within the record body, but for 95% of use cases, the compiler-generated ones are perfect and bug-free.
+  </p>
+
+  <h2>12. IDE-Generated vs. Lombok vs. Manual</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Approach</th>
+        <th>Pros</th>
+        <th>Cons</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Manual Handwritten</strong></td>
+        <td>Zero overhead, customized field comparison sequence.</td>
+        <td>Boilerplate, prone to human error and null pointer risks.</td>
+      </tr>
+      <tr>
+        <td><strong>IDE Generated (IntelliJ/Eclipse)</strong></td>
+        <td>Explicit visibility, easy to customize.</td>
+        <td>Clutters source files, doesn't update automatically if fields are added.</td>
+      </tr>
+      <tr>
+        <td><strong>Lombok (<code>@EqualsAndHashCode</code>)</strong></td>
+        <td>Clean, zero boilerplate, automatically updates.</td>
+        <td>Requires compiler plugin, opaque runtime bytecode.</td>
+      </tr>
+      <tr>
+        <td><strong>Objects Utility Methods</strong></td>
+        <td>Null-safe, readable, standard JDK.</td>
+        <td>Slight allocation overhead in hashCode (varargs arrays).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>13. Real-World Framework Integration</h2>
+  <ul>
+    <li><strong>Hibernate/JPA Entities:</strong> Hibernate relies heavily on equals/hashCode. But database entities present a unique challenge: their ID is often <code>null</code> until persisted!
+      <ul>
+        <li>If you use the database ID in <code>hashCode()</code>, saving the entity will change its ID from null to a generated value, changing the hashcode and breaking collections (the mutable key hazard!).</li>
+        <li><strong>Best Practice:</strong> Use a stable, unique <em>business key</em> (like UUID or natural unique fields) for <code>equals</code> and <code>hashCode</code>. If none exists, fall back to a constant hashCode (e.g. <code>31</code>) and compare equality by ID if present, otherwise by reference. This forces Hibernate to use reference matching for unpersisted entities but preserves collection lookups.</li>
+      </ul>
+    </li>
+    <li><strong>Spring Caching (<code>@Cacheable</code>):</strong> When caching method results, Spring generates cache keys based on method arguments. If custom classes are arguments, they must implement a correct <code>equals()</code> and <code>hashCode()</code>, otherwise Spring cannot match the cache keys, leading to cache misses.</li>
+  </ul>
+
+  <h2>Retrieval Practice</h2>
+
+  <div class="quiz" id="quiz-contract-violation">
+    <p class="quiz-question">What is the direct consequence of overriding equals() without overriding hashCode() in a class stored as a HashMap key?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="wrong">The compiler throws a compilation error.</button></li>
+      <li><button data-answer="correct">Equivalent keys return different hashcodes, making stored items irretrievable.</button></li>
+      <li><button data-answer="wrong">The HashMap automatically converts all buckets to red-black trees instantly.</button></li>
+      <li><button data-answer="wrong">A NullPointerException is thrown during the HashMap lookup.</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <div class="quiz" id="quiz-mutable-keys">
+    <p class="quiz-question">Why is modifying a field used in hashCode() after placing the object in a HashSet dangerous?</p>
+    <ul class="quiz-options">
+      <li><button data-answer="wrong">The HashSet immediately throws a ConcurrentModificationException.</button></li>
+      <li><button data-answer="wrong">The JVM executes a garbage collection sweep to clear the object.</button></li>
+      <li><button data-answer="correct">The object becomes trapped in the old bucket index, leading to retrieval failures.</button></li>
+      <li><button data-answer="wrong">The HashSet reorganizes its capacity and updates the index automatically.</button></li>
+    </ul>
+    <p class="quiz-feedback" aria-live="polite"></p>
+  </div>
+
+  <h2>Common Interview Questions</h2>
+  <div class="callout">
+    <strong>Q1: Can two unequal objects return the same hashCode?</strong>
+    <p>Yes. This is called a **hash collision**. Hash functions map infinite object combinations to a finite 32-bit integer space. While valid, collisions degrade hash table performance from O(1) towards O(log N) or O(N).</p>
+  </div>
+  <div class="callout">
+    <strong>Q2: Why does equals() take Object as an argument rather than the specific class type?</strong>
+    <p>Because the method signature in the parent class <code>java.lang.Object</code> is <code>equals(Object)</code>. If you write <code>public boolean equals(MyClass other)</code>, you are **overloading** the method, not **overriding** it. The collections library calls <code>equals(Object)</code>, so your custom overloaded version will be ignored!</p>
+  </div>
+  <div class="callout">
+    <strong>Q3: How does subclassing affect equals() transitivity?</strong>
+    <p>As Joshua Bloch details in <em>Effective Java</em>, there is no way to extend an instantiable class and add a value component while preserving the equals contract. If you use <code>instanceof</code>, subclasses compare equal to parents but not vice-versa (symmetry broken), or transitivity breaks. To solve this, favor composition over inheritance, or check types using <code>getClass() != obj.getClass()</code> to enforce strict type identity.</p>
+  </div>
+
+  <h2>Primary Sources & Reading</h2>
+  <ul>
+    <li>Chapter 3 of <em>Effective Java (3rd Edition)</em> by Joshua Bloch: Item 10 ("Obey the general contract when overriding equals") and Item 11 ("Always override hashCode when you override equals").</li>
+    <li>Java documentation on <a href="https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Object.html#equals(java.lang.Object)">Object.equals()</a> and <a href="https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/lang/Object.html#hashCode()">Object.hashCode()</a>.</li>
+  </ul>
+
+  <p class="teacher-note">
+    <strong>Need to check your entity's equals() implementation?</strong> Paste your class structure in the chat, and let's trace its behavioral correctness under inheritance or dynamic persistence!
+  </p>
+
+  <script src="../assets/quiz.js"></script>
+  <script>
+    initQuiz('quiz-contract-violation', {
+      correct: 'Correct! Because the default hashCode() returns different integers for different instances, a lookup creates a new instance with a matching username, hashes to a different bucket, and fails to find the entry.',
+      wrong: 'Incorrect. Java does not catch this at compile-time, it is a logical runtime error. HashMap does not treeify instantly, and it will not throw a NullPointerException.'
+    });
+    initQuiz('quiz-mutable-keys', {
+      correct: 'Correct! The bucket index is calculated from the hashCode. If the hashCode changes, the lookup searches a different bucket. Since the item remains in the old bucket, the set fails to find it.',
+      wrong: 'Incorrect. There is no automated re-indexing or GC trigger for mutable state changes, nor does it throw a ConcurrentModificationException (which is only for structural collection modifications during traversal).'
+    });
+  </script>
+</body>
+</html>

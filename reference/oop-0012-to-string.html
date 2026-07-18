@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>toString() — Reference</title>
+  <meta name="description" content="Quick reference guide for Java toString(): formatting, security masking, Hibernate StackOverflow preventions, Lombok configuration, and Null-safe helper conversions.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0012-to-string.html">&larr; Lesson 12</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>toString() Cheat Sheet & Reference</h1>
+  <p class="meta">Secure Logging Patterns, Bidirectional Relationships, and Tool Options</p>
+
+  <h2>1. Implementation Guidelines</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Rule</th>
+      <th align="left" style="padding: 0.5rem; width: 45%;">Rationale & Behavior</th>
+      <th align="left" style="padding: 0.5rem; width: 30%;">Example Format</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Start with ClassName</strong></td>
+      <td style="padding: 0.5rem;">Provides immediate type identification in massive log search outputs.</td>
+      <td style="padding: 0.5rem;"><code>"User[...]"</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Essential State Only</strong></td>
+      <td style="padding: 0.5rem;">Omit large collections, binary fields (like raw byte arrays), or heavy nested records to save heap allocation and log size.</td>
+      <td style="padding: 0.5rem;">Exclude list fields. Keep IDs and enum statuses.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Null Safety</strong></td>
+      <td style="padding: 0.5rem;">Avoid raw operations on nullable object properties. Use <code>Objects.toString()</code> or ternary checks.</td>
+      <td style="padding: 0.5rem;"><code>Objects.toString(name)</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Standard Syntax</strong></td>
+      <td style="padding: 0.5rem;">Use standard JSON or property layouts to allow regex-based parser matching in ELK/Splunk.</td>
+      <td style="padding: 0.5rem;"><code>"User[id=12, name='Riyaz']"</code></td>
+    </tr>
+  </table>
+
+  <h2>2. Security Checklist: Sensitive Information</h2>
+  <p>To avoid compliance violations (GDPR, PCI-DSS, HIPAA), apply these rules for data classifications:</p>
+  <ul>
+    <li><strong>Exclude Completely:</strong> Password hashes, raw tokens, PINs, cryptographic keys.
+      <br><em>Lombok:</em> Place <code>@ToString.Exclude</code> on the field definition.
+    </li>
+    <li><strong>Apply Masking:</strong> Credit card numbers, Social Security Numbers (SSN), full personal names/emails (if required by strict privacy configurations).
+      <pre><code class="language-java">// Masking Credit Card Number
+private String maskCreditCard(String cc) {
+    return (cc == null || cc.length() < 4) ? "****" : "****-****-****-" + cc.substring(cc.length() - 4);
+}</code></pre>
+    </li>
+  </ul>
+
+  <h2>3. Hibernate / Bidirectional Relationship Protection</h2>
+  <p>Naively calling <code>toString()</code> on bidirectional associations causes infinite loops and crashes with a <code>StackOverflowError</code>.
+  <br><strong>Mitigation checklist:</strong>
+  <ol>
+    <li>**Exclude bidirectional list collections** from parent class <code>toString()</code>.</li>
+    <li>**Exclude the parent reference field** from child class <code>toString()</code>.</li>
+    <li>Do not call getters on Lazy-loaded collections or proxy fields inside <code>toString()</code> to avoid triggering <code>LazyInitializationException</code>.</li>
+  </ol>
+  </p>
+
+  <h2>4. Coding Templates</h2>
+  <h3>Java 7+ Objects.toString Utility</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 40%;">Method Signature</th>
+      <th align="left" style="padding: 0.5rem; width: 60%;">Output Behavior if Null</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>Objects.toString(o)</code></td>
+      <td style="padding: 0.5rem;">Returns the string literal <code>"null"</code>.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>Objects.toString(o, "DEFAULT")</code></td>
+      <td style="padding: 0.5rem;">Returns the custom fallback string <code>"DEFAULT"</code>.</td>
+    </tr>
+  </table>
+
+  <h3>Lombok Annotation Setup</h3>
+  <pre><code class="language-java">import lombok.ToString;
+
+@ToString(callSuper = true)
+public class Customer extends Person {
+    private int id;
+    
+    @ToString.Exclude
+    private String rawCardPin; // Excluded from logging
+}</code></pre>
+</body>
+</html>

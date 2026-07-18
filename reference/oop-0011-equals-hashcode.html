@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>equals() and hashCode() — Reference</title>
+  <meta name="description" content="Quick reference guide for Java equals() and hashCode(): contracts, HashMap mechanics, best practices, record types, and Hibernate entity patterns.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0011-equals-hashcode.html">&larr; Lesson 11</a> &middot;
+    <a href="../lessons/oop-0012-to-string.html">Lesson 12 &rarr;</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>equals() & hashCode() Cheat Sheet</h1>
+  <p class="meta">Core Contracts, Collection Integration, and Production Coding Patterns</p>
+
+  <h2>1. The equals() Mathematical Contract</h2>
+  <p>For any non-null object references <code>x</code>, <code>y</code>, and <code>z</code>:</p>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Contract Property</th>
+      <th align="left" style="padding: 0.5rem; width: 35%;">Requirement</th>
+      <th align="left" style="padding: 0.5rem; width: 40%;">Common Pitfalls & Warnings</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Reflexive</strong></td>
+      <td style="padding: 0.5rem;"><code>x.equals(x)</code> must return <code>true</code>.</td>
+      <td style="padding: 0.5rem;">Broken by custom collections or floating point comparisons if NaN values are poorly handled.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Symmetric</strong></td>
+      <td style="padding: 0.5rem;"><code>x.equals(y)</code> iff <code>y.equals(x)</code>.</td>
+      <td style="padding: 0.5rem;"><strong>Highly Vulnerable:</strong> Using <code>instanceof</code> across a base class and a subclass. Subclass equals fails to match parent. Enforce strict class checks via <code>getClass()</code>.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Transitive</strong></td>
+      <td style="padding: 0.5rem;">If <code>x.equals(y)</code> & <code>y.equals(z)</code>, then <code>x.equals(z)</code>.</td>
+      <td style="padding: 0.5rem;">Adding a state field in a subclass and comparing polymorphic types will break transitivity if not careful. Favor composition over inheritance.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Consistent</strong></td>
+      <td style="padding: 0.5rem;">Repeated calls return the same outcome unless state is modified.</td>
+      <td style="padding: 0.5rem;">Never perform network-dependent lookups in <code>equals</code> (e.g. <code>java.net.URL.equals()</code> resolves IP addresses over network, breaking consistency and blocking threads!).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Non-nullity</strong></td>
+      <td style="padding: 0.5rem;"><code>x.equals(null)</code> must return <code>false</code>.</td>
+      <td style="padding: 0.5rem;">Ensure null check occurs at the start. <code>getClass()</code> check or <code>instanceof</code> handles null implicitly, but an explicit check is clean.</td>
+    </tr>
+  </table>
+
+  <h2>2. The hashCode() Contract</h2>
+  <ol>
+    <li>Consistency during JVM runtime execution.</li>
+    <li><strong>The Critical Rule:</strong> If <code>a.equals(b) == true</code>, then <code>a.hashCode() == b.hashCode()</code>.</li>
+    <li>If <code>a.equals(b) == false</code>, their hashcodes do not have to differ, but different hashcodes optimize table distributions.</li>
+  </ol>
+
+  <h2>3. HashMap Internal Lookup Flow</h2>
+  <pre><code>
+  When executing map.get(key):
+  
+                 [ Compute key.hashCode() ]
+                             |
+                             v
+           [ Supplemental Hashing & Bucket Index ]
+                  index = (n - 1) & hash
+                             |
+                             v
+                  [ Navigate to Bucket ]
+                             |
+                             v
+             +--> [ For each Node in Bucket ] <---+
+             |               |                    |
+             |               v                    |
+             |      Does node.hash == hash?       |
+             |       (Fast integer check)         |
+             |         /              \           |
+             |       (Yes)            (No) -------+
+             |         |
+             v         v
+     Does node.key == key || node.key.equals(key)?
+               /                    \
+             (Yes)                  (No) ---------+
+               |                                  |
+               v                                  v
+     [ Return node.value ]               [ Search Next Node ]
+                                         If none, return null
+  </code></pre>
+
+  <h2>4. Production Implementation Checklist</h2>
+  <pre><code class="language-java">@Override
+public boolean equals(Object obj) {
+    // 1. Reference check
+    if (this == obj) return true;
+
+    // 2. Null and strict type checking (avoids symmetry/subclass violations)
+    if (obj == null || getClass() != obj.getClass()) return false;
+
+    // 3. Cast to concrete class
+    Employee other = (Employee) obj;
+
+    // 4. Compare fields safely
+    return this.id == other.id &&
+           Double.compare(this.salary, other.salary) == 0 && // Safe double comparison
+           Objects.equals(this.name, other.name);            // Null-safe object reference comparison
+}
+
+@Override
+public int hashCode() {
+    // Combine fields using JDK helper
+    return Objects.hash(id, salary, name);
+}</code></pre>
+
+  <h2>5. Special Types & Frameworks Guidelines</h2>
+  <h3>Java Records (Java 14+)</h3>
+  <ul>
+    <li>Records automatically generate a final field for each component and build <code>equals()</code> and <code>hashCode()</code> behind the scenes.</li>
+    <li>Comparing records evaluates all component fields. If you override them inside a record, you risk breaking their data-carrier invariants. Keep records clean.</li>
+  </ul>
+
+  <h3>Hibernate / JPA Entities</h3>
+  <ul>
+    <li>Database entities have IDs that are <code>null</code> before saving (unpersisted).</li>
+    <li>If you use the ID in <code>hashCode()</code>, the hashcode will change when the entity is saved (violating the Consistency contract).</li>
+    <li><strong>Solution:</strong> Use a stable, non-null, unique business key (e.g. email, UUID) if available. If not, use a constant hashcode (e.g. <code>31</code>) and compare IDs in <code>equals()</code>. Returning a constant forces the entity bucket to a linked list, but Hibernate relies on reference checks or generated keys correctly during updates.</li>
+  </ul>
+
+  <h3>Floating Point Math in equals()</h3>
+  <ul>
+    <li>Do not use <code>==</code> for floats or doubles inside equals. Use <code>Float.compare(f1, f2)</code> and <code>Double.compare(d1, d2)</code>.</li>
+    <li>This handles special values like <code>Float.NaN</code> and handles sign differences between positive and negative zero (<code>-0.0</code> vs <code>+0.0</code>) correctly.</li>
+  </ul>
+
+  <h2>6. Quick Reference Table</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd;">
+      <th align="left" style="padding: 0.5rem; width: 30%;">Scenario</th>
+      <th align="left" style="padding: 0.5rem; width: 70%;">Expected Result / Behavior</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;">Mutable Keys modified in Set</td>
+      <td style="padding: 0.5rem;">Object is trapped in old bucket; set.contains() returns false; element cannot be removed easily (memory leak).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;">Different class instance comparison</td>
+      <td style="padding: 0.5rem;">Must return false. Avoids ClassCastExceptions and preserves symmetry.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;">Objects.hash() overhead</td>
+      <td style="padding: 0.5rem;">Slight heap allocations from implicit arrays (varargs) and primitive boxing. In performance-critical loops, compute hash manually: <code>int result = 17; result = 31 * result + field;</code>.</td>
+    </tr>
+  </table>
+</body>
+</html>

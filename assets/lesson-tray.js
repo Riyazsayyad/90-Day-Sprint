@@ -11,6 +11,8 @@
     { num: '08', file: 'oop-0008-polymorphism.html', title: 'Polymorphism in Java', meta: '12 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
     { num: '09', file: 'oop-0009-abstraction.html', title: 'Abstraction in Java', meta: '12 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
     { num: '10', file: 'oop-0010-object-class.html', title: 'java.lang.Object Root Class', meta: '15 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
+    { num: '11', file: 'oop-0011-equals-hashcode.html', title: 'equals() & hashCode() Contracts', meta: '25 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
+    { num: '12', file: 'oop-0012-to-string.html', title: 'toString() Invariants & Security', meta: '20 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
     
     // Module 01: Collections Internals
     { num: '01', file: '0001-what-is-a-functional-interface.html', title: 'What Is a Functional Interface?', meta: '5 min read &bull; Core Java', module: 'Collections Internals', moduleNum: '01' },
