@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>static Keyword — Reference</title>
+  <meta name="description" content="Quick reference guide for Java static keyword: memory footprint, execution sequences, nested classes, static binding vs dynamic dispatch.">
+  <link class="stylesheet" href="../assets/lesson.css" rel="stylesheet">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0014-static.html">&larr; Lesson 14</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>static Keyword Cheat Sheet</h1>
+  <p class="meta">JVM Allocation, Execution Lifecycle, and Thread Safety Guards</p>
+
+  <h2>1. Context & Scope Matrix</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background: #f7f7f0;">
+      <th align="left" style="padding: 0.5rem; width: 20%;">Keyword context</th>
+      <th align="left" style="padding: 0.5rem; width: 40%;">Allowed Access Inside Context</th>
+      <th align="left" style="padding: 0.5rem; width: 40%;">Implicit variables available</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Static Method / Block</strong></td>
+      <td style="padding: 0.5rem;">Other static variables and static methods. Non-static variables are blocked.</td>
+      <td style="padding: 0.5rem;">None. <code>this</code> and <code>super</code> references are unavailable.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Instance Method / Block</strong></td>
+      <td style="padding: 0.5rem;">All instance and static variables, methods.</td>
+      <td style="padding: 0.5rem;">Implicit <code>this</code> pointer (refers to the current executing instance).</td>
+    </tr>
+  </table>
+
+  <h2>2. Memory Location Breakdown (Java 8+)</h2>
+  <ul>
+    <li><strong>Metaspace (Off-Heap native memory):</strong> Holds the Class Metadata (structure, method signatures, constant pool, annotations).</li>
+    <li><strong>Heap Space:</strong> Holds the concrete <code>java.lang.Class</code> instance representing the class. <strong>Static variables reside directly inside this Class instance on the heap.</strong></li>
+    <li><strong>Stack Space:</strong> Method frames holding local variables and references pointing to objects on the Heap.</li>
+  </ul>
+
+  <h2>3. Parent-Child Initialization Chain</h2>
+  <p>During the loading phase, the JVM executes initializers top-down. The strict order of execution is:</p>
+  <pre>
+1. Parent static variables & blocks (in code order)
+2. Child static variables & blocks (in code order)
+3. Parent instance variables & initializers
+4. Parent Constructor
+5. Child instance variables & initializers
+6. Child Constructor
+  </pre>
+
+  <h2>4. Nesting and Memory reference</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background: #f7f7f0;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Class Type</th>
+      <th align="left" style="padding: 0.5rem; width: 35%;">Outer Class Instance Requirement</th>
+      <th align="left" style="padding: 0.5rem; width: 40%;">Enclosing Instance Reference pointer</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Static Nested Class</strong></td>
+      <td style="padding: 0.5rem;">No. Can be initialized independently: <code>new Outer.Nested()</code>.</td>
+      <td style="padding: 0.5rem;">No (saves reference field pointer, no memory leak hazard).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Inner Class (Non-static)</strong></td>
+      <td style="padding: 0.5rem;">Yes. Requires enclosing instance: <code>outerObj.new Inner()</code>.</td>
+      <td style="padding: 0.5rem;">Yes (holds <code>Outer.this</code> hidden compiler pointer, risk of memory leaks).</td>
+    </tr>
+  </table>
+
+  <h2>5. Critical Lifecycle Hazards</h2>
+  
+  <h3>1. Mutable static Fields</h3>
+  <p>Static fields are shared among all execution threads. If they are mutable (e.g. static maps, shared counters), they require lock synchronization or Atomic classes (like <code>AtomicInteger</code>) to be thread-safe. Singletons must protect state mutation.</p>
+
+  <h3>2. ExceptionInInitializerError</h3>
+  <p>If a static variable assignment or a static block throws a runtime exception, the JVM marks the class as failed and throws an <code>ExceptionInInitializerError</code>. Subsequent calls to the class will result in a <code>NoClassDefFoundError</code>.</p>
+
+  <h3>3. Spring Bean Singleton != static</h3>
+  <p>A Spring singleton is a standard heap instance managed by Spring's <code>ApplicationContext</code>. It fully supports Dependency Injection (DI) and dynamic AOP proxies, whereas static variables bypass Spring DI entirely, complicating unit testing and mocking.</p>
+
+  <h2>6. Quick Code Reference</h2>
+  <pre><code class="language-java">public class ResourcePool {
+    private static final int MAX_SIZE = 100; // Shared Constant
+    private static int activeCount = 0;      // Shared state (needs concurrency guards)
+
+    // Thread-safe Initialization Holder
+    private static class InstanceHolder {
+        private static final ResourcePool INSTANCE = new ResourcePool();
+    }
+
+    public static ResourcePool getInstance() {
+        return InstanceHolder.INSTANCE; // Lazy loaded & thread-safe
+    }
+}</code></pre>
+</body>
+</html>

@@ -1,0 +1,7 @@
+# java.lang.Object static keyword mechanics, class loading and initialization track
+
+The user requested a lesson on the `static` keyword in Java from an interview and software engineering perspective (via `/teach /teach today we are studying: Module 00 — Core Java & OOP... static`). This covers: why static exists, class-level vs object-level state, static variables (memory allocation on heap inside Class objects, JMM thread safety hazards), static methods (absence of `this`, utility vs factory design patterns), static blocks (execution order, class loading phases, exception handling wrapper wrappers), static nested classes (saving pointer memory and preventing outer context reference leaks), static imports readability concerns, class initialization triggers, static vs instance comparison matrices, production integration examples (Collections, logger, Spring singletons vs static, executors, singleton holder idiom), interview MCQs, coding exercises, and tricky questions.
+
+**Evidence:** Explicit user request: `/teach /teach Today we are studying: Module 00 — Core Java & OOP, Section 3 — Java Language Design, Lesson 14 — static`
+
+**Implications:** Explain JVM class loading and linking phases. Contrast static Metaspace metadata with heap class variable storage. Highlight mutable static field concurrency dangers in backend systems. Differentiate static singletons from Spring context singletons to avoid dependency injection anti-patterns.
