@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>final Keyword — Reference</title>
+  <meta name="description" content="Quick reference guide for Java final keyword: variables, methods, classes, compile-time constants, inlining, and JVM JIT compiler optimizations.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/oop-0015-final.html">&larr; Lesson 15</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>final Keyword Cheat Sheet</h1>
+  <p class="meta">Variable Invariance, Devirtualization, and Constructor Chaining Rules</p>
+
+  <h2>1. Scope & Behavior Matrix</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background: #f7f7f0;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Target Scope</th>
+      <th align="left" style="padding: 0.5rem; width: 45%;">Rule & Compiler Enforcement</th>
+      <th align="left" style="padding: 0.5rem; width: 30%;">Primary Purpose</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Variable (Primitive)</strong></td>
+      <td style="padding: 0.5rem;">Value cannot be changed after initial assignment.</td>
+      <td style="padding: 0.5rem;">Constant values, state integrity.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Variable (Reference)</strong></td>
+      <td style="padding: 0.5rem;">Heap address pointer cannot change. Referenced object is NOT locked.</td>
+      <td style="padding: 0.5rem;">Pointer safety, sharing references.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Method</strong></td>
+      <td style="padding: 0.5rem;">Cannot be overridden by subclasses. Declared private final methods are not overridden but hidden.</td>
+      <td style="padding: 0.5rem;">Design locking, skeleton structure.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Class</strong></td>
+      <td style="padding: 0.5rem;">Cannot be extended/subclassed. All methods are implicitly final.</td>
+      <td style="padding: 0.5rem;">Immutability, security protection.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Parameter</strong></td>
+      <td style="padding: 0.5rem;">Cannot be reassigned inside the method body.</td>
+      <td style="padding: 0.5rem;">Prevent input mutations.</td>
+    </tr>
+  </table>
+
+  <h2>2. Definite Assignment of Blank final</h2>
+  <ul>
+    <li><strong>Instance variables:</strong> Must be assigned exactly once in every constructor path or instance initializer block.</li>
+    <li><strong>Static variables:</strong> Must be assigned exactly once in static initializer blocks or static declarations.</li>
+    <li><strong>Local variables:</strong> Can be left unassigned upon declaration, but must be assigned exactly once before being read.</li>
+  </ul>
+
+  <h2>3. Compile-Time Constants (CTC) vs Runtime Constants</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background: #f7f7f0;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Feature</th>
+      <th align="left" style="padding: 0.5rem; width: 35%;">Compile-Time Constants (CTC)</th>
+      <th align="left" style="padding: 0.5rem; width: 40%;">Runtime final Variable</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Declaration</strong></td>
+      <td style="padding: 0.5rem;"><code>static final int MAX = 100;</code></td>
+      <td style="padding: 0.5rem;"><code>final double VAL = Math.random();</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Resolution</strong></td>
+      <td style="padding: 0.5rem;">Resolved at compilation.</td>
+      <td style="padding: 0.5rem;">Resolved at class initialization or runtime.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Bytecode Inlining</strong></td>
+      <td style="padding: 0.5rem;">Inlined directly as literals into client classes.</td>
+      <td style="padding: 0.5rem;">Not inlined; resolved via field lookups (<code>getstatic</code>/<code>getfield</code>).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Class Loading</strong></td>
+      <td style="padding: 0.5rem;">Accessing CTC does NOT load or initialize the class.</td>
+      <td style="padding: 0.5rem;">Accessing triggers standard class initialization.</td>
+    </tr>
+  </table>
+
+  <h2>4. Key JVM JIT Optimizations</h2>
+  <h3>1. Speculative Devirtualization</h3>
+  <p>JVM maps dynamic method calls using a lookup table (vtable). When class/method is marked <code>final</code>, the lookup table is bypassed, transforming dynamic method lookup into direct calls.</p>
+  <h3>2. Method Inlining</h3>
+  <p>JIT replaces small method call instructions directly with the method body. Devirtualized final methods are ideal candidates, removing stack frame push/pop runtime overhead.</p>
+  <h3>3. Constant Folding</h3>
+  <p>Mathematical calculations involving constant fields (e.g. <code>final int sec = 60; int min = sec * 60;</code>) are pre-calculated to <code>3600</code> at compile-time.</p>
+
+  <h2>5. Design Guidelines</h2>
+  <ul>
+    <li><strong>String pool safety:</strong> <code>java.lang.String</code> is final to preserve integrity, caching, hash codes, and protect dynamic class loaders from loading malicious subclass variations.</li>
+    <li><strong>Spring Injection:</strong> Constructor injection using final variables ensures complete object configuration on load and makes units mock-friendly.</li>
+    <li><strong>Defensive copying:</strong> When using final variables referencing mutable types (like <code>java.util.Date</code> or Lists), return clone values to preserve class encapsulation boundaries.</li>
+  </ul>
+
+  <h2>6. Quick Code Reference</h2>
+  <pre><code class="language-java">public final class Configuration {
+    // Compile-Time Constant (Inlined directly by compiler)
+    public static final String API_VERSION = "v2.0"; 
+
+    // Runtime final variable
+    public final long creationTime;
+
+    // constructor injection / blank final initialization
+    public Configuration() {
+        this.creationTime = System.currentTimeMillis();
+    }
+}</code></pre>
+</body>
+</html>

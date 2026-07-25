@@ -336,6 +336,29 @@ _Avoid_: class interface
 An API design pattern combining a pure behavioral interface with a partially implemented abstract class to simplify concrete subclass definitions.
 _Avoid_: abstract template
 
+## final Keyword & Immutability Terms
+
+**final**:
+A Java keyword used to declare non-modifiable intent. Applied to variables (value/reference address immutable), methods (cannot be overridden), or classes (cannot be subclassed).
+_Avoid_: static variable, constant variable
+
+**Blank final**:
+A final variable declared without an initial value, requiring initialization exactly once in every constructor or instance initializer path.
+_Avoid_: uninitialized final
+
+**Compile-Time Constant (CTC)**:
+A final primitive or String literal initialized with a constant expression, which the compiler inlines directly into client bytecode locations.
+_Avoid_: runtime constant
+
+**Devirtualization**:
+A JIT compiler optimization that bypasses the virtual method table lookup for final, private, or static methods and converts them to direct calls.
+_Avoid_: late binding bypass
+
+**Method Inlining**:
+A performance optimization where the JIT compiler replaces method invocation instructions with the direct method body, typically applied to devirtualized final methods.
+_Avoid_: macro expansion
+
+
 
 
 

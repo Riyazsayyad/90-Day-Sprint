@@ -15,6 +15,7 @@
     { num: '12', file: 'oop-0012-to-string.html', title: 'toString() Invariants & Security', meta: '20 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
     { num: '13', file: 'oop-0013-this-super.html', title: 'this & super Keywords', meta: '25 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
     { num: '14', file: 'oop-0014-static.html', title: 'The static Keyword', meta: '30 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
+    { num: '15', file: 'oop-0015-final.html', title: 'The final Keyword', meta: '35 min read &bull; OOP Basics', module: 'Core Java & OOP', moduleNum: '00' },
     
     
     // Module 01: Collections Internals
