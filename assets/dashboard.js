@@ -19,6 +19,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const oopDrawer = document.getElementById('oopDrawer');
   const closeOopBtn = document.getElementById('closeOopDrawerBtn');
 
+  // Drawer Elements for Streams (Module 2)
+  const streamsCard = document.getElementById('streamsCard');
+  const streamsDrawer = document.getElementById('streamsDrawer');
+  const closeStreamsBtn = document.getElementById('closeStreamsDrawerBtn');
+
   // Open / Close Drawer Functions for Collections
   const openDrawer = () => {
     drawer.classList.add('open');
@@ -45,9 +50,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.style.overflow = '';
   };
 
+  // Open / Close Drawer Functions for Streams
+  const openStreamsDrawer = () => {
+    if (streamsDrawer) streamsDrawer.classList.add('open');
+    if (backdrop) backdrop.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  };
+
+  const closeStreamsDrawer = () => {
+    if (streamsDrawer) streamsDrawer.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('open');
+    document.body.style.overflow = '';
+  };
+
   const closeAllDrawers = () => {
     closeDrawer();
     closeOopDrawer();
+    closeStreamsDrawer();
   };
 
   // Click active cards to open
@@ -65,9 +84,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  if (streamsCard) {
+    streamsCard.addEventListener('click', (e) => {
+      if (e.target.closest('a')) return;
+      openStreamsDrawer();
+    });
+  }
+
   // Close triggers
   if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
   if (closeOopBtn) closeOopBtn.addEventListener('click', closeOopDrawer);
+  if (closeStreamsBtn) closeStreamsBtn.addEventListener('click', closeStreamsDrawer);
   if (backdrop) backdrop.addEventListener('click', closeAllDrawers);
 
   // Esc key listener to close drawer

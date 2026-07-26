@@ -93,7 +93,7 @@
         </div>
 
         <!-- Module 02: Streams API -->
-        <div class="module-card locked">
+        <div class="module-card active" id="streamsCard">
           <div class="card-header">
             <div class="icon-wrapper">
               <svg viewBox="0 0 24 24">
@@ -103,24 +103,21 @@
                 <circle cx="12" cy="17" r="2" fill="currentColor"/>
               </svg>
             </div>
-            <span class="badge locked-badge">Locked</span>
+            <span class="badge in-progress">In Progress</span>
           </div>
           <div class="card-body">
             <div class="card-num">Module 02</div>
             <h3 class="card-title">Streams API</h3>
             <p class="card-desc">Master Java's declarative stream pipelines. Understand intermediate vs terminal ops, lazy execution, collector strategies, and parallel performance.</p>
-            
-            <div class="upcoming-topics">
-              <ul>
-                <li>Lazy Evaluation & Pipelines</li>
-                <li>Custom Collectors & Grouping By</li>
-                <li>Optional API Best Practices</li>
-                <li>Parallel Streams & ForkJoinPool</li>
-              </ul>
-            </div>
           </div>
           <div class="card-footer">
-            <span class="card-progress-text">Upcoming</span>
+            <span class="card-progress-text">0 / 1 Lessons</span>
+            <span class="active-action">
+              View Lessons
+              <svg viewBox="0 0 24 24">
+                <path d="M5 12h14M12 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
           </div>
         </div>
 
@@ -850,6 +847,40 @@
             <div class="lesson-info">
               <span class="lesson-title">The final Keyword</span>
               <span class="lesson-meta">35 min read &bull; OOP Basics</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar Streams Lesson Drawer -->
+  <div class="drawer" id="streamsDrawer">
+    <div class="drawer-header">
+      <div class="drawer-title-group">
+        <h2>Streams API</h2>
+        <p>Module 02 &bull; 1 Lesson</p>
+      </div>
+      <button class="close-btn" id="closeStreamsDrawerBtn" aria-label="Close lesson list">
+        <svg viewBox="0 0 24 24">
+          <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="drawer-content">
+      <div class="lesson-list">
+
+        <!-- Lesson 1 -->
+        <a href="lessons/streams-0001-stream-fundamentals.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">01</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Stream Fundamentals</span>
+              <span class="lesson-meta">45 min read &bull; Streams API</span>
             </div>
           </div>
           <div class="lesson-arrow">

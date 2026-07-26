@@ -34,7 +34,10 @@
     { num: '13', file: '0013-collections-utility.html', title: 'The Collections Utility Class', meta: '6 min read &bull; Static Utilities', module: 'Collections Internals', moduleNum: '01' },
     { num: '14', file: '0014-java-iterator.html', title: 'Java Iterator Internals', meta: '8 min read &bull; Traversals', module: 'Collections Internals', moduleNum: '01' },
     { num: '15', file: '0015-java-listiterator.html', title: 'Java ListIterator Internals', meta: '8 min read &bull; Traversals', module: 'Collections Internals', moduleNum: '01' },
-    { num: '16', file: '0016-failfast-failsafe.html', title: 'Fail-Fast vs. Fail-Safe Iteration', meta: '8 min read &bull; Traversals', module: 'Collections Internals', moduleNum: '01' }
+    { num: '16', file: '0016-failfast-failsafe.html', title: 'Fail-Fast vs. Fail-Safe Iteration', meta: '8 min read &bull; Traversals', module: 'Collections Internals', moduleNum: '01' },
+
+    // Module 02: Streams API
+    { num: '01', file: 'streams-0001-stream-fundamentals.html', title: 'Stream Fundamentals', meta: '45 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' }
   ];
 
   function init() {
