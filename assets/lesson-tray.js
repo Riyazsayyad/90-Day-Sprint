@@ -156,6 +156,33 @@
       document.body.classList.remove('lesson-tray-open');
     };
 
+    // 5. Create and inject scroll-up button
+    const scrollUpBtn = document.createElement('button');
+    scrollUpBtn.className = 'scroll-up-btn';
+    scrollUpBtn.id = 'scrollUpBtn';
+    scrollUpBtn.setAttribute('aria-label', 'Scroll to top');
+    scrollUpBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="18 15 12 9 6 15"></polyline>
+      </svg>
+    `;
+    document.body.appendChild(scrollUpBtn);
+
+    const handleScroll = () => {
+      const scrollTop = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
+      if (scrollTop > 300) {
+        scrollUpBtn.classList.add('visible');
+      } else {
+        scrollUpBtn.classList.remove('visible');
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+
+    scrollUpBtn.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
     toggleBtn.addEventListener('click', openTray);
     
     const closeBtn = document.getElementById('lessonTrayClose');
