@@ -37,8 +37,10 @@
     { num: '16', file: '0016-failfast-failsafe.html', title: 'Fail-Fast vs. Fail-Safe Iteration', meta: '8 min read &bull; Traversals', module: 'Collections Internals', moduleNum: '01' },
 
     // Module 02: Streams API
-    { num: '01', file: 'streams-0001-stream-fundamentals.html', title: 'Stream Fundamentals', meta: '45 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' }
+    { num: '01', file: 'streams-0001-stream-fundamentals.html', title: 'Stream Fundamentals', meta: '45 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' },
+    { num: '02', file: 'streams-0002-intermediate-operations.html', title: 'Intermediate Operations', meta: '45 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' }
   ];
+
 
   function init() {
     // Prevent double initialization

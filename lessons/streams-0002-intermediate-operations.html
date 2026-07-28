@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 2 — Intermediate Operations & Pipeline Mechanics</title>
+  <meta name="description" content="Deep dive into Java Streams intermediate operations, stateless vs stateful logic, primitive stream boxing overhead, flatMap GC stress, peek pitfalls, and Sink chain internals.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot; <a href="streams-0001-stream-fundamentals.html">⬅️ Prev: Stream Fundamentals</a>
+  </nav>
+
+  <h1>Deep Dive: Stream Intermediate Operations & Pipeline Internals</h1>
+  <p class="meta">~45 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> top-tier systems engineering roles assess your understanding of intermediate operation state costs, parallel pipeline performance penalties, primitive specialization, and the bytecode-level mechanics of JVM <code>Sink</code> execution structures.
+  </div>
+
+  <h2>1. Stateless vs. Stateful Intermediate Operations</h2>
+  <p>Intermediate operations are categorized into two fundamental types based on their state requirements and processing barriers:</p>
+  
+  <h3>A. Stateless Operations</h3>
+  <p>Operations like <code>filter()</code>, <code>map()</code>, and <code>flatMap()</code> process each element individually. They do not require knowledge of other elements in the stream to emit a result. 
+  Memory cost is O(1) per element, and execution is highly parallelizable because data does not need to cross thread barriers.</p>
+
+  <h3>B. Stateful Operations</h3>
+  <p>Operations like <code>distinct()</code>, <code>sorted()</code>, <code>limit()</code>, and <code>skip()</code> require processing elements as a group. For example, <code>sorted()</code> cannot emit the first sorted element until it has collected and compared <em>all</em> elements of the stream.
+  This introduces a <strong>sorting barrier</strong>, forcing the stream to block lazy execution, buffer the elements into memory (O(N) memory complexity), and sort them before allowing downstream operations to proceed. In parallel pipelines, this requires thread synchronization and serializes parts of the pipeline, destroying efficiency.</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Operation</th>
+        <th>Type</th>
+        <th>Memory Complexity</th>
+        <th>Parallel Stream Penalty</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>filter()</code> / <code>map()</code></td>
+        <td>Stateless</td>
+        <td>O(1)</td>
+        <td>None</td>
+      </tr>
+      <tr>
+        <td><code>flatMap()</code></td>
+        <td>Stateless</td>
+        <td>O(1) (but creates stream objects)</td>
+        <td>Low</td>
+      </tr>
+      <tr>
+        <td><code>distinct()</code></td>
+        <td>Stateful</td>
+        <td>O(N) (hash set lookup)</td>
+        <td>High (sync overhead)</td>
+      </tr>
+      <tr>
+        <td><code>sorted()</code></td>
+        <td>Stateful</td>
+        <td>O(N) (buffers all elements)</td>
+        <td>Very High (full barrier)</td>
+      </tr>
+      <tr>
+        <td><code>limit()</code> / <code>skip()</code></td>
+        <td>Stateful</td>
+        <td>O(N) (buffers for order tracking)</td>
+        <td>High (coordination needed)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2. Mechanics of filter() and map(): Boxing Overhead</h2>
+  <p>Using <code>Stream&lt;Integer&gt;</code> instead of <code>IntStream</code> leads to severe garbage collector stress due to constant wrapper object creation.</p>
+  <pre><code class="language-java">// BAD: Causes boxing for every element
+List&lt;Integer&gt; list = Stream.of(1, 2, 3)
+    .map(x -> x * 2) // Auto-boxing back to Integer
+    .collect(Collectors.toList());
+
+// GOOD: Avoids boxing entirely using primitive streams
+int sum = IntStream.of(1, 2, 3)
+    .map(x -> x * 2) // primitive int -> int
+    .sum();</code></pre>
+  <p>To bridge generic objects to primitives, use specialized mapping: <code>mapToInt()</code>, <code>mapToLong()</code>, and <code>mapToDouble()</code>. Conversely, use <code>boxed()</code> or <code>mapToObj()</code> to return to object pipelines.</p>
+
+  <h2>3. flatMap() Internals & GC Stress</h2>
+  <p>The <code>flatMap()</code> operation replaces each element in a stream with another stream, flattening the final output. In the JVM, this is achieved by opening a nested stream for each input element.
+  If you process 10,000 customers and call <code>flatMap(c -> c.getOrders().stream())</code>, the JVM creates 10,000 temporary <code>Stream</code>, <code>AbstractPipeline</code>, and <code>Spliterator</code> allocation frames on the Heap. This can trigger frequent minor GC pauses in high-throughput enterprise APIs.</p>
+  <p><strong>Refactoring Tip:</strong> For simple collections, replace <code>flatMap</code> with explicit loops or map values to collection types if ordering and laziness can be compromised to save object allocations.</p>
+
+  <h2>4. limit() & skip() short-circuiting</h2>
+  <p><code>limit(n)</code> is a stateful operation that stops processing upstream elements once <code>n</code> items have passed. In sequential pipelines, this works through short-circuiting: downstream sinks throw a cancellation exception (or return false from <code>cancellationRequested()</code>) to signal upstream stages to stop pulling data.
+  In parallel streams, order must be maintained, so the JVM coordinated state across concurrent workers, resulting in threads blocking each other to verify index positions.</p>
+
+  <h2>5. distinct() & sorted() constraints</h2>
+  <p><code>distinct()</code> uses a temporary `HashSet` internally. This relies heavily on the elements having correct, high-performance implementations of <code>equals()</code> and <code>hashCode()</code>. If keys collide frequently, lookup performance degrades from O(1) to O(log N) or O(N).
+  <code>sorted()</code> acts as a hard barrier. Downstream sinks are not triggered until <code>sorted()</code> has consumed all elements from the upstream spliterator, stored them in an internal array, and sorted them using TimSort.</p>
+
+  <h2>6. peek() Pitfalls & The Debugger Trap</h2>
+  <p>The <code>peek()</code> operation exists exclusively to support debugging (e.g. printing intermediate states). However, developers frequently abuse it to perform side effects (e.g. mutating fields).
+  <strong>The JIT compiler optimization trap:</strong> Since Java 9, the JVM is free to optimize away intermediate operations if they do not change the count or final structure of the stream. For example:
+  <pre><code class="language-java">Stream.of("A", "B").peek(x -> System.out.println(x)).count();</code></pre>
+  Under JIT compiler loop optimizations, the stream knows the source has a size of 2, and since there is no structural modification, the entire pipeline is bypassed, and <code>peek()</code> is never executed!</p>
+
+  <h2>7. Sink Chain & Lazy Evaluation</h2>
+  <p>Under the hood, Java Streams compile down to a chain of <code>Sink</code> interface instances. Each intermediate stage creates a custom <code>Sink</code> wrapper.
+  The <code>Sink</code> interface defines three critical lifecycle stages:</p>
+  <ul>
+    <li><code>begin(size)</code>: Fired when processing starts, passing the size if known. This allows stateful operations (like <code>sorted()</code>) to allocate target arrays.</li>
+    <li><code>accept(t)</code>: Fired for each element. Stateless sinks process and push directly downstream. Stateful sinks store the item.</li>
+    <li><code>end()</code>: Fired when upstream finishes. Stateful operations use this event to sort, deduplicate, or group, then push all items downstream.</li>
+  </ul>
+  <p>When the terminal operation is called, it constructs this nested Sink chain (wrapping from the last stage back to the first) and starts pushing elements from the source spliterator into the head of the chain.</p>
+
+  <hr>
+
+  <h2>8. 15 Advanced, High-Reasoning MCQs</h2>
+  
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Given the following pipeline, how many times will "filter" be printed?
+        <code>Stream.of(1, 2, 3).filter(x -> { System.out.print("filter "); return x > 1; }).limit(1).count();</code></p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: "filter filter " (2 times)</strong></p>
+          <p>Explanation: Elements are evaluated lazily. The first element (1) is checked but fails the filter. The second element (2) passes the filter. Since <code>limit(1)</code> is reached, evaluation short-circuits immediately. The third element is never evaluated.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: What happens if you execute: 
+        <code>List&lt;Integer&gt; list = new ArrayList<>(List.of(1, 2)); Stream&lt;Integer&gt; s = list.stream(); list.add(3); s.forEach(System.out::print);</code></p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: Prints 123</strong></p>
+          <p>Explanation: Stream sources are evaluated lazily when the terminal operation (<code>forEach</code>) is invoked. Adding "3" to the list prior to executing <code>forEach</code> means it is included in the final stream iteration.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: How does <code>sorted()</code> affect lazy evaluation in a pipeline like <code>.filter().sorted().map()</code>?</p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: It acts as an execution barrier.</strong></p>
+          <p>Explanation: <code>sorted()</code> is stateful. It forces all upstream elements that pass the <code>filter()</code> stage to be processed and sorted before any element can proceed to the <code>map()</code> operation.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: Why does mutating state inside a stateless operation like <code>map()</code> on a parallel stream cause issues?</p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: Race conditions and lack of thread visibility.</strong></p>
+          <p>Explanation: Parallel streams run on multiple threads. Mutating a shared, non-thread-safe collection or variable inside a map operation results in non-deterministic results and data corruption.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: Which of the following operations is stateless?</p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: flatMap()</strong></p>
+          <p>Explanation: <code>flatMap()</code> transforms each item independently into a sub-stream and flattens it. It requires no memory of other items, unlike <code>distinct()</code>, <code>sorted()</code>, or <code>limit()</code>.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: What is the main JVM drawback of overusing <code>flatMap()</code> over nested lists?</p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: Heavy object allocation overhead on the Heap.</strong></p>
+          <p>Explanation: Each execution of the mapper function in <code>flatMap()</code> creates a new temporary stream object, increasing GC pressure for large datasets.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q7: In Java 9, how does <code>takeWhile()</code> differ from <code>filter()</code>?</p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: <code>takeWhile()</code> short-circuits on the first false result.</strong></p>
+          <p>Explanation: <code>filter()</code> evaluates all elements in the stream. <code>takeWhile()</code> processes elements until the predicate evaluates to false, then terminates evaluation of the entire stream immediately.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q8: In Java 9, what will <code>Stream.of(1, 2, 3).peek(System.out::print).count();</code> output under JIT optimization?</p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: It may output nothing.</strong></p>
+          <p>Explanation: The compiler optimizes out <code>peek()</code> because the terminal operation <code>count()</code> can be computed directly from the size of the source without traversing elements.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q9: What happens if <code>distinct()</code> is executed on objects without overridden <code>equals()</code>?</p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: Identity comparison (reference equals) is used.</strong></p>
+          <p>Explanation: Without <code>equals()</code> and <code>hashCode()</code> overridden, default <code>Object</code> behaviors apply, comparing memory references. Different objects with identical values will not be grouped or deduplicated.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q10: What is the purpose of the <code>cancellationRequested()</code> method in the JVM <code>Sink</code> interface?</p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: To enable early termination / short-circuiting.</strong></p>
+          <p>Explanation: Before sending an element to a sink, the upstream operation checks <code>cancellationRequested()</code>. If it returns true (e.g. limit has been hit), the upstream halts iteration immediately.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q11: How does a parallel stream execute stateful operations like <code>sorted()</code>?</p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: It serializes data across thread boundaries at the barrier.</strong></p>
+          <p>Explanation: Stateful operations act as synchronization checkpoints. The parallel execution breaks down, elements are collected to a single thread or synchronized buffer to sort, and then redistribute.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q12: Which operation will cause a memory leak / OutOfMemoryError on an infinite stream: <code>Stream.iterate(0, i -> i + 1)</code>?</p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: <code>sorted()</code></strong></p>
+          <p>Explanation: <code>sorted()</code> requires buffering all elements in memory to perform sorting. Because the stream is infinite, it will buffer infinitely until memory is exhausted.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q13: What does the <code>begin(long size)</code> method in the <code>Sink</code> interface allow a stateful operation like <code>sorted()</code> to do?</p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: Pre-allocate backing arrays or structures dynamically.</strong></p>
+          <p>Explanation: <code>begin(size)</code> provides the size of elements to process. A stateful sink can use this to optimize allocation size for its temporary storage buffers.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q14: What is the default type of stream returned by <code>flatMapToInt()</code>?</p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: <code>IntStream</code></strong></p>
+          <p>Explanation: <code>flatMapToInt()</code> returns an optimized primitive <code>IntStream</code>, flattening elements into primitive integer arrays to eliminate wrapper overhead.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q15: What is the main design reason <code>peek()</code> is discouraged from changing object states?</p>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: It violates statelessness/immutability invariants and breaks lazy expectations.</strong></p>
+          <p>Explanation: Changing state inside intermediate steps makes stream behavior non-deterministic, especially when subject to JIT optimizations and parallel execution thread reordering.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>9. Homework & Refactoring Exercises</h2>
+  <ol>
+    <li><strong>Primitive Conversion:</strong> Refactor a generic pipeline <code>Stream&lt;Integer&gt;</code> to use <code>IntStream</code>. Measure GC collection counts before and after processing 1,000,000 values.</li>
+    <li><strong>Custom Filter implementation:</strong> Implement a custom stateless filter that only allows prime numbers to pass. Trace element flow using thread logs.</li>
+    <li><strong>Stateful Barrier Simulation:</strong> Create an infinite stream and apply a custom collector and <code>sorted()</code>. Observe when the pipeline freezes and identify the exact line of execution.</li>
+  </ol>
+
+</body>
+</html>
+
