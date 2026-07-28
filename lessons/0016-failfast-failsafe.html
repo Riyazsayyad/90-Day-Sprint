@@ -39,18 +39,18 @@
   <pre><code>expectedModCount = modCount; // Re-synchronized!</code></pre>
 
   <h2>4. Why Fail-Fast is Best-Effort</h2>
-  <p>The Javadoc states that fail-fast behavior is **best-effort** and **not guaranteed**. Here is why:</p>
+  <p>The Javadoc states that fail-fast behavior is <b>best-effort</b> and <b>not guaranteed</b>. Here is why:</p>
   <ul>
     <li><strong>Visibility Gaps:</strong> In a multithreaded context, <code>modCount</code> is not declared volatile or synchronized. A thread mutating the collection might update <code>modCount</code> in its local CPU cache, but that update may not be immediately flushed to main memory. Another iterating thread might read a stale value, missing the modification.</li>
     <li><strong>Non-Structural Changes:</strong> Modifying the state of an object already inside the collection (e.g. <code>list.get(0).setName("Bob")</code>) does not change list size, so <code>modCount</code> is not incremented and no CME is thrown.</li>
   </ul>
 
   <h2>5. Fail-Safe / Weakly Consistent Iterators</h2>
-  <p>The term "fail-safe" is a common design pattern name (not a term used in the Javadoc; Java Javadoc refers to them as **weakly consistent**). Fail-safe iterators traverse a copy or use direct bucket pointer safety to avoid throwing CME.</p>
+  <p>The term "fail-safe" is a common design pattern name (not a term used in the Javadoc; Java Javadoc refers to them as <b>weakly consistent</b>). Fail-safe iterators traverse a copy or use direct bucket pointer safety to avoid throwing CME.</p>
 
   <h3>CopyOnWriteArrayList (Snapshot Iteration)</h3>
   <p>When write operations occur (like <code>add()</code>), this collection clones the backing array, writes to the clone, and swap-references the volatile array pointer.
-  <br>The iterator holds a reference to the **original array snapshot** at the time of creation. Since that snapshot is never mutated, the iterator is 100% safe from CME.
+  <br>The iterator holds a reference to the <b>original array snapshot</b> at the time of creation. Since that snapshot is never mutated, the iterator is 100% safe from CME.
   <br><em>Trade-off:</em> High write memory overhead (cloning arrays) and stale read views (the iterator will not see additions made after it was created).</p>
 
   <h3>ConcurrentHashMap (Bucket Traversal)</h3>
@@ -59,7 +59,7 @@
   <h2>6. Key Interview Questions</h2>
   <div class="callout">
     <strong>Q: Can a fail-safe iterator reflect list updates after its creation?</strong>
-    <br>It depends on the collection. In <code>CopyOnWriteArrayList</code>, **no**—it iterates over a static array snapshot. In <code>ConcurrentHashMap</code>, **yes**—it traverses active buckets directly using weakly consistent reads.
+    <br>It depends on the collection. In <code>CopyOnWriteArrayList</code>, <b>no</b>—it iterates over a static array snapshot. In <code>ConcurrentHashMap</code>, <b>yes</b>—it traverses active buckets directly using weakly consistent reads.
   </div>
   <div class="callout">
     <strong>Q: What is the main structural trade-off between Fail-Fast and Fail-Safe?</strong>

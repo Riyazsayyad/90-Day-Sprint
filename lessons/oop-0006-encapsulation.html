@@ -80,7 +80,7 @@
 
   <h2>4. The Getter/Setter Abuse & "Tell, Don't Ask"</h2>
   <p>A very common misconception is that "encapsulation = private fields + getters + setters." If you auto-generate public getters and setters for every private field, you have created a class that is structurally identical to public fields: client code can still bypass the object's logic to change its state.</p>
-  <p>This leads to an **Anemic Domain Model** (objects are just passive bags of data, and business logic is scattered across client classes). Instead, apply the **Tell, Don't Ask** principle:</p>
+  <p>This leads to an <b>Anemic Domain Model</b> (objects are just passive bags of data, and business logic is scattered across client classes). Instead, apply the <b>Tell, Don't Ask</b> principle:</p>
   <pre><code>// VIOLATION: Asking the object for its fields to perform external logic
 if (user.getRole().equals("ADMIN")) {
     adminPanel.show(user.getId());
@@ -158,7 +158,7 @@ public final class ShoppingCart {
 }</code></pre>
 
   <h2>8. Encapsulation in Enterprise Systems</h2>
-  <p>In enterprise software architectures (like Domain-Driven Design), encapsulation is applied at the level of **Aggregates** and **Domain Models**:</p>
+  <p>In enterprise software architectures (like Domain-Driven Design), encapsulation is applied at the level of <b>Aggregates</b> and <b>Domain Models</b>:</p>
   <ul>
     <li><strong>Domain Models:</strong> Contain business logic and validations. They guarantee that an object represents a valid business state at all times (e.g. validating order status changes).</li>
     <li><strong>Data Transfer Objects (DTOs):</strong> Are intentionally non-encapsulated bags of data (often records in modern Java) designed solely to transport data over networks. They have no invariants to enforce.</li>

@@ -42,7 +42,7 @@
   </ul>
 
   <h2>4. Method Call Stack & Stack Frames</h2>
-  <p>Every time a thread invokes a method, the JVM pushes a new **Stack Frame** onto that thread's call stack. A frame is a temporary storage block containing:</p>
+  <p>Every time a thread invokes a method, the JVM pushes a new <b>Stack Frame</b> onto that thread's call stack. A frame is a temporary storage block containing:</p>
   <ul>
     <li><strong>Local Variable Array:</strong> Indexed slots containing method parameters and local variables.</li>
     <li><strong>Operand Stack:</strong> A workspace used to perform intermediate evaluation steps (e.g., adding numbers).</li>
@@ -90,7 +90,7 @@
 
   <h2>7. Object Lifetime & GC Eligibility</h2>
   <p>An object survives on the Heap as long as it is reachable from active roots (such as local variables in active stack frames, static variables, or JNI references).
-  <br>An object becomes **eligible for Garbage Collection** the moment it has zero strong references pointing to it, or it becomes isolated in an unreachable reference group (island of isolation).</p>
+  <br>An object becomes <b>eligible for Garbage Collection</b> the moment it has zero strong references pointing to it, or it becomes isolated in an unreachable reference group (island of isolation).</p>
   <pre><code>User user = new User("Bob"); // Reachable
 user = null; // Original Bob object is now eligible for GC</code></pre>
 
@@ -102,9 +102,9 @@ user = null; // Original Bob object is now eligible for GC</code></pre>
 
   <h2>9. Escape Analysis Optimization</h2>
   <p>In modern JVMs, the JIT (Just-In-Time) compiler analyzes object allocations to optimize performance.
-  <br>If an object is created within a method and **never escapes** its scope (meaning it is not returned, passed to other threads, or stored in instance fields):
+  <br>If an object is created within a method and <b>never escapes</b> its scope (meaning it is not returned, passed to other threads, or stored in instance fields):
   <ul>
-    <li>The JIT compiler can optimize this via **Scalar Replacement**, allocating individual instance fields directly on the Stack rather than creating the actual object shell on the Heap.</li>
+    <li>The JIT compiler can optimize this via <b>Scalar Replacement</b>, allocating individual instance fields directly on the Stack rather than creating the actual object shell on the Heap.</li>
     <li>This bypasses heap allocation entirely, removing Garbage Collection pressure and speeding up execution.</li>
   </ul>
 

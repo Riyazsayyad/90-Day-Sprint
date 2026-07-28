@@ -54,7 +54,7 @@
 
   <h2>4. Polymorphism & Collections Type Erasure</h2>
   <p>Because `Object` is the root of the type hierarchy, it makes Java's dynamic method dispatch possible. A call to an overridden method on an `Object` reference is resolved at runtime using the concrete class vtable.</p>
-  <p>JDK collections store elements internally within raw <code>Object[]</code> arrays to enable generic layouts. Due to **Type Erasure**, the compiler replaces generic types with their bounds (typically <code>Object</code>) during compilation, inserting implicit casts when retrieving elements. This design maintains backward binary compatibility with pre-generics Java versions.</p>
+  <p>JDK collections store elements internally within raw <code>Object[]</code> arrays to enable generic layouts. Due to <b>Type Erasure</b>, the compiler replaces generic types with their bounds (typically <code>Object</code>) during compilation, inserting implicit casts when retrieving elements. This design maintains backward binary compatibility with pre-generics Java versions.</p>
 
   <h2>5. How Object Influences Frameworks</h2>
   <ul>

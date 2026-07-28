@@ -20,7 +20,7 @@
   <p class="meta">~10 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
 
   <h2>1. Why Constructors Exist</h2>
-  <p>In software engineering, objects should never exist in a half-initialized or invalid state. A <strong>Constructor</strong> is a special block of code executed during instantiation to establish the object's **invariants** (essential properties that must always be valid):</p>
+  <p>In software engineering, objects should never exist in a half-initialized or invalid state. A <strong>Constructor</strong> is a special block of code executed during instantiation to establish the object's <b>invariants</b> (essential properties that must always be valid):</p>
   <ul>
     <li><strong>State Initialization:</strong> It populates instance variables with initial values.</li>
     <li><strong>Invariant Enforcement:</strong> It validates parameters (e.g., throwing an exception if a bank account is created with a negative balance).</li>
@@ -30,8 +30,8 @@
   <h2>2. Default Constructor vs. User-Defined Constructor</h2>
   <p>The distinction between default and written constructors is a classic interview topic:</p>
   <ul>
-    <li><strong>Default Constructor:</strong> If a class contains **no constructors at all**, the Java compiler automatically generates a no-argument constructor at compile time. It has an empty body and calls <code>super()</code>.</li>
-    <li><strong>User-Defined Constructor:</strong> As soon as you write a single constructor (whether parameterized or no-arg), the compiler **ceases to generate the default constructor**.</li>
+    <li><strong>Default Constructor:</strong> If a class contains <b>no constructors at all</b>, the Java compiler automatically generates a no-argument constructor at compile time. It has an empty body and calls <code>super()</code>.</li>
+    <li><strong>User-Defined Constructor:</strong> As soon as you write a single constructor (whether parameterized or no-arg), the compiler <b>ceases to generate the default constructor</b>.</li>
   </ul>
   <div class="callout">
     <strong>Warning:</strong> If you write <code>public MyClass(String name) { ... }</code>, callers can no longer execute <code>new MyClass()</code> unless you explicitly write a no-arg constructor yourself.
@@ -56,7 +56,7 @@
     }
 }</code></pre>
   <p>Similarly, child classes invoke parent constructors using <code>super()</code>.
-  <br><em>Crucial Rule:</em> Both <code>this()</code> and <code>super()</code> must be the **first line** of a constructor. Therefore, they can never be used in the same constructor block.</p>
+  <br><em>Crucial Rule:</em> Both <code>this()</code> and <code>super()</code> must be the <b>first line</b> of a constructor. Therefore, they can never be used in the same constructor block.</p>
 
   <h2>4. Constructor Execution Flow & Inheritance</h2>
   <p>When you instantiate a child class, constructors execute in a strict hierarchy. The JVM follows this sequence:</p>

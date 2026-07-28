@@ -271,11 +271,11 @@ public final class GoodEmployee {
   <h2>Common Interview Questions</h2>
   <div class="callout">
     <strong>Q1: Can two unequal objects return the same hashCode?</strong>
-    <p>Yes. This is called a **hash collision**. Hash functions map infinite object combinations to a finite 32-bit integer space. While valid, collisions degrade hash table performance from O(1) towards O(log N) or O(N).</p>
+    <p>Yes. This is called a <b>hash collision</b>. Hash functions map infinite object combinations to a finite 32-bit integer space. While valid, collisions degrade hash table performance from O(1) towards O(log N) or O(N).</p>
   </div>
   <div class="callout">
     <strong>Q2: Why does equals() take Object as an argument rather than the specific class type?</strong>
-    <p>Because the method signature in the parent class <code>java.lang.Object</code> is <code>equals(Object)</code>. If you write <code>public boolean equals(MyClass other)</code>, you are **overloading** the method, not **overriding** it. The collections library calls <code>equals(Object)</code>, so your custom overloaded version will be ignored!</p>
+    <p>Because the method signature in the parent class <code>java.lang.Object</code> is <code>equals(Object)</code>. If you write <code>public boolean equals(MyClass other)</code>, you are <b>overloading</b> the method, not <b>overriding</b> it. The collections library calls <code>equals(Object)</code>, so your custom overloaded version will be ignored!</p>
   </div>
   <div class="callout">
     <strong>Q3: How does subclassing affect equals() transitivity?</strong>

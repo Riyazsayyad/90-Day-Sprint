@@ -20,8 +20,8 @@
   <p class="meta">~12 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
 
   <h2>1. Why Polymorphism Exists</h2>
-  <p>Derived from Greek meaning "many forms", **Polymorphism** is the ability of different classes to respond uniquely to the same method call. It decouples the client from specific implementations, allowing you to write code that operates on abstract parent classes or interfaces while executing specialized subclass behaviors at runtime.</p>
-  <p>Without polymorphism, software systems become rigid: adding a new subclass would require modifying every client method to check types and execute custom routines. Polymorphism supports the **Open/Closed Principle (OCP)**—classes are open for extension (by adding subclasses) but closed for modification.</p>
+  <p>Derived from Greek meaning "many forms", <b>Polymorphism</b> is the ability of different classes to respond uniquely to the same method call. It decouples the client from specific implementations, allowing you to write code that operates on abstract parent classes or interfaces while executing specialized subclass behaviors at runtime.</p>
+  <p>Without polymorphism, software systems become rigid: adding a new subclass would require modifying every client method to check types and execute custom routines. Polymorphism supports the <b>Open/Closed Principle (OCP)</b>—classes are open for extension (by adding subclasses) but closed for modification.</p>
 
   <h2>2. Compile-Time vs. Runtime Polymorphism</h2>
   <p>Java supports two distinct forms of polymorphism resolved at different lifecycle stages:</p>
@@ -67,7 +67,7 @@ if (obj instanceof String) {
     String s = (String) obj; // Redundant boilerplate cast
     System.out.println(s.toLowerCase());
 }</code></pre>
-  <p>In modern Java (introduced in Java 16), **Pattern Matching for instanceof** eliminates this boilerplate. If the type check succeeds, it binds the cast object to a scope variable automatically:</p>
+  <p>In modern Java (introduced in Java 16), <b>Pattern Matching for instanceof</b> eliminates this boilerplate. If the type check succeeds, it binds the cast object to a scope variable automatically:</p>
   <pre><code>// Modern Java approach
 if (obj instanceof String s) {
     System.out.println(s.toLowerCase()); // Safe, no explicit cast needed

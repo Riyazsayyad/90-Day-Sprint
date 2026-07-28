@@ -20,7 +20,7 @@
   <p class="meta">~15 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
 
   <h2>1. Why Abstraction Exists</h2>
-  <p>In software engineering, complexity is the primary driver of bugs, architectural rot, and high cognitive load. **Abstraction** is the design practice of hiding internal implementation details and exposing only the essential interface of a component. It establishes a boundary of <em>what</em> an object does rather than <em>how</em> it does it.</p>
+  <p>In software engineering, complexity is the primary driver of bugs, architectural rot, and high cognitive load. <b>Abstraction</b> is the design practice of hiding internal implementation details and exposing only the essential interface of a component. It establishes a boundary of <em>what</em> an object does rather than <em>how</em> it does it.</p>
   <p>Abstraction exists to solve three core problems:</p>
   <ul>
     <li><strong>Cognitive Management:</strong> Developers can build complex systems by thinking in terms of simplified models. You do not need to understand disk sector scheduling or file system tree balancing to write text to a file in Java.</li>
@@ -36,11 +36,11 @@
   </ul>
   <div class="callout">
     <strong>The Dashboard Analogy:</strong> 
-    <p>Think of a car. **Abstraction** is the driver's interface: the steering wheel, accelerator pedal, and speedometer. It hides the complexity of internal combustion and transmission gear shifts, exposing a simple driving model. **Encapsulation** is the physical engine hood and metal casing. It restricts direct access to hot pistons and electrical wiring, ensuring you can only interact with the vehicle through authorized inputs (the pedals) to prevent you from breaking the engine or hurting yourself.</p>
+    <p>Think of a car. <b>Abstraction</b> is the driver's interface: the steering wheel, accelerator pedal, and speedometer. It hides the complexity of internal combustion and transmission gear shifts, exposing a simple driving model. <b>Encapsulation</b> is the physical engine hood and metal casing. It restricts direct access to hot pistons and electrical wiring, ensuring you can only interact with the vehicle through authorized inputs (the pedals) to prevent you from breaking the engine or hurting yourself.</p>
   </div>
 
   <h2>3. Abstract Classes: Skeletal Blueprints</h2>
-  <p>An **Abstract Class** is a class declared with the <code>abstract</code> modifier. It represents an incomplete conceptual template and cannot be directly instantiated using the <code>new</code> keyword. It serves as a base class for a family of related types.</p>
+  <p>An <b>Abstract Class</b> is a class declared with the <code>abstract</code> modifier. It represents an incomplete conceptual template and cannot be directly instantiated using the <code>new</code> keyword. It serves as a base class for a family of related types.</p>
   <h3>Key Characteristics:</h3>
   <ul>
     <li><strong>Instance State:</strong> Unlike interfaces, abstract classes can define instance variables (state). Subclasses inherit this state directly.</li>
@@ -65,7 +65,7 @@
 }</code></pre>
 
   <h2>4. Interfaces: Pure Behavioral Contracts</h2>
-  <p>An **Interface** represents a strict behavioral contract. In Java's type system, an abstract class represents an **is-a** relationship (e.g., <code>Dog extends Animal</code>), whereas an interface represents a **can-do** or **acts-as** relationship (e.g., <code>Dog implements Runnable</code>).</p>
+  <p>An <b>Interface</b> represents a strict behavioral contract. In Java's type system, an abstract class represents an <b>is-a</b> relationship (e.g., <code>Dog extends Animal</code>), whereas an interface represents a <b>can-do</b> or <b>acts-as</b> relationship (e.g., <code>Dog implements Runnable</code>).</p>
   <p>While interfaces historically could only contain public abstract methods, Java has evolved significantly:</p>
   <ul>
     <li><strong>Implicit Properties:</strong> All fields declared in an interface are implicitly <code>public static final</code> (constants). All methods are implicitly <code>public abstract</code> unless declared default, static, or private.</li>
@@ -148,13 +148,13 @@ public class CheckoutService {
   <h2>10. Common Interview Questions</h2>
   <div class="callout">
     <strong>Q1: When should you choose an abstract class over an interface in Java?</strong>
-    <p>Use an **Abstract Class** when:
+    <p>Use an <b>Abstract Class</b> when:
     <ul>
       <li>You need to share instance state (non-static, non-final fields) or constructors across related classes.</li>
       <li>You want to provide a common base implementation of methods that subclasses can inherit directly without duplicating code.</li>
       <li>The subclasses are conceptually part of an "is-a" hierarchy (e.g. <code>Dog extends Animal</code>).</li>
     </ul>
-    Use an **Interface** when:
+    Use an <b>Interface</b> when:
     <ul>
       <li>You are defining a behavior contract for unrelated classes (e.g. both a <code>DatabaseConnection</code> and a <code>FileParser</code> can implement <code>AutoCloseable</code>).</li>
       <li>You want to leverage multiple inheritance by allowing a class to implement multiple contracts.</li>

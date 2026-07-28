@@ -32,7 +32,7 @@
   <br>At runtime, a class is represented as a metadata structure stored in the JVM's <strong>Metaspace</strong>. The JVM instantiates a single instance of <code>java.lang.Class</code> for each loaded class. This class object holds:
   <ul>
     <li>The blueprint layout (offsets of instance fields, types of variables).</li>
-    <li>The **vtable (virtual method table)**, which lists addresses of executable method bytecodes.</li>
+    <li>The <b>vtable (virtual method table)</b>, which lists addresses of executable method bytecodes.</li>
     <li>Static variables (class-level state shared by all instances).</li>
   </ul>
 
@@ -67,7 +67,7 @@
   </ul>
 
   <h2>6. Reference Variables vs. Actual Objects</h2>
-  <p>In Java, variables never hold objects directly. They hold **references** (pointers to memory addresses):</p>
+  <p>In Java, variables never hold objects directly. They hold <b>references</b> (pointers to memory addresses):</p>
   <pre><code>Car myCar = new Car();</code></pre>
   <ul>
     <li><strong><code>myCar</code>:</strong> The reference variable, usually allocated on the Stack. It stores only a 32-bit or 64-bit address.</li>

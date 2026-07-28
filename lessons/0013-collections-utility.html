@@ -21,18 +21,18 @@
   <h2>Collection vs. Collections</h2>
   <p>In Java, it is easy to confuse the two names:</p>
   <ul>
-    <li><code>java.util.Collection</code> is the **root interface** of the collections hierarchy (implemented by List, Set, Queue).</li>
-    <li><code>java.util.Collections</code> is a **utility class** consisting exclusively of static methods that operate on or return collections. It cannot be instantiated.</li>
+    <li><code>java.util.Collection</code> is the <b>root interface</b> of the collections hierarchy (implemented by List, Set, Queue).</li>
+    <li><code>java.util.Collections</code> is a <b>utility class</b> consisting exclusively of static methods that operate on or return collections. It cannot be instantiated.</li>
   </ul>
 
   <h2>1. Sorting & Searching</h2>
   <p>Two of the most frequently used methods are for ordering and retrieving elements:</p>
   <ul>
     <li><strong><code>Collections.sort(List&lt;T&gt; list)</code>:</strong> Sorts elements using the objects' natural order (<code>Comparable</code>) or a custom <code>Comparator</code>.
-      <br><em>Stable Sorting:</em> The sort algorithm is **stable** (Timsort in modern JDKs). Equal elements are guaranteed to remain in their original relative positions after sorting.
+      <br><em>Stable Sorting:</em> The sort algorithm is <b>stable</b> (Timsort in modern JDKs). Equal elements are guaranteed to remain in their original relative positions after sorting.
     </li>
     <li><strong><code>Collections.binarySearch(List&lt;?&gt; list, T key)</code>:</strong> Performs an optimized logarithmic search.
-      <br><em>Prerequisite:</em> The list **MUST be sorted** in ascending order before invoking this method. If it is not sorted, the returned index is undefined and unpredictable.
+      <br><em>Prerequisite:</em> The list <b>MUST be sorted</b> in ascending order before invoking this method. If it is not sorted, the returned index is undefined and unpredictable.
       <br><em>Note on Lists:</em> Runs in <code>O(log n)</code> on <code>RandomAccess</code> lists (ArrayList). However, on sequential-access chains (LinkedList), it traverses nodes step-by-step, degrading to <code>O(n)</code>.
     </li>
   </ul>
@@ -62,7 +62,7 @@
     </tr>
     <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
       <td style="padding: 0.5rem;"><code>copy(dest, src)</code></td>
-      <td style="padding: 0.5rem;">Copies all elements from <code>src</code> to <code>dest</code>. **Dest must be at least as long as src**, or IndexOutOfBoundsException is thrown.</td>
+      <td style="padding: 0.5rem;">Copies all elements from <code>src</code> to <code>dest</code>. <b>Dest must be at least as long as src</b>, or IndexOutOfBoundsException is thrown.</td>
     </tr>
     <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
       <td style="padding: 0.5rem;"><code>min(coll)</code> / <code>max(coll)</code></td>

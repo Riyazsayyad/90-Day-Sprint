@@ -20,12 +20,12 @@
   <p class="meta">~12 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
 
   <h2>1. Why Inheritance Exists & The IS-A Relationship</h2>
-  <p>In object-oriented system design, **Inheritance** is the mechanism by which one class acquires the state (fields) and behavior (methods) of another class. It serves two primary architectural goals:</p>
+  <p>In object-oriented system design, <b>Inheritance</b> is the mechanism by which one class acquires the state (fields) and behavior (methods) of another class. It serves two primary architectural goals:</p>
   <ul>
     <li><strong>Code Reuse:</strong> Subclasses inherit verified, tested code from parent classes, eliminating duplicate logic.</li>
     <li><strong>Polymorphic Typing (The IS-A Contract):</strong> By extending a class, you establish a semantic contract: a subclass instance *is-a* type of the superclass. A <code>StripeGateway</code> *is-a* <code>PaymentGateway</code>.</li>
   </ul>
-  <p>According to the <strong>Liskov Substitution Principle (LSP)</strong>, a subclass must be completely substitutable for its superclass without breaking client expectations. If extending a class violates the IS-A contract, prefer **Composition** (wrapping a reference to another class) instead.</p>
+  <p>According to the <strong>Liskov Substitution Principle (LSP)</strong>, a subclass must be completely substitutable for its superclass without breaking client expectations. If extending a class violates the IS-A contract, prefer <b>Composition</b> (wrapping a reference to another class) instead.</p>
 
   <h2>2. Constructor Chaining under the Hood</h2>
   <p>Subclasses do not inherit constructors (which are specific to initializing their own declaring class). However, subclass constructors must chain to a parent constructor to guarantee that the inherited parent state is fully initialized first. Java enforces these rules:</p>
@@ -45,14 +45,14 @@
   <p><em>Note:</em> Methods declared as <code>private</code>, <code>final</code>, or <code>static</code> cannot be overridden.</p>
 
   <h2>4. Dynamic Method Dispatch & The vtable</h2>
-  <p>Also known as Runtime Polymorphism, **Dynamic Method Dispatch** is the mechanism by which a call to an overridden method is resolved at runtime rather than compile time.
+  <p>Also known as Runtime Polymorphism, <b>Dynamic Method Dispatch</b> is the mechanism by which a call to an overridden method is resolved at runtime rather than compile time.
   <br>The reference variable type determines which methods are accessible at compile time, but the actual object type on the heap determines which overridden implementation executes at runtime:</p>
   <pre><code>PaymentGateway gateway = new StripeGateway(); // Reference = Parent; Heap = Child
 gateway.processPayment(100.0); // Executes StripeGateway's overridden method</code></pre>
   <p>Under the hood, the JVM executes this lookup using a <strong>vtable (Virtual Method Table)</strong>. Every class loaded into Metaspace has a vtable listing pointers to its virtual methods. If a subclass overrides a parent method, the JVM replaces the parent's method pointer with the subclass method pointer in the subclass vtable, enabling O(1) runtime method lookup.</p>
 
   <h2>5. Single Inheritance & The Diamond Problem</h2>
-  <p>Java classes support **Single Inheritance** (a class can extend at most one class) to prevent ambiguity. In languages with multiple inheritance, the **Diamond Problem** occurs when class <code>A</code> defines a method, classes <code>B</code> and <code>C</code> override it, and class <code>D</code> extends both <code>B</code> and <code>C</code>. If <code>D</code> calls the method, which parent implementation should it run?</p>
+  <p>Java classes support <b>Single Inheritance</b> (a class can extend at most one class) to prevent ambiguity. In languages with multiple inheritance, the <b>Diamond Problem</b> occurs when class <code>A</code> defines a method, classes <code>B</code> and <code>C</code> override it, and class <code>D</code> extends both <code>B</code> and <code>C</code>. If <code>D</code> calls the method, which parent implementation should it run?</p>
   <p>To avoid this conflict, Java forbids class-level multiple inheritance. However, Java allows multiple inheritance of interfaces. If default method implementations conflict across interfaces, the compiler forces the subclass to override the conflicting method and resolve it explicitly:</p>
   <pre><code>public class Device implements Camera, Scanner {
     @Override

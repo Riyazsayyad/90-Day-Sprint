@@ -41,7 +41,7 @@
 
   <h2>3. Reachability & GC Roots</h2>
   <p>The Garbage Collector determines if an object is alive by tracing reachability.
-  <br>The trace starts from **GC Roots** (references that are directly accessible outside the heap, such as local variables in active thread stacks, static class variables, and JNI handles).
+  <br>The trace starts from <b>GC Roots</b> (references that are directly accessible outside the heap, such as local variables in active thread stacks, static class variables, and JNI handles).
   <br>If there is no path of strong references connecting active GC Roots to an object, that object is declared unreachable and becomes eligible for GC.
   <p>
   <pre><code>User user = new User("Alice"); // Root references Alice
@@ -63,7 +63,7 @@ user = null; // Reference broken; Alice is eligible for GC</code></pre>
 protected void finalize() {
     activeInstances.add(this); // Resurrected!
 }</code></pre>
-  <p><em>Key Caveat:</em> The JVM runs <code>finalize()</code> **at most once** per object. If the resurrected object later becomes unreachable again, the finalizer is not re-run; the object is swept immediately.</p>
+  <p><em>Key Caveat:</em> The JVM runs <code>finalize()</code> <b>at most once</b> per object. If the resurrected object later becomes unreachable again, the finalizer is not re-run; the object is swept immediately.</p>
 
   <h2>6. High-Level Reference Strengths</h2>
   <p>To control GC behavior, Java provides four reference strengths via package <code>java.lang.ref</code>:</p>

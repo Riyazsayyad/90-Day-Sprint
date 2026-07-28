@@ -37,7 +37,7 @@
   </ul>
 
   <h2>3. Visualizing Cursor Positions</h2>
-  <p>The core concept to master for interviews is that **the cursor always lies in the gaps between elements** (before the first, between two, or after the last element):</p>
+  <p>The core concept to master for interviews is that <b>the cursor always lies in the gaps between elements</b> (before the first, between two, or after the last element):</p>
   <pre><code>   Element:     [Element 0]  |  [Element 1]  |  [Element 2]
    Index:            0       |       1       |       2
    Cursor:      ^            ^               ^             ^
@@ -50,13 +50,13 @@
   </ol>
   <div class="callout">
     <strong>Interview Tip: Iteration Flip</strong>
-    If you call <code>previous()</code> immediately after <code>next()</code>, you will retrieve the **exact same element** you just read!
+    If you call <code>previous()</code> immediately after <code>next()</code>, you will retrieve the <b>exact same element</b> you just read!
   </div>
 
   <h2>4. State Modifications: add(), remove(), and set()</h2>
   <p>The behavior of modifications depends on the last traversed element:</p>
   <ul>
-    <li><strong><code>add(e)</code>:</strong> Inserts <code>e</code> immediately **before the cursor** position. The cursor shifts right so the new element is behind it. Subsequent calls to <code>next()</code> are unaffected, but calling <code>previous()</code> returns this newly added element.
+    <li><strong><code>add(e)</code>:</strong> Inserts <code>e</code> immediately <b>before the cursor</b> position. The cursor shifts right so the new element is behind it. Subsequent calls to <code>next()</code> are unaffected, but calling <code>previous()</code> returns this newly added element.
       <br><em>Constraint:</em> Calling <code>add()</code> resets the last-returned index tracker (<code>lastRet = -1</code>). You cannot call <code>remove()</code> or <code>set()</code> immediately after adding.
     </li>
     <li><strong><code>remove()</code>:</strong> Deletes the last element returned by <code>next()</code> or <code>previous()</code>.

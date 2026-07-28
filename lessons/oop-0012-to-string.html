@@ -20,7 +20,7 @@
   <p class="meta">~20 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
 
   <h2>1. Why java.lang.Object Provides toString()</h2>
-  <p>In Java's design, every class inherits from <code>java.lang.Object</code>. The <code>toString()</code> method is defined on the root class so that **every object on the heap can represent itself textually.**</p>
+  <p>In Java's design, every class inherits from <code>java.lang.Object</code>. The <code>toString()</code> method is defined on the root class so that <b>every object on the heap can represent itself textually.</b></p>
   <p>Providing a standard string representation ensures that developers can inspect object states during runtime debugging, IDE inspections, console print statements (<code>System.out.println</code>), and application logs, without having to inspect individual fields manually.</p>
 
   <h2>2. Default Implementation in java.lang.Object</h2>
@@ -31,7 +31,7 @@
   <p>This outputs the fully-qualified class name, followed by an <code>@</code> character, followed by the unsigned hexadecimal representation of the object's identity hash code (e.g., <code>com.example.User@7a81197d</code>). This is rarely helpful for reading the actual state of the object.</p>
 
   <h2>3. Why Overriding toString() is Useful</h2>
-  <p>The primary purpose of overriding <code>toString()</code> is to **provide a concise, informative, and readable summary of the object's state.**</p>
+  <p>The primary purpose of overriding <code>toString()</code> is to <b>provide a concise, informative, and readable summary of the object's state.</b></p>
   <ul>
     <li><strong>Better Diagnostics:</strong> When looking at logs, seeing <code>User[id=102, username='riyaz']</code> is vastly superior to seeing <code>com.example.User@7a81197d</code>.</li>
     <li><strong>Easier Debugging:</strong> IDE debuggers call <code>toString()</code> automatically on hover and inside variable panels to help developers inspect variables rapidly.</li>
@@ -50,7 +50,7 @@
 
   <h2>5. Logging & Sensitive Information Concerns (Critical)</h2>
   <p>Logs are frequently ingested into search indices and seen by many operators. Printing sensitive fields in logs violates compliance laws (like GDPR, HIPAA, or PCI-DSS) and creates severe security vulnerabilities.</p>
-  <p><strong>Strict Rule:</strong> **Never** include passwords, credit card numbers, tax IDs (SSN), auth tokens, or private medical details in a <code>toString()</code> output. You must either exclude these fields or mask them.</p>
+  <p><strong>Strict Rule:</strong> <b>Never</b> include passwords, credit card numbers, tax IDs (SSN), auth tokens, or private medical details in a <code>toString()</code> output. You must either exclude these fields or mask them.</p>
 
   <div class="callout">
     <strong>Example of Masking:</strong>
@@ -72,7 +72,7 @@ public String toString() {
 
   <h2>7. How IDEs, Lombok, and Records Generate toString()</h2>
   <ul>
-    <li><strong>IDE Templates (IntelliJ/Eclipse):</strong> Generate clean builder-style strings. However, if you add new fields to the class later, the generated method is **not** automatically updated. You must re-generate it manually.</li>
+    <li><strong>IDE Templates (IntelliJ/Eclipse):</strong> Generate clean builder-style strings. However, if you add new fields to the class later, the generated method is <b>not</b> automatically updated. You must re-generate it manually.</li>
     <li><strong>Lombok (<code>@ToString</code>):</strong> Automatically generates the method at compile-time.
       <ul>
         <li>Use <code>@ToString.Exclude</code> on sensitive fields to prevent them from printing.</li>
@@ -189,7 +189,7 @@ public final class SecureAccount {
   <h2>Common Interview Questions</h2>
   <div class="callout">
     <strong>Q1: What happens if an object's toString() throws an exception?</strong>
-    <p>It behaves like any other runtime exception: it bubbles up the call stack. Throwing an exception inside <code>toString()</code> is highly destructive because it breaks standard diagnostic calls. If a developer uses a debugger to inspect your application, the debugger's attempt to display the object will trigger the exception, crashing the debug session or polluting console outputs. **Never let toString() throw an exception.**</p>
+    <p>It behaves like any other runtime exception: it bubbles up the call stack. Throwing an exception inside <code>toString()</code> is highly destructive because it breaks standard diagnostic calls. If a developer uses a debugger to inspect your application, the debugger's attempt to display the object will trigger the exception, crashing the debug session or polluting console outputs. <b>Never let toString() throw an exception.</b></p>
   </div>
   <div class="callout">
     <strong>Q2: Should you include parent class details in a subclass toString()?</strong>

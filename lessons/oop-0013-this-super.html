@@ -30,7 +30,7 @@
   </div>
 
   <h2>2. Constructor Chaining with this() and super()</h2>
-  <p>An object's lifecycle begins with memory allocation and constructor execution. Under inheritance, Java guarantees a strict **top-down initialization sequence** (from <code>Object</code> down to the leaf subclass).</p>
+  <p>An object's lifecycle begins with memory allocation and constructor execution. Under inheritance, Java guarantees a strict <b>top-down initialization sequence</b> (from <code>Object</code> down to the leaf subclass).</p>
 
   <h3>Chaining inside the same class via <code>this()</code></h3>
   <p>To avoid code duplication (DRY principle), one constructor can delegate to another overloaded constructor in the same class using <code>this(arguments)</code>.</p>
@@ -59,8 +59,8 @@
   <h2>4. Method Overriding vs. Field Hiding</h2>
   <p>Understanding how methods and variables are resolved under inheritance is crucial for interview preparation:</p>
   <ul>
-    <li><strong>Method Overriding (Polymorphic):</strong> Methods are resolved dynamically at runtime based on the actual concrete object type on the heap. This is called **Dynamic Method Dispatch** (using vtable lookups).</li>
-    <li><strong>Field Hiding (Static):</strong> Fields are <strong>not</strong> polymorphic. If a subclass declares a field with the exact same name as a parent class field, the parent field is **hidden**. The field accessed is determined statically at compile-time based on the **reference type** of the variable, not the heap object type.</li>
+    <li><strong>Method Overriding (Polymorphic):</strong> Methods are resolved dynamically at runtime based on the actual concrete object type on the heap. This is called <b>Dynamic Method Dispatch</b> (using vtable lookups).</li>
+    <li><strong>Field Hiding (Static):</strong> Fields are <strong>not</strong> polymorphic. If a subclass declares a field with the exact same name as a parent class field, the parent field is <b>hidden</b>. The field accessed is determined statically at compile-time based on the <b>reference type</b> of the variable, not the heap object type.</li>
   </ul>
 
   <div class="callout">
@@ -75,7 +75,7 @@ System.out.println(((Child)p).value); // Prints "ChildField" (explicit cast)</co
 
   <h2>5. How "this" Behaves in Dynamic Dispatch</h2>
   <p>If a parent class method is executed and contains a method call like <code>method()</code> (which is implicitly <code>this.method()</code>), Java performs dynamic dispatch on <code>this</code>.
-  <br>Even though the method code is defined in the parent class, <code>this</code> references the subclass instance on the heap. Thus, if the subclass overrides <code>method()</code>, the **subclass version will run**.</p>
+  <br>Even though the method code is defined in the parent class, <code>this</code> references the subclass instance on the heap. Thus, if the subclass overrides <code>method()</code>, the <b>subclass version will run</b>.</p>
 
   <div class="callout">
     <strong>Example:</strong>
@@ -100,7 +100,7 @@ d.execute(); // Prints "Derived Show" because dynamic dispatch resolves to Deriv
   </ul>
 
   <h2>7. Calling Overridable Methods in Constructors (Critical Bug)</h2>
-  <p><strong>Strict Rule:</strong> **Never** invoke an overridable method from inside a constructor.</p>
+  <p><strong>Strict Rule:</strong> <b>Never</b> invoke an overridable method from inside a constructor.</p>
   <p>If you call a virtual (overridable) method in a parent constructor:
   <ol>
     <li>The parent constructor runs first (due to constructor chaining).</li>
@@ -117,7 +117,7 @@ d.execute(); // Prints "Derived Show" because dynamic dispatch resolves to Deriv
     <li>Starting a new thread from inside the constructor that uses <code>this</code>.</li>
     <li>Passing <code>this</code> to another object's constructor.</li>
   </ul>
-  <p>If another thread or class accesses the escaped <code>this</code> reference, it will interact with a **partially constructed object**, creating race conditions and memory visibility issues that are incredibly hard to trace.</p>
+  <p>If another thread or class accesses the escaped <code>this</code> reference, it will interact with a <b>partially constructed object</b>, creating race conditions and memory visibility issues that are incredibly hard to trace.</p>
 
   <h2>9. Code Examples: Bad vs. Good</h2>
 

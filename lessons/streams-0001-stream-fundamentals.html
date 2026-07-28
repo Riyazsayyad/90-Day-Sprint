@@ -25,7 +25,7 @@
   <p>A Stream is <strong>not a data structure</strong>. It is a declarative pipeline that processes a sequence of elements from a source (such as a Collection, an array, a generator function, or an I/O channel) without storing or mutating the underlying data. It acts as an abstraction for <strong>internal iteration</strong>.</p>
 
   <h3>Mental Model: The Assembly Line</h3>
-  <p>Think of a Stream as a **conveyor belt** (the pipeline) where parts (elements) flow from a warehouse bin (the source) past several robotic arms (intermediate operations). The robots do not touch the warehouse bin itself; they only modify the parts as they pass by. At the end of the belt, a packer wraps them into a package (the terminal operation). The belt only moves when the packer requests a package—otherwise, the conveyor belt remains stationary.</p>
+  <p>Think of a Stream as a <b>conveyor belt</b> (the pipeline) where parts (elements) flow from a warehouse bin (the source) past several robotic arms (intermediate operations). The robots do not touch the warehouse bin itself; they only modify the parts as they pass by. At the end of the belt, a packer wraps them into a package (the terminal operation). The belt only moves when the packer requests a package—otherwise, the conveyor belt remains stationary.</p>
 
   <h3>Key Differences: Collections vs. Streams</h3>
   <table class="reference-table">
@@ -77,7 +77,7 @@
     <li><strong>Lack of Optimization Opportunities:</strong> The JVM cannot easily optimize hand-written nested loops because the control flow is locked in client code. The compiler cannot easily perform loop fusion or short-circuit operations dynamically.</li>
     <li><strong>Multi-core Hardware Pressure:</strong> By 2014, dual-core and quad-core CPUs were standard. Java needed a way to abstract parallel execution so that code could automatically scale across available cores without changing the business logic.</li>
   </ul>
-  <p>Java designers introduced Streams to support **Declarative Data Processing**. Instead of telling the JVM <em>how</em> to loop, you define <em>what</em> transformations to apply, and the library handles the underlying iteration mechanics, concurrency, and pipeline scheduling.</p>
+  <p>Java designers introduced Streams to support <b>Declarative Data Processing</b>. Instead of telling the JVM <em>how</em> to loop, you define <em>what</em> transformations to apply, and the library handles the underlying iteration mechanics, concurrency, and pipeline scheduling.</p>
 
   <h2>3. The Anatomy of a Stream Pipeline</h2>
   <p>A Stream pipeline is composed of three distinct stages:</p>
@@ -101,7 +101,7 @@
   <p>These operations transform one Stream into another. They do not execute immediately; they merely record the operation on the pipeline.
     <ul>
       <li><strong>Stateless:</strong> (<code>filter</code>, <code>map</code>, <code>flatMap</code>, <code>peek</code>) Each element is processed independently. No knowledge of previous elements is required.</li>
-      <li><strong>Stateful:</strong> (<code>sorted</code>, <code>distinct</code>, <code>limit</code>, <code>skip</code>) These operations must maintain state across elements. For example, <code>sorted()</code> must buffer all elements in memory before emitting the first element to the next stage, creating a **barrier** in the pipeline.</li>
+      <li><strong>Stateful:</strong> (<code>sorted</code>, <code>distinct</code>, <code>limit</code>, <code>skip</code>) These operations must maintain state across elements. For example, <code>sorted()</code> must buffer all elements in memory before emitting the first element to the next stage, creating a <b>barrier</b> in the pipeline.</li>
     </ul>
   </p>
 
@@ -157,7 +157,7 @@
   <p>Streams create overhead in the form of short-lived objects (the stream head, the intermediate operation nodes, the sink instances, and lambda captures).
     <ul>
       <li><strong>TLABs (Thread Local Allocation Buffers):</strong> The JVM mitigates this overhead by allocating these short-lived objects directly in the thread's TLAB within the Eden space. Since allocation in TLABs only requires bumping a pointer (bump-the-pointer allocation), it is extremely fast and incurs zero locking overhead.</li>
-      <li><strong>Escape Analysis:</strong> The JIT compiler attempts to analyze if the stream objects escape the scope of the method. If they do not escape, the compiler can apply **Scalar Replacement**, breaking the objects into their primitive fields and allocating them directly on the CPU registers or stack, bypassing heap allocation entirely.</li>
+      <li><strong>Escape Analysis:</strong> The JIT compiler attempts to analyze if the stream objects escape the scope of the method. If they do not escape, the compiler can apply <b>Scalar Replacement</b>, breaking the objects into their primitive fields and allocating them directly on the CPU registers or stack, bypassing heap allocation entirely.</li>
     </ul>
   </p>
 
@@ -421,7 +421,7 @@ System.out.println(results.size());</code></pre>
     </li>
     <li>
       <strong>Explain how the JIT compiler uses Escape Analysis to optimize Stream object allocations.</strong><br>
-      <em>Answer: JIT compiler analyzes the scope of short-lived objects created by streams (such as pipeline nodes and sink instances). If they do not escape the allocating thread or method, the JIT optimizes them away using **Scalar Replacement**, creating local variables on registers/stack instead of allocating on the heap.</em>
+      <em>Answer: JIT compiler analyzes the scope of short-lived objects created by streams (such as pipeline nodes and sink instances). If they do not escape the allocating thread or method, the JIT optimizes them away using <b>Scalar Replacement</b>, creating local variables on registers/stack instead of allocating on the heap.</em>
     </li>
     <li>
       <strong>How does a stateful intermediate operation (like <code>sorted()</code>) affect the Sink execution chain?</strong><br>

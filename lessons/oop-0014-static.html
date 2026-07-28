@@ -61,7 +61,7 @@
   </ol>
 
   <h3>Thread Safety Considerations</h3>
-  <p>Because static variables are shared globally across all threads running in the same JVM, they are **inherently not thread-safe** if mutable. Any concurrent modification to a mutable static field (e.g., <code>static int count</code>) will lead to race conditions and data corruption unless guarded by synchronization (like <code>AtomicInteger</code> or explicit locks).</p>
+  <p>Because static variables are shared globally across all threads running in the same JVM, they are <b>inherently not thread-safe</b> if mutable. Any concurrent modification to a mutable static field (e.g., <code>static int count</code>) will lead to race conditions and data corruption unless guarded by synchronization (like <code>AtomicInteger</code> or explicit locks).</p>
 
   <h2>3. Static Methods</h2>
   <p>A static method is bound to the class rather than an instance. It can be invoked using the class name directly without instantiating an object: <code>Math.abs(-5)</code>.</p>
@@ -110,16 +110,16 @@
   <p>If a static block throws a runtime exception, the JVM cannot initialize the class. Any subsequent attempt to access the class will result in a <code>java.lang.NoClassDefFoundError</code> wrapper, pointing to the original failure, which is wrapped in a <code>java.lang.ExceptionInInitializerError</code> during the initial loading thread.</p>
 
   <h2>5. Static Nested Classes vs. Inner Classes</h2>
-  <p>A nested class declared as <code>static</code> is called a **static nested class**. If it lacks the <code>static</code> keyword, it is an **inner class** (or member class).</p>
+  <p>A nested class declared as <code>static</code> is called a <b>static nested class</b>. If it lacks the <code>static</code> keyword, it is an <b>inner class</b> (or member class).</p>
 
   <h3>The Critical Difference</h3>
   <ul>
     <li><strong>Inner Class:</strong> Holds an implicit hidden pointer to its enclosing outer class instance (written by the compiler as <code>Outer.this</code>). It cannot exist without an outer class instance.</li>
-    <li><strong>Static Nested Class:</strong> Has **no** implicit pointer to an outer instance. It behaves exactly like a top-level class that has been nested for packaging convenience and scope control.</li>
+    <li><strong>Static Nested Class:</strong> Has <b>no</b> implicit pointer to an outer instance. It behaves exactly like a top-level class that has been nested for packaging convenience and scope control.</li>
   </ul>
 
   <h3>Memory Implications</h3>
-  <p>Inner classes present a significant **memory leak hazard**. Because they hold a reference to the outer instance, if an inner class instance is exported (e.g., as a handler or listener) and outlives the outer instance, it prevents the outer object from being garbage-collected, leaking the entire outer scope.</p>
+  <p>Inner classes present a significant <b>memory leak hazard</b>. Because they hold a reference to the outer instance, if an inner class instance is exported (e.g., as a handler or listener) and outlives the outer instance, it prevents the outer object from being garbage-collected, leaking the entire outer scope.</p>
 
   <pre><code class="language-java">public class Outer {
     private int outerValue;
@@ -161,7 +161,7 @@ double val = sqrt(sin(2.0));</code></pre>
   <ol>
     <li><strong>Loading:</strong> The class loader locates the bytecode binary and creates a class metadata representation.</li>
     <li><strong>Linking:</strong> Includes verification (checking structure), preparation (allocating memory for static fields and defaulting them), and resolution (resolving symbolic references).</li>
-    <li><strong>Initialization:</strong> Executes the static initializers (static blocks and field assignments). This occurs on the first **active use** of the class.</li>
+    <li><strong>Initialization:</strong> Executes the static initializers (static blocks and field assignments). This occurs on the first <b>active use</b> of the class.</li>
   </ol>
 
   <h3>Active Uses that Trigger Initialization</h3>
@@ -170,7 +170,7 @@ double val = sqrt(sin(2.0));</code></pre>
     <li>Accessing a static method or non-constant static field.</li>
     <li>Reflection (<code>Class.forName("ClassName")</code>).</li>
   </ul>
-  <p><em>Note:</em> Accessing a compile-time constant static field (marked <code>static final</code> and assigned a primitive or string literal constant) does **not** trigger class initialization, because the compiler inlines the constant directly into the calling bytecode.</p>
+  <p><em>Note:</em> Accessing a compile-time constant static field (marked <code>static final</code> and assigned a primitive or string literal constant) does <b>not</b> trigger class initialization, because the compiler inlines the constant directly into the calling bytecode.</p>
 
   <h3>Parent-Child Initialization Order</h3>
   <p>When a subclass is initialized, the JVM ensures that its parent class is initialized first. 
@@ -265,7 +265,7 @@ double val = sqrt(sin(2.0));</code></pre>
 }</code></pre>
 
   <h3>Spring Boot Context: Static vs. Container Singletons</h3>
-  <p>In Spring, beans are singletons by default. However, **a Spring singleton bean is not static**. 
+  <p>In Spring, beans are singletons by default. However, <b>a Spring singleton bean is not static</b>. 
   <br>A Spring bean is a standard instance of a class managed by the <code>ApplicationContext</code>. It supports dependency injection (DI), dynamic proxies, lifecycle callbacks (<code>@PostConstruct</code>), and aspect-oriented programming (AOP). Static variables bypass Spring's DI entirely and cannot be mocked easily in tests.</p>
 
   <h2>11. Interview Questions & Deep Dives</h2>
@@ -282,12 +282,12 @@ double val = sqrt(sin(2.0));</code></pre>
 
   <div class="callout">
     <strong>Q3: Can static methods be overridden?</strong>
-    <p>No. Overriding depends on runtime dynamic dispatch (vtable lookups based on the heap object's type). Static methods are resolved statically at compile-time based on the declared **reference type**. If a subclass defines a static method with the same signature, it **hides** the parent method rather than overriding it.</p>
+    <p>No. Overriding depends on runtime dynamic dispatch (vtable lookups based on the heap object's type). Static methods are resolved statically at compile-time based on the declared <b>reference type</b>. If a subclass defines a static method with the same signature, it <b>hides</b> the parent method rather than overriding it.</p>
   </div>
 
   <div class="callout">
     <strong>Q4: Can interfaces have static methods?</strong>
-    <p>Yes, since Java 8. Static methods in interfaces are used to provide utility behavior (like <code>Comparator.reverseOrder()</code>). They must have a body and are **not inherited** by classes implementing the interface.</p>
+    <p>Yes, since Java 8. Static methods in interfaces are used to provide utility behavior (like <code>Comparator.reverseOrder()</code>). They must have a body and are <b>not inherited</b> by classes implementing the interface.</p>
   </div>
 
   <div class="callout">
@@ -547,7 +547,7 @@ public class Main {
 
   <div class="callout">
     <strong>T3: Can an inner class declare a static method?</strong>
-    <p>Starting with Java 16, non-static inner classes **are** allowed to declare static members (including static methods and fields). In older versions of Java (Java 15 and earlier), declaring static members in a non-static inner class was a compilation error because static elements were bound strictly to top-level or static contexts.</p>
+    <p>Starting with Java 16, non-static inner classes <b>are</b> allowed to declare static members (including static methods and fields). In older versions of Java (Java 15 and earlier), declaring static members in a non-static inner class was a compilation error because static elements were bound strictly to top-level or static contexts.</p>
   </div>
 
   <div class="callout">
