@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Collectors Deep Dive — Reference</title>
+  <meta name="description" content="Quick reference guide for Java Streams Collectors: predefined collectors, custom collector architecture, characteristics, and downstream collectors.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/streams-0004-collectors-deep-dive.html">&larr; Lesson 04</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Collectors Deep Dive Cheat Sheet</h1>
+  <p class="meta">Predefined Collectors, Custom Architecture, and Characteristics</p>
+
+  <h2>1. Standard Collectors Reference</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background: #f7f7f0;">
+      <th align="left" style="padding: 0.5rem; width: 25%;">Collector</th>
+      <th align="left" style="padding: 0.5rem; width: 45%;">Behavior</th>
+      <th align="left" style="padding: 0.5rem; width: 30%;">Result Type</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>toList()</code></td>
+      <td style="padding: 0.5rem;">Accumulates elements into a mutable <code>List</code>.</td>
+      <td style="padding: 0.5rem;"><code>List&lt;T&gt;</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>toSet()</code></td>
+      <td style="padding: 0.5rem;">Accumulates elements into a mutable <code>Set</code>.</td>
+      <td style="padding: 0.5rem;"><code>Set&lt;T&gt;</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>toCollection(...)</code></td>
+      <td style="padding: 0.5rem;">Accumulates elements into a custom collection factory (e.g. <code>ArrayList::new</code>).</td>
+      <td style="padding: 0.5rem;"><code>C extends Collection&lt;T&gt;</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>toMap(keyMapper, valueMapper)</code></td>
+      <td style="padding: 0.5rem;">Maps elements to keys and values. Throws <code>IllegalStateException</code> on duplicates.</td>
+      <td style="padding: 0.5rem;"><code>Map&lt;K, U&gt;</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>toMap(key, val, mergeFn)</code></td>
+      <td style="padding: 0.5rem;">Maps elements to keys and values, resolving duplicates with a merge function.</td>
+      <td style="padding: 0.5rem;"><code>Map&lt;K, U&gt;</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>joining(delimiter)</code></td>
+      <td style="padding: 0.5rem;">Concatenates CharSequences in encounter order with delimiter.</td>
+      <td style="padding: 0.5rem;"><code>String</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>counting()</code></td>
+      <td style="padding: 0.5rem;">Counts the number of elements (normally used as downstream).</td>
+      <td style="padding: 0.5rem;"><code>Long</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><code>summarizingInt(...)</code></td>
+      <td style="padding: 0.5rem;">Calculates count, sum, min, max, average of map results.</td>
+      <td style="padding: 0.5rem;"><code>IntSummaryStatistics</code></td>
+    </tr>
+  </table>
+
+  <h2>2. Collector Architecture Components</h2>
+  <ul>
+    <li><strong>Supplier (<code>() -> A</code>):</strong> Creates the mutable accumulation container (e.g. <code>ArrayList::new</code>).</li>
+    <li><strong>Accumulator (<code>(A, T) -> void</code>):</strong> Folds the next element into the container (e.g. <code>List::add</code>).</li>
+    <li><strong>Combiner (<code>(A, A) -> A</code>):</strong> Merges two container partitions (parallel streams only; e.g. <code>(left, right) -> { left.addAll(right); return left; }</code>).</li>
+    <li><strong>Finisher (<code>A -> R</code>):</strong> Transforms the container to the final result (identity function if container is the result).</li>
+    <li><strong>Characteristics:</strong> Configuration set declaring optimization flags:
+      <ul>
+        <li><code>CONCURRENT</code>: Accumulator is concurrent-safe; engine can accumulate concurrently without synchronization (uses single container).</li>
+        <li><code>UNORDERED</code>: Collection order does not matter.</li>
+        <li><code>IDENTITY_FINISH</code>: Finisher is an identity function, cast is safe from <code>A</code> to <code>R</code>.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <h2>3. Grouping vs Partitioning</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background: #f7f7f0;">
+      <th align="left" style="padding: 0.5rem; width: 20%;">Feature</th>
+      <th align="left" style="padding: 0.5rem; width: 40%;"><code>groupingBy(...)</code></th>
+      <th align="left" style="padding: 0.5rem; width: 40%;"><code>partitioningBy(...)</code></th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Classifier Function</strong></td>
+      <td style="padding: 0.5rem;"><code>Function&lt;T, K&gt;</code> (Maps element to any key type <code>K</code>).</td>
+      <td style="padding: 0.5rem;"><code>Predicate&lt;T&gt;</code> (Evaluates element to boolean).</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Output Map Keys</strong></td>
+      <td style="padding: 0.5rem;">Dynamic keys based on classifier return values.</td>
+      <td style="padding: 0.5rem;">Always exactly two keys: <code>true</code> and <code>false</code>.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding: 0.5rem;"><strong>Downstream defaults</strong></td>
+      <td style="padding: 0.5rem;"><code>toList()</code>.</td>
+      <td style="padding: 0.5rem;"><code>toList()</code>.</td>
+    </tr>
+  </table>
+
+  <h2>4. Downstream Collectors recipes</h2>
+  <ul>
+    <li><strong><code>mapping(mapper, downstream)</code>:</strong> Applies mapper to elements before collecting (e.g. <code>groupingBy(Task::getProject, mapping(Task::getName, toList()))</code>).</li>
+    <li><strong><code>filtering(predicate, downstream)</code>:</strong> Filters elements *at the point of collection* rather than in the stream pipeline (crucial to prevent empty key omission).</li>
+    <li><strong><code>collectingAndThen(downstream, finisher)</code>:</strong> Wraps a collector and applies a final function to the result (e.g. converting list to unmodifiable list).</li>
+    <li><strong><code>teeing(c1, c2, merger)</code>:</strong> Directs elements to two separate collectors, merging results with a function.</li>
+  </ul>
+
+  <h2>5. Custom Collector Template</h2>
+  <pre><code class="language-java">Collector&lt;String, StringBuilder, String&gt; joiningWithUpper = Collector.of(
+    StringBuilder::new,                               // supplier
+    (sb, s) -> sb.append(s.toUpperCase()).append(","), // accumulator
+    StringBuilder::append,                             // combiner
+    StringBuilder::toString                            // finisher
+);</code></pre>
+</body>
+</html>

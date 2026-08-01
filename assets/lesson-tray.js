@@ -39,7 +39,8 @@
     // Module 02: Streams API
     { num: '01', file: 'streams-0001-stream-fundamentals.html', title: 'Stream Fundamentals', meta: '25 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' },
     { num: '02', file: 'streams-0002-intermediate-operations.html', title: 'Intermediate Operations', meta: '15 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' },
-    { num: '03', file: 'streams-0003-terminal-operations.html', title: 'Terminal Operations', meta: '15 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' }
+    { num: '03', file: 'streams-0003-terminal-operations.html', title: 'Terminal Operations', meta: '15 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' },
+    { num: '04', file: 'streams-0004-collectors-deep-dive.html', title: 'Collectors Deep Dive', meta: '20 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' }
   ];
 
 

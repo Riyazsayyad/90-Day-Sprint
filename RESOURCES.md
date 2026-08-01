@@ -50,6 +50,12 @@
   Direct reference for constructors wrapping TreeMap, Comparable cast validations, and key search logic. Use for: code verification.
 - [OpenJDK PriorityQueue source code](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/PriorityQueue.java)
   Direct reference for backing array representation, siftUp and siftDown implementations, and bottom-up heapify. Use for: code verification.
+- [Oracle: `Collectors` javadoc](https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/stream/Collectors.html)
+  Authoritative API documentation for predefined collectors. Covers reduction, grouping, partitioning, downstream collectors, and concurrent mappings.
+- [OpenJDK `Collectors` source code](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/Collectors.java)
+  Direct reference for CollectorImpl implementation, groupingBy concurrent structures, and downstream execution.
+- [Baeldung: Guide to Java 8 Collectors](https://www.baeldung.com/java-8-collectors)
+  Practical guide covering standard collectors (toList, toMap, groupingBy, partitioningBy).
 
 ## Wisdom (Communities)
 
@@ -65,11 +71,12 @@
   Common bugs with comparator mismatch, compareTo inconsistency with equals, and duplicate set exclusions. Use for: debugging.
 - [Stack Overflow — java-priorityqueue tag](https://stackoverflow.com/questions/tagged/priority-queue+java)
   Edge cases, mutable objects priority update bugs, comparator issues, and iterator unordered pitfalls. Use for: debugging.
+- [Stack Overflow — java-stream tag](https://stackoverflow.com/questions/tagged/java-stream)
+  Troubleshooting collector duplicate key exceptions, grouping concurrent performance, and custom reductions.
 - [r/java](https://reddit.com/r/java)
   General discussion. Use for: real-world collection choices and performance benchmarks.
 
-
----
+----
 
 <details>
 <summary>Previous topic: HashMap Internals</summary>

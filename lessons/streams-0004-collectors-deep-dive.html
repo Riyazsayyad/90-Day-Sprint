@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 4 — Collectors Deep Dive</title>
+  <meta name="description" content="Deep dive into Java Streams Collectors, mutable reduction, grouping, partitioning, downstream collectors, custom collectors, and interview preparation.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot; <a href="streams-0003-terminal-operations.html">⬅️ Prev: Terminal Operations</a>
+  </nav>
+
+  <h1>Deep Dive: Stream Collectors</h1>
+  <p class="meta">~20 minutes &middot; ties to <a href="../MISSION.md">mission</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Predefined collectors in Java (like <code>groupingBy</code>, <code>toMap</code>, and downstream mappings) look simple but hide complex execution paths. Senior engineers must understand mutable reduction vs immutable reduction, how grouping concurrency differs from thread-safe collections, map collision resolutions, custom collector lifecycle components, and how to avoid structural performance bottlenecks.
+  </div>
+
+  <h2>1. Why Collectors Exist</h2>
+  <p>In functional programming, aggregation is often modeled as folding. However, Java streams distinguish between two folding abstractions: <strong>immutable reduction</strong> (<code>reduce()</code>) and <strong>mutable reduction</strong> (<code>collect()</code>).</p>
+  <ul>
+    <li><strong>Mutable Reduction:</strong> Instead of creating a new result value on each step (which is costly when generating complex structures like a <code>List</code> or <code>Map</code>), mutable reduction mutates a shared container to accumulate results in-place.</li>
+    <li><strong><code>collect()</code> vs <code>reduce()</code>:</strong> 
+      <ul>
+        <li><code>reduce()</code> is designed for immutable values (e.g. numbers, strings). Running <code>reduce()</code> with a list accumulator forces the collection to allocate new collections at each step, creating $O(N^2)$ garbage collector pressure.</li>
+        <li><code>collect()</code> accumulates elements by mutating a container. It accepts a <a href="../reference/streams-0004-collectors-deep-dive.html">Collector</a> configuration which handles container initialization, execution, thread merging, and typing.</li>
+      </ul>
+    </li>
+  </ul>
+  <p>For official API definitions, consult the <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/stream/Collectors.html">Oracle Collectors Javadoc</a>.</p>
+
+  <h2>2. The Collector Architecture</h2>
+  <p>An implementation of the <code>java.util.stream.Collector&lt;T, A, R&gt;</code> interface is defined by 5 components, where <code>T</code> is the stream element type, <code>A</code> is the mutable accumulation container type, and <code>R</code> is the final result type.</p>
+  <ol>
+    <li><strong>Supplier (<code>Supplier&lt;A&gt;</code>):</strong> A function that creates a new mutable result container.
+      <pre><code class="language-java">Supplier&lt;List&lt;T&gt;&gt; supplier = ArrayList::new;</code></pre>
+    </li>
+    <li><strong>Accumulator (<code>BiConsumer&lt;A, T&gt;</code>):</strong> A function that folds an element into the container.
+      <pre><code class="language-java">BiConsumer&lt;List&lt;T&gt;, T&gt; accumulator = List::add;</code></pre>
+    </li>
+    <li><strong>Combiner (<code>BinaryOperator&lt;A&gt;</code>):</strong> A function that merges two partial containers during parallel execution.
+      <pre><code class="language-java">BinaryOperator&lt;List&lt;T&gt;&gt; combiner = (left, right) -> { left.addAll(right); return left; };</code></pre>
+    </li>
+    <li><strong>Finisher (<code>Function&lt;A, R&gt;</code>):</strong> Performs final transformations on the container to yield type <code>R</code>. For identity collectors, this cast is bypassed.</li>
+    <li><strong>Characteristics (<code>Set&lt;Characteristics&gt;</code>):</strong> Optimization flags configured on the collector (see section 7).</li>
+  </ol>
+
+  <h2>3. Common Built-in Collectors</h2>
+  <p>The <code>java.util.stream.Collectors</code> utility class provides dozens of preconfigured factory methods:</p>
+  <ul>
+    <li><code>toList()</code> & <code>toSet()</code>: Accumulate into standard lists/sets. The exact implementation (e.g. <code>ArrayList</code> vs <code>HashSet</code>) is not guaranteed and can change across JVM vendors.</li>
+    <li><code>toCollection(Supplier&lt;C&gt;)</code>: Accumulates into a specific collection type (e.g. <code>toCollection(TreeSet::new)</code>).</li>
+    <li><code>toMap(keyMapper, valueMapper)</code>: Maps elements to key-value pairs. <strong>Warning:</strong> throws an exception if duplicate keys are encountered.</li>
+    <li><code>toMap(keyMapper, valueMapper, mergeFunction)</code>: Maps elements, using a merge function to resolve collisions.
+      <pre><code class="language-java">Map&lt;String, String&gt; userRoles = users.stream().collect(
+    Collectors.toMap(User::getId, User::getRole, (existing, replacement) -> existing)
+);</code></pre>
+    </li>
+    <li><code>joining(delimiter)</code>: Concatenates CharSequences inside a <code>StringBuilder</code> in encounter order.</li>
+    <li><code>counting()</code>, <code>averagingDouble()</code>, <code>summarizingInt()</code>, <code>maxBy(comparator)</code>: Perform reductions. Normally, these are used as downstream collectors inside grouping operations.</li>
+  </ul>
+
+  <h2>4. Grouping & Partitioning</h2>
+  <p>Grouping partitions stream elements into a map matching specific buckets:</p>
+  <ul>
+    <li><strong><code>groupingBy(classifier)</code>:</strong> Groups elements by a classifier function. The downstream defaults to <code>toList()</code>.
+      <pre><code class="language-java">Map&lt;Department, List&lt;Employee&gt;&gt; deptEmployees = employees.stream()
+    .collect(Collectors.groupingBy(Employee::getDepartment));</code></pre>
+    </li>
+    <li><strong><code>groupingBy(classifier, downstream)</code>:</strong> Cascades another collector downstream to post-process each bucket.
+      <pre><code class="language-java">Map&lt;Department, Long&gt; deptCounts = employees.stream()
+    .collect(Collectors.groupingBy(Employee::getDepartment, Collectors.counting()));</code></pre>
+    </li>
+    <li><strong><code>groupingByConcurrent(classifier)</code>:</strong> Performs concurrent grouping. It yields a <code>ConcurrentMap</code>. In parallel pipelines, it avoids merging intermediate maps by accumulating elements into a single shared concurrent container, boosting throughput but ignoring order.</li>
+    <li><strong><code>partitioningBy(predicate)</code>:</strong> A specialized grouping collector where keys are always <code>Boolean</code>. It is optimized for exactly two partitions: <code>true</code> and <code>false</code>.</li>
+  </ul>
+
+  <h2>5. Downstream Collectors</h2>
+  <p>Downstream collectors allow composition. They act on elements *after* they are grouped into a bucket:</p>
+  <ul>
+    <li><code>mapping(mapper, downstream)</code>: Transforms elements before feeding them to the downstream collector.
+      <pre><code class="language-java">Map&lt;Department, Set&lt;String&gt;&gt; deptNames = employees.stream().collect(
+    groupingBy(Employee::getDepartment, mapping(Employee::getName, toSet()))
+);</code></pre>
+    </li>
+    <li><code>filtering(predicate, downstream)</code>: Filters elements inside each bucket. <strong>Crucial interview distinction:</strong> Using stream-level filter removes keys from the map entirely. Downstream <code>filtering</code> retains the map key but initializes an empty collection value if no elements match.</li>
+    <li><code>collectingAndThen(downstream, finisher)</code>: Runs the downstream collector and then transforms the final container (e.g. wrapping a list in <code>Collections::unmodifiableList</code>).</li>
+    <li><code>teeing(c1, c2, merger)</code>: Directs elements to two separate collectors, merging their outputs with a function. Perfect for calculating two metrics (like average and sum) in a single pass.</li>
+  </ul>
+
+  <h2>6. Custom Collectors</h2>
+  <p>If predefined collectors are insufficient, you can instantiate a custom collector using <code>Collector.of(...)</code>:</p>
+  <pre><code class="language-java">Collector&lt;Employee, StringBuilder, String&gt; employeeStringifier = Collector.of(
+    StringBuilder::new,                                // supplier
+    (sb, emp) -> sb.append(emp.getName()).append(";"),  // accumulator
+    StringBuilder::append,                             // combiner
+    StringBuilder::toString                            // finisher
+);</code></pre>
+  <p><strong>Enterprise Use Cases:</strong> Building custom collectors is common when writing custom batch processing, serializing objects directly to proprietary formats (like writing CSV streams without middle-tier list allocations), or calculating sliding window averages on custom metric containers.</p>
+
+  <h2>7. Collector Characteristics & Concurrency</h2>
+  <p>The performance profile of a collector is controlled by the <code>Characteristics</code> enum set:</p>
+  <ul>
+    <li><strong><code>IDENTITY_FINISH</code>:</strong> Indicates that the finisher function is the identity function and can be omitted. The compiler will cast the accumulation container <code>A</code> directly to the result type <code>R</code>.</li>
+    <li><strong><code>UNORDERED</code>:</strong> Declares that the collector does not preserve the stream encounter order. This gives the engine freedom to run optimizations on parallel streams.</li>
+    <li><strong><code>CONCURRENT</code>:</strong> Declares that the accumulator is thread-safe and can be invoked concurrently. A concurrent collector allows the parallel stream engine to bypass intermediate map merging. Threads bypass combiners entirely and push elements directly into a single shared concurrent collection.</li>
+  </ul>
+
+  <h2>8. Enterprise Best Practices</h2>
+  <ul>
+    <li><strong>Avoid duplicate key failures in toMap:</strong> When map keys are dynamic, always provide a merge function to prevent runtime <code>IllegalStateException</code> failures due to duplicates.</li>
+    <li><strong>Enforce immutability:</strong> Prefer Java 10+ <code>toUnmodifiableList()</code> or <code>collectingAndThen(toList(), Collections::unmodifiableList)</code> to prevent client code from mutating collected API returns.</li>
+    <li><strong>Prevent pipeline state leakage:</strong> When grouping concurrent streams, use <code>groupingByConcurrent</code> only if ordering is irrelevant and the JVM garbage collector shows pressure from map merges.</li>
+  </ul>
+
+  <h2>9. Common Interview Traps</h2>
+  <ul>
+    <li><strong>The <code>toMap</code> collision:</strong> Interviewers will ask: "What happens if keys collide in `toMap`?" If no merge function is provided, it throws a runtime exception. You must suggest a merge function as the solution.</li>
+    <li><strong><code>groupingBy</code> vs <code>partitioningBy</code>:</strong> <code>partitioningBy</code> is optimized to construct a map with exactly two keys: <code>true</code> and <code>false</code>. <code>groupingBy</code> handles dynamic keys and is more expensive.</li>
+    <li><strong>Calling Collectors from reduce():</strong> If you try to accumulate stream elements into a List using <code>reduce()</code>, you violate thread-safety or create massive GC allocations. <code>collect()</code> is the designated channel for mutable reductions.</li>
+  </ul>
+
+  <hr>
+
+  <h2>Key Takeaways & Revision Summary</h2>
+  <ul>
+    <li><code>collect()</code> is designed for mutable reduction (accumulating into collections/builders).</li>
+    <li>Collectors are composed of 4 functional components and optimization flags.</li>
+    <li>Use downstream mapping and filtering to shape groupings without losing map keys.</li>
+    <li>Declare <code>CONCURRENT</code> and <code>UNORDERED</code> to speed up parallel reductions on thread-safe containers.</li>
+  </ul>
+
+  <hr>
+
+  <h2>10. 5 Senior-Level MCQs</h2>
+  <p class="meta">Note: All option lengths and word counts are formatted identically to prevent visual hints.</p>
+  
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: What is the primary difference in thread execution behavior between groupingBy and groupingByConcurrent?</p>
+        <!-- A: "One container is shared." (24 characters) -->
+        <!-- B: "New container is opened." (24 characters) -->
+        <!-- C: "Map container is locked." (24 characters) -->
+        <!-- D: "Key container is copied." (24 characters) -->
+        <ol type="A">
+          <li>One container is shared.</li>
+          <li>New container is opened.</li>
+          <li>Map container is locked.</li>
+          <li>Key container is copied.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (One container is shared.)</strong></p>
+          <p>Explanation: <code>groupingByConcurrent</code> uses a single shared concurrent map container (like ConcurrentHashMap). Threads insert values directly into it concurrently without creating separate map splits and merging them at the end.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Which characteristic specifies that the collector finisher is simply an identity cast?</p>
+        <!-- A: "IDENTITY_FINISH is declared." (28 characters) -->
+        <!-- B: "CONCURRENT_SAFE is declared." (28 characters) -->
+        <!-- C: "UNORDERED_SAVES is declared." (28 characters) -->
+        <!-- D: "MUTABLE_REDUCES is declared." (28 characters) -->
+        <ol type="A">
+          <li>IDENTITY_FINISH is declared.</li>
+          <li>CONCURRENT_SAFE is declared.</li>
+          <li>UNORDERED_SAVES is declared.</li>
+          <li>MUTABLE_REDUCES is declared.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (IDENTITY_FINISH is declared.)</strong></p>
+          <p>Explanation: <code>IDENTITY_FINISH</code> tells the stream engine that the finisher function is an identity operation, meaning the container class can be safely cast directly to the final return type.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: What occurs when toMap encounters duplicate keys without a merge function?</p>
+        <!-- A: "IllegalStateException is thrown." (32 characters) -->
+        <!-- B: "NullPointerException  is thrown." (32 characters) -->
+        <!-- C: "ClassCastException    is thrown." (32 characters) -->
+        <!-- D: "RuntimeException      is thrown." (32 characters) -->
+        <ol type="A">
+          <li>IllegalStateException is thrown.</li>
+          <li>NullPointerException  is thrown.</li>
+          <li>ClassCastException    is thrown.</li>
+          <li>RuntimeException      is thrown.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (IllegalStateException is thrown.)</strong></p>
+          <p>Explanation: When duplicate keys are encountered in <code>toMap()</code> and no resolver/merge function is declared, the JVM throws an <code>IllegalStateException</code> due to key collision.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: What is the return type of partitioningBy collector?</p>
+        <!-- A: "Map with boolean keys." (22 characters) -->
+        <!-- B: "Map with integer keys." (22 characters) -->
+        <!-- C: "Map with generic keys." (22 characters) -->
+        <!-- D: "Map with string  keys." (22 characters) -->
+        <ol type="A">
+          <li>Map with boolean keys.</li>
+          <li>Map with integer keys.</li>
+          <li>Map with generic keys.</li>
+          <li>Map with string  keys.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Map with boolean keys.)</strong></p>
+          <p>Explanation: <code>partitioningBy</code> accepts a Predicate and splits elements into exactly two groups: <code>true</code> and <code>false</code>. Therefore, the resulting map keys are always <code>Boolean</code>.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: Why is collect preferred over reduce for accumulating into a List?</p>
+        <!-- A: "Avoids creating new collections." (32 characters) -->
+        <!-- B: "Avoids updating active elements." (32 characters) -->
+        <!-- C: "Avoids matching generic objects." (32 characters) -->
+        <!-- D: "Avoids sorting duplicate objects." (32 characters) -->
+        <ol type="A">
+          <li>Avoids creating new collections.</li>
+          <li>Avoids updating active elements.</li>
+          <li>Avoids matching generic objects.</li>
+          <li>Avoids sorting duplicate objects.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Avoids creating new collections.)</strong></p>
+          <p>Explanation: <code>collect()</code> is a mutable reduction. It mutates a single container, whereas <code>reduce()</code> is designed for immutable reductions and would require allocating new lists/sets at every step.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>11. Reasoning/Coding Exercises</h2>
+  <ol>
+    <li><strong>Map Collision Resolver:</strong> Write a stream of user objects with identical IDs. Collect them into a Map using <code>toMap</code>, specifying a merge function that keeps the newest user data and prints conflicts.</li>
+    <li><strong>Custom CSV Serializer:</strong> Create a custom collector using <code>Collector.of</code> that takes a stream of objects and builds a single comma-separated CSV string (with headers) without storing them in a temporary List.</li>
+    <li><strong>Downstream Filtering vs Stream Filtering:</strong> Build a grouping setup mapping Tasks to Projects. Implement one using stream-level <code>filter(t -> t.isCompleted())</code>, and another using downstream <code>filtering(t -> t.isCompleted(), toList())</code>. Print both maps when there's a project with zero completed tasks to observe key omissions.</li>
+  </ol>
+
+  <p class="meta">If you have any questions or would like to dive deeper into any of these concepts, ask your AI mentor anytime!</p>
+</body>
+</html>
