@@ -6,7 +6,9 @@ alwaysApply: false
 
 # Study Tracker Maintenance (Project BMW)
 
-After any study activity, update the matching tracker files. Do not skip tracker updates when lessons, interviews, DSA, or weaknesses are discussed.
+**Never commit or push `tracker/`** — public repo, PII inside, `.gitignore` enforced.
+
+After any study activity, update the matching tracker files locally. Do not skip tracker updates when lessons, interviews, DSA, or weaknesses are discussed.
 
 ## 1. Daily Progress & Lesson Completion
 

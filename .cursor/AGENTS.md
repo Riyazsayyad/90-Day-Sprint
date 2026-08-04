@@ -12,6 +12,8 @@ Whenever a new lesson is added, modified, or reordered in the project, agents MU
 
 ## Study Tracker Maintenance
 
+**Local only — never commit or push `tracker/`.** The repo is public; tracker files contain PII (finance, salary, personal goals). They are listed in `.gitignore`. Update them locally after study activity; do not add them to git or suggest removing the ignore rule.
+
 To ensure the user's progress is consistently and accurately tracked throughout the 90-Day Sprint (Project BMW), agents MUST maintain and update the files in the [tracker/](file:///c:/Riyaz/Study/Learn/tracker/) directory.
 
 ### Maintenance Events & Update Rules
