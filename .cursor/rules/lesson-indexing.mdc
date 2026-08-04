@@ -1,0 +1,41 @@
+---
+description: Update curriculum indexes when lessons are added, modified, or reordered
+globs: lessons/**/*.html,reference/**/*.html,index.html,assets/lesson-tray.js
+alwaysApply: false
+---
+
+# Lesson Curriculum Indexing
+
+When a lesson is **added, modified, or reordered**, update **all three** locations before finishing.
+
+## 1. Dashboard (`index.html`)
+
+- Update module curriculum cards and drawer lesson lists
+- Fix progress counts (e.g. `X / Y Lessons`)
+- Add or reorder lesson links with correct number, title, and meta
+
+## 2. Lessons Tray (`assets/lesson-tray.js`)
+
+Add or update the lesson object in the `lessons` array:
+
+```javascript
+{ num: "05", path: "lessons/streams-0005-parallel-streams.html", title: "Parallel Streams", meta: "20 min read • Streams API" }
+```
+
+Match the module's existing naming pattern (`streams-0005-...`, `oop-0014-...`, etc.).
+
+## 3. Lesson Navigation (`lessons/*.html`)
+
+- Chain `<nav class="lesson-nav">` prev/next links sequentially within the module
+- Every nav bar must include: `<a href="../index.html">🏠 Home</a>`
+- Update adjacent lessons when inserting in the middle
+
+## Checklist
+
+- [ ] `index.html` drawer and counts updated
+- [ ] `lesson-tray.js` entry added or corrected
+- [ ] New lesson has Home + prev/next links
+- [ ] Neighbor lessons' prev/next links updated
+- [ ] Matching `reference/` sheet created when the lesson has one
+
+Full spec: `.cursor/AGENTS.md` → Lesson Curriculum Indexing.

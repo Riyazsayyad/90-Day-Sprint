@@ -56,6 +56,14 @@
   Direct reference for CollectorImpl implementation, groupingBy concurrent structures, and downstream execution.
 - [Baeldung: Guide to Java 8 Collectors](https://www.baeldung.com/java-8-collectors)
   Practical guide covering standard collectors (toList, toMap, groupingBy, partitioningBy).
+- [Oracle: `BaseStream.parallel()` javadoc](https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/stream/BaseStream.html#parallel())
+  Authoritative contract for switching a stream to parallel execution and encounter-order implications.
+- [Oracle: `ForkJoinPool.commonPool()` javadoc](https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/concurrent/ForkJoinPool.html#commonPool())
+  Default pool for parallel streams: parallelism defaults, caller-helps policy, system property overrides.
+- [OpenJDK `ForkJoinPool` source](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/concurrent/ForkJoinPool.java)
+  commonPool parallelism (`availableProcessors - 1`), work-stealing, and custom-pool interaction with parallel streams.
+- [Baeldung: When to Use Parallel Streams](https://www.baeldung.com/java-when-to-use-parallel-stream)
+  Practical guidance on when parallel streams win or lose; complements benchmark-first discipline.
 
 ## Wisdom (Communities)
 

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 5 — Parallel Streams</title>
+  <meta name="description" content="Parallel Streams in Java: ForkJoinPool, work-stealing, ordering, thread safety, performance reality, enterprise hazards, and senior interview traps.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot; <a href="streams-0004-collectors-deep-dive.html">⬅️ Prev: Collectors Deep Dive</a>
+  </nav>
+
+  <h1>Deep Dive: Parallel Streams</h1>
+  <p class="meta">~20 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; <a href="../reference/streams-0005-parallel-streams.html">Cheat sheet</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Parallel streams look like a free speedup switch. Senior engineers know they route work through the JVM's shared <code>ForkJoinPool.commonPool()</code>, demand stateless side-effect-free ops, punish ordered sources and I/O, and often lose on small data. Interviewers probe whether you default to sequential, measure before parallelizing, and isolate pools when you must.
+  </div>
+
+  <p><strong>Primary source:</strong> Read the <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/stream/BaseStream.html#parallel()">Oracle <code>BaseStream.parallel()</code> documentation</a> and the <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/concurrent/ForkJoinPool.html#commonPool()"><code>ForkJoinPool.commonPool()</code> javadoc</a> — they define the execution contract parallel streams inherit.</p>
+
+  <h2>1. Why Parallel Streams Exist</h2>
+
+  <h3>Parallelism vs Concurrency</h3>
+  <ul>
+    <li><strong>Concurrency:</strong> Multiple tasks in progress — threads may time-slice on one core. Good for I/O wait, overlapping requests.</li>
+    <li><strong>Parallelism:</strong> Multiple tasks execute <em>simultaneously</em> on multiple cores. Good for CPU-bound work where each unit is independent.</li>
+    <li>Parallel streams target <strong>data parallelism</strong>: same operation applied to many elements, split across workers. Not a general-purpose concurrency framework.</li>
+  </ul>
+
+  <h3>Data Parallelism Model in Streams</h3>
+  <p>A parallel stream decomposes the source into chunks via <code>Spliterator.trySplit()</code>, runs pipeline stages on each chunk on different threads, then merges results (for reductions/collects). The pipeline logic is identical to sequential — only traversal and task scheduling change.</p>
+
+  <h3>Sequential vs Parallel Mental Model</h3>
+  <pre><code class="language-java">// Sequential: one thread walks the spliterator forward
+list.stream().map(f).filter(p).collect(toList());
+
+// Parallel: spliterator splits → fork/join tasks on commonPool → merge
+list.parallelStream().map(f).filter(p).collect(toList());</code></pre>
+  <p>Think: sequential = single walker; parallel = tree of sub-tasks over sub-spliterators, coordinated by <code>ForkJoinPool</code>.</p>
+
+  <h2>2. Enabling Parallelism</h2>
+  <ul>
+    <li><code>stream.parallel()</code> — returns parallel view of an existing stream (may switch mid-pipeline).</li>
+    <li><code>stream.sequential()</code> — forces subsequent ops back to single-threaded traversal.</li>
+    <li><code>collection.parallelStream()</code> — creates a parallel stream from the start.</li>
+    <li><code>Arrays.stream(arr).parallel()</code> — parallel over array spliterator.</li>
+  </ul>
+  <p><strong>Mid-pipeline switching matters:</strong> ops <em>before</em> <code>parallel()</code> run sequentially; ops <em>after</em> may run in parallel. Example:</p>
+  <pre><code class="language-java">list.stream()
+    .filter(expensivePredicate)   // sequential
+    .parallel()
+    .map(cpuHeavyTransform)      // parallel
+    .collect(toList());</code></pre>
+  <p>Only the parallel segment is forked. Earlier stages still run on the calling thread until the split point.</p>
+
+  <h2>3. Execution Model</h2>
+
+  <h3>ForkJoinPool.commonPool()</h3>
+  <p>Unless you use the custom-pool trick (below), all parallel streams share <code>ForkJoinPool.commonPool()</code> — one static pool per JVM. Every Spring request thread, batch job, and <code>CompletableFuture</code> task that touches parallel streams competes here.</p>
+
+  <h3>Work-Stealing</h3>
+  <p>Each worker maintains a deque of tasks. When idle, a worker steals from another worker's tail. Keeps cores busy when splits are uneven — critical when some chunks finish faster.</p>
+
+  <h3>Task Decomposition via Spliterator.trySplit()</h3>
+  <p>The engine calls <code>trySplit()</code> on the source spliterator until chunks are small enough (or splitting fails). <code>ArrayList</code> and arrays split cleanly (index ranges). <code>LinkedList</code> splits poorly — often one element per split → massive overhead.</p>
+
+  <h3>Default Parallelism</h3>
+  <p><code>commonPool()</code> parallelism defaults to <code>Runtime.getRuntime().availableProcessors() - 1</code> (minimum 1 on single-core). Rationale: the submitting thread often helps execute work ("caller-runs" policy). Override via system property <code>java.util.concurrent.ForkJoinPool.common.parallelism</code>.</p>
+  <p>A <em>custom</em> <code>new ForkJoinPool(n)</code> defaults parallelism to <code>availableProcessors()</code> — not minus one.</p>
+
+  <h3>Custom ForkJoinPool for Isolation</h3>
+  <p><code>parallelStream()</code> always uses <code>commonPool()</code> — you cannot pass a pool to the stream API. To isolate:</p>
+  <pre><code class="language-java">ForkJoinPool customPool = new ForkJoinPool(4);
+try {
+    customPool.submit(() ->
+        data.parallelStream()
+            .map(cpuBoundWork)
+            .collect(toList())
+    ).get();
+} finally {
+    customPool.shutdown();
+}</code></pre>
+  <p>Running the parallel pipeline <em>inside</em> a task submitted to a custom pool routes fork/join work to that pool's workers. Interview favorite: "How do you stop parallel streams from starving the common pool?" — this pattern.</p>
+
+  <h2>4. Ordering & Encounter Order</h2>
+
+  <h3>Ordered vs Unordered Sources</h3>
+  <p>Lists and arrays have a defined <strong>encounter order</strong>. <code>HashSet</code> is unordered. Ordered sources impose ordering constraints on parallel ops — the engine may buffer or synchronize to preserve order, killing speedup.</p>
+
+  <h3>forEach() vs forEachOrdered()</h3>
+  <ul>
+    <li><code>forEach()</code> on parallel streams — order not guaranteed (unless source is <code>ORDERED</code> and op requires it).</li>
+    <li><code>forEachOrdered()</code> — processes in encounter order even in parallel; may force single-threaded behavior or extra coordination.</li>
+  </ul>
+
+  <h3>findFirst() vs findAny()</h3>
+  <ul>
+    <li><code>findFirst()</code> — must respect encounter order; on parallel ordered streams, may need to wait for the leftmost chunk.</li>
+    <li><code>findAny()</code> — returns any matching element; cheaper on parallel — first worker that finds one can short-circuit.</li>
+  </ul>
+
+  <h3>unordered() Optimization</h3>
+  <p><code>stream.unordered()</code> drops the <code>ORDERED</code> characteristic. Downstream ops may skip order-preserving merges. Use when order is irrelevant — e.g. summing, grouping into sets.</p>
+
+  <h3>When Order Kills Parallel Speedup</h3>
+  <p>Ops like <code>limit()</code>, <code>skip()</code> on ordered parallel streams, or <code>collect(toList())</code> on ordered sources may require stitching results in encounter order. If you need parallel throughput and not order, call <code>unordered()</code> early or use unordered collectors (see <a href="streams-0004-collectors-deep-dive.html">Collectors lesson</a> — <code>UNORDERED</code> characteristic).</p>
+
+  <h2>5. Statelessness & Thread Safety</h2>
+
+  <h3>Stateless Intermediate Ops Requirement</h3>
+  <p><code>map</code>, <code>filter</code>, <code>flatMap</code> must not depend on mutable external state. Each element processed independently — if your lambda reads/writes shared fields, parallel execution races.</p>
+
+  <h3>Side-Effect Free Lambdas</h3>
+  <pre><code class="language-java">// BROKEN in parallel
+List&lt;Integer&gt; result = new ArrayList&lt;&gt;();
+list.parallelStream().forEach(result::add); // ArrayList not thread-safe
+
+// CORRECT
+List&lt;Integer&gt; result = list.parallelStream().collect(toList());</code></pre>
+
+  <h3>Shared Mutable State Traps</h3>
+  <p>Atomic counters, synchronized blocks inside <code>map</code>, or mutating a shared <code>HashMap</code> from <code>forEach</code> — all interview traps. Fix: collect, reduce, or concurrent collectors.</p>
+
+  <h3>Thread-Safe Collectors (CONCURRENT)</h3>
+  <p>Collectors with <code>Characteristics.CONCURRENT</code> allow multiple threads to accumulate into one shared container without combiner merges. Example: <code>Collectors.toConcurrentMap(...)</code>, <code>groupingByConcurrent(...)</code>. See <a href="../reference/streams-0004-collectors-deep-dive.html">Collectors reference</a>.</p>
+
+  <h3>Non-Associative Reductions Break in Parallel</h3>
+  <p><code>reduce()</code> requires an <strong>associative</strong> combiner: <code>(a op b) op c == a op (b op c)</code>. Subtraction is not associative — parallel merge order changes results. Interview: "Can I parallelize string concatenation with reduce?" — technically associative for strings, but still allocates heavily; prefer <code>collect(joining())</code>.</p>
+
+  <h2>6. Performance Reality</h2>
+
+  <h3>When Parallel Wins</h3>
+  <ul>
+    <li>CPU-bound work per element (math, parsing, encryption).</li>
+    <li>Large <code>N</code> (rule of thumb: tens of thousands+ — always benchmark your case).</li>
+    <li>Splittable sources: <code>ArrayList</code>, arrays, <code>IntStream.range</code>.</li>
+    <li>Primitive streams (<code>IntStream</code>, <code>LongStream</code>) avoid boxing overhead.</li>
+  </ul>
+
+  <h3>When Parallel Loses</h3>
+  <ul>
+    <li>Small collections — fork/join overhead dominates.</li>
+    <li><code>LinkedList</code>, single-element splits, custom spliterators that don't split.</li>
+    <li>I/O inside <code>map</code> (HTTP, DB) — blocks commonPool workers.</li>
+    <li>Boxing with <code>Stream&lt;Integer&gt;</code> vs <code>IntStream</code>.</li>
+    <li>Ordered pipelines with order-preserving terminals.</li>
+  </ul>
+
+  <h3>Overhead of Splitting/Merging</h3>
+  <p>Splitting creates sub-tasks; combiners merge partial results. For cheap per-element work, task creation exceeds savings. Amdahl's law: if 90% of pipeline is sequential setup, max speedup is 10× even with infinite cores.</p>
+
+  <h3>Boxing Tax (Light Touch)</h3>
+  <p><code>Stream&lt;Integer&gt;.map(n -> n * 2)</code> boxes every int. <code>IntStream.range(0, n).map(i -> i * 2)</code> stays primitive. Parallel primitive streams often beat parallel boxed streams on large N.</p>
+
+  <h3>Measure Before Switching</h3>
+  <p>Use JMH or at minimum warm-up loops with representative data sizes. "Parallel is faster" without numbers is a red flag in senior interviews. Profile GC too — bad parallel collect can increase allocation pressure.</p>
+
+  <h2>7. Enterprise Hazards</h2>
+  <ul>
+    <li><strong>Blocking I/O in parallel map/filter:</strong> Each blocked worker is a stolen commonPool thread. Under load, all parallel streams and <code>CompletableFuture</code> defaults stall.</li>
+    <li><strong>Starving commonPool:</strong> One misbehaving service method with <code>parallelStream()</code> + DB calls can degrade the entire JVM.</li>
+    <li><strong>Request threads / Spring apps:</strong> HTTP thread calls <code>parallelStream()</code> → submits to commonPool → request thread may block in <code>join</code> waiting for workers that are themselves blocked on I/O.</li>
+    <li><strong>Shared global pool contention:</strong> Batch job + API traffic share one pool — no isolation without custom pool trick.</li>
+    <li><strong>Debugging non-deterministic bugs:</strong> Race on shared state manifests intermittently. Reproducing requires stress tests; fix is eliminate shared mutation, not "add synchronized".</li>
+  </ul>
+
+  <h2>8. Best Practices</h2>
+  <ul>
+    <li><strong>Default sequential;</strong> opt into parallel only with benchmark evidence on production-like data.</li>
+    <li><strong>Isolate custom pools</strong> for CPU-bound batch work that must not touch commonPool.</li>
+    <li><strong>Associative, side-effect-free</strong> lambdas — no shared accumulators.</li>
+    <li><strong>Concurrent collectors</strong> for parallel <code>collect</code> when accumulating into maps.</li>
+    <li><strong>Splittable sources:</strong> prefer <code>ArrayList</code> / arrays over <code>LinkedList</code>.</li>
+    <li><strong>I/O-bound work:</strong> use dedicated thread pools (<code>ExecutorService</code>), not parallel streams.</li>
+  </ul>
+
+  <h2>9. Common Interview Traps</h2>
+  <ul>
+    <li><strong>"parallelStream() always faster?"</strong> No — overhead, splitting quality, ordering, and I/O dominate. Often slower on small N.</li>
+    <li><strong>commonPool starvation with DB/HTTP:</strong> Blocking in parallel lambdas ties up shared workers — use async I/O pools.</li>
+    <li><strong>Mutable accumulator in parallel reduce:</strong> <code>reduce(0, (a,b) -> a+b)</code> on primitives is fine; <code>reduce(new ArrayList(), ...)</code> is broken.</li>
+    <li><strong>forEach ordering assumptions:</strong> Parallel <code>forEach</code> is unordered — use <code>forEachOrdered</code> only when needed (costs performance).</li>
+    <li><strong>findFirst on parallel:</strong> May be slower than <code>findAny</code> due to order constraints.</li>
+    <li><strong>Custom ForkJoinPool submit trick:</strong> Only way to route parallel streams off commonPool — must wrap in <code>pool.submit(() -> stream.parallel()...).get()</code>.</li>
+    <li><strong>LinkedList / I/O sources:</strong> Worst-case parallel candidates — explain why in interviews.</li>
+  </ul>
+
+  <hr>
+
+  <h2>Key Takeaways</h2>
+  <ul>
+    <li>Parallel streams = data parallelism via <code>ForkJoinPool.commonPool()</code> and <code>Spliterator.trySplit()</code>.</li>
+    <li>Default parallelism: <code>cores - 1</code> on commonPool; custom pools default to <code>cores</code>.</li>
+    <li>Stateless ops, no shared mutation, associative reductions, concurrent collectors when collecting in parallel.</li>
+    <li>Order constraints (<code>findFirst</code>, <code>forEachOrdered</code>, ordered collect) often erase parallel gains.</li>
+    <li>Benchmark on real N; never parallelize I/O on commonPool in production services.</li>
+  </ul>
+
+  <hr>
+
+  <h2>10. 5 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Which pool executes a default parallelStream() pipeline?</p>
+        <ol type="A">
+          <li>ForkJoinPool common pool.</li>
+          <li>Cached thread pool default.</li>
+          <li>Fixed thread pool default.</li>
+          <li>Virtual thread pool default.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (ForkJoinPool common pool.)</strong></p>
+          <p>Parallel streams fork tasks on <code>ForkJoinPool.commonPool()</code> unless the pipeline runs inside a submitted task on a custom <code>ForkJoinPool</code>.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Which source splits best for parallel streams?</p>
+        <ol type="A">
+          <li>Array-backed list source.</li>
+          <li>Linked list node source.</li>
+          <li>Single queue node source.</li>
+          <li>Custom iterator source.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Array-backed list source.)</strong></p>
+          <p><code>ArrayList</code> spliterators split by index ranges in O(1). <code>LinkedList</code> often yields tiny splits — high fork overhead.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: Parallel findAny vs findFirst main difference?</p>
+        <ol type="A">
+          <li>findAny skips order wait.</li>
+          <li>findFirst skips order wait.</li>
+          <li>findAny always returns null.</li>
+          <li>findFirst always returns null.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (findAny skips order wait.)</strong></p>
+          <p><code>findAny()</code> can return the first match any worker finds. <code>findFirst()</code> must honor encounter order on ordered streams — may wait for earlier chunks.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: Safe way to accumulate in parallel stream?</p>
+        <ol type="A">
+          <li>Use collect with collector.</li>
+          <li>Use forEach on shared list.</li>
+          <li>Use map on shared list.</li>
+          <li>Use filter on shared list.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Use collect with collector.)</strong></p>
+          <p><code>collect()</code> uses combiners and/or <code>CONCURRENT</code> collectors designed for parallel merge. Mutating a shared <code>ArrayList</code> from <code>forEach</code> races.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: Route parallel stream off common pool?</p>
+        <ol type="A">
+          <li>Submit pipeline to custom pool.</li>
+          <li>Call parallel on common pool.</li>
+          <li>Call sequential on common pool.</li>
+          <li>Call unordered on common pool.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Submit pipeline to custom pool.)</strong></p>
+          <p>Wrap <code>parallelStream()</code> in <code>customPool.submit(() -> ...).get()</code>. No API parameter selects a pool directly.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>11. Reasoning Exercises</h2>
+  <ol>
+    <li><strong>Benchmark trap:</strong> Time <code>list.stream().map(Math::sqrt)</code> vs <code>parallelStream()</code> on 100, 10k, and 1M doubles in an <code>ArrayList</code>. When does parallel win? When does it lose?</li>
+    <li><strong>Bug hunt:</strong> Find the race in <code>Map&lt;String,Integer&gt; m = new HashMap(); list.parallelStream().forEach(s -> m.merge(s, 1, Integer::sum));</code> and fix with two different approaches.</li>
+    <li><strong>Pool isolation:</strong> Write CPU-heavy parallel processing using a custom <code>ForkJoinPool(2)</code> so a batch job does not compete with other parallel streams on commonPool.</li>
+  </ol>
+
+  <p class="meta">Questions on ordering, pool starvation, or when to parallelize? Ask your AI mentor anytime.</p>
+</body>
+</html>

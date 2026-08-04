@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Parallel Streams — Reference</title>
+  <meta name="description" content="Quick reference: parallel streams, ForkJoinPool, ordering, thread safety, performance, enterprise hazards.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/streams-0005-parallel-streams.html">&larr; Lesson 05</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Parallel Streams Cheat Sheet</h1>
+  <p class="meta">ForkJoinPool, ordering, safety, performance traps</p>
+
+  <h2>1. Enable / Disable</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background:#f7f7f0;">
+      <th align="left" style="padding:0.5rem;">API</th>
+      <th align="left" style="padding:0.5rem;">Effect</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>parallelStream()</code></td>
+      <td style="padding:0.5rem;">Parallel from source</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>stream().parallel()</code></td>
+      <td style="padding:0.5rem;">Switch to parallel mid-pipeline</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>sequential()</code></td>
+      <td style="padding:0.5rem;">Switch back to single-threaded</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>unordered()</code></td>
+      <td style="padding:0.5rem;">Drop ORDERED — faster parallel merges</td>
+    </tr>
+  </table>
+
+  <h2>2. Execution</h2>
+  <ul>
+    <li><strong>Pool:</strong> <code>ForkJoinPool.commonPool()</code> (shared JVM-wide)</li>
+    <li><strong>Parallelism:</strong> <code>availableProcessors() - 1</code> (commonPool default)</li>
+    <li><strong>Split:</strong> <code>Spliterator.trySplit()</code></li>
+    <li><strong>Schedule:</strong> work-stealing deques</li>
+    <li><strong>Custom pool:</strong> <code>pool.submit(() -> list.parallelStream()...).get()</code></li>
+  </ul>
+
+  <h2>3. Ordering Ops</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background:#f7f7f0;">
+      <th align="left" style="padding:0.5rem;">Op</th>
+      <th align="left" style="padding:0.5rem;">Parallel behavior</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>forEach</code></td>
+      <td style="padding:0.5rem;">Unordered</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>forEachOrdered</code></td>
+      <td style="padding:0.5rem;">Encounter order — costly</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>findAny</code></td>
+      <td style="padding:0.5rem;">Any match — fast short-circuit</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>findFirst</code></td>
+      <td style="padding:0.5rem;">First in encounter order — may wait</td>
+    </tr>
+  </table>
+
+  <h2>4. Thread Safety Rules</h2>
+  <ul>
+    <li>Intermediate ops: stateless, no shared mutation</li>
+    <li>Never <code>forEach</code> into shared <code>ArrayList</code> / <code>HashMap</code></li>
+    <li>Parallel <code>collect</code>: use <code>CONCURRENT</code> collectors when possible</li>
+    <li><code>reduce</code> combiner must be <strong>associative</strong></li>
+  </ul>
+
+  <h2>5. When Parallel Wins / Loses</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background:#f7f7f0;">
+      <th align="left" style="padding:0.5rem;">Wins</th>
+      <th align="left" style="padding:0.5rem;">Loses</th>
+    </tr>
+    <tr>
+      <td style="padding:0.5rem; vertical-align:top;">
+        CPU-bound, large N<br>
+        ArrayList / arrays<br>
+        Primitive streams<br>
+        Unordered collect
+      </td>
+      <td style="padding:0.5rem; vertical-align:top;">
+        Small N<br>
+        LinkedList<br>
+        I/O in lambda<br>
+        Ordered terminals<br>
+        Boxing overhead
+      </td>
+    </tr>
+  </table>
+
+  <h2>6. Enterprise Red Flags</h2>
+  <ul>
+    <li>HTTP/DB inside <code>parallelStream().map(...)</code></li>
+    <li>commonPool starvation under Spring load</li>
+    <li>Intermittent races on shared state</li>
+    <li>Assuming parallel without benchmark</li>
+  </ul>
+
+  <h2>7. Interview One-Liners</h2>
+  <ul>
+    <li>Parallel streams ≠ general concurrency — data parallelism only</li>
+    <li>No API to pick pool — submit trick only</li>
+    <li>Default sequential; parallel needs evidence</li>
+    <li><code>groupingByConcurrent</code> for parallel map collect — see <a href="streams-0004-collectors-deep-dive.html">Collectors ref</a></li>
+  </ul>
+</body>
+</html>

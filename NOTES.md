@@ -1,5 +1,12 @@
 # Teaching Notes
 
+## Standing Preferences (always honor)
+
+**Core responsibility (stated 2026-08-05):**
+1. **Lessons** — When user sends a `/teach` prompt, primary job is ship **high-quality** lessons: clear scope, interview-grade depth, real examples, cheat sheet + indexing, not thin coverage.
+2. **Queries** — When user asks follow-ups, answer with a **human tone**: natural, clear, conversational. Prefer concrete examples over abstract lectures. Explain like a senior mentor sitting next to them.
+3. Persist these preferences across sessions; do not drift into terse caveman-only reply style when answering learning questions — substance + warmth + examples win.
+
 ## Session 1 (2026-07-02)
 - User invoked `/teach functional interface in java`
 - Mission drafted but not yet confirmed — need: why they're learning, prior Java/lambda experience, success criteria beyond defaults.

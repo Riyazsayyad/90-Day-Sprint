@@ -1,0 +1,43 @@
+---
+description: Keep 90-Day Sprint tracker files current after study activity
+globs: tracker/**/*.md
+alwaysApply: false
+---
+
+# Study Tracker Maintenance (Project BMW)
+
+After any study activity, update the matching tracker files. Do not skip tracker updates when lessons, interviews, DSA, or weaknesses are discussed.
+
+## 1. Daily Progress & Lesson Completion
+
+**Files:** `tracker/Progress.md`, `tracker/04_study_progress.md`, `tracker/mentor_handoff.md`
+
+- Increment **Current Day** and `% complete` in `Progress.md`
+- Update scoreboard (🟢 🟡 🔴) and module progress bars if status changed
+- Append **Daily Streak Journal** line with activity + status indicator
+- Mark section complete in `04_study_progress.md`
+- Sync day, module, current/next lesson, strengths/weaknesses in `mentor_handoff.md`
+
+## 2. Mock or Real Interviews
+
+**Files:** `interview_log.md`, `05_interview_history.md`, `mentor_handoff.md`
+
+Log interview, add score (e.g. `Score 7/10`), note mistakes in handoff.
+
+## 3. DSA Problem Solved
+
+**Files:** `Progress.md`, `04_study_progress.md`
+
+Add LeetCode link under correct topic; update completed patterns list.
+
+## 4. New Weakness, Strength, or Mistake
+
+**Files:** `07_technical_weaknesses.md`, `06_technical_strengths.md`, `08_recurring_mistakes.md`, `revision.md`, `Memory.md`
+
+Record blind spot or mistake; add spaced-repetition topic to `revision.md` when needed.
+
+## 5. Goal or Preference Change
+
+**Files:** `01_long_term_goals.md`, `10_implicit_preferences.md`, `Memory.md`
+
+Full spec: `.cursor/AGENTS.md` → Study Tracker Maintenance.
