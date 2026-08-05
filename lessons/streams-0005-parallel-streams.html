@@ -10,7 +10,7 @@
 </head>
 <body>
   <nav class="lesson-nav">
-    <a href="../index.html">🏠 Home</a> &middot; <a href="streams-0004-collectors-deep-dive.html">⬅️ Prev: Collectors Deep Dive</a>
+    <a href="../index.html">🏠 Home</a> &middot; <a href="streams-0004-collectors-deep-dive.html">⬅️ Prev: Collectors Deep Dive</a> &middot; <a href="streams-0006-stream-internals.html">➡️ Next: Stream Internals</a>
   </nav>
 
   <h1>Deep Dive: Parallel Streams</h1>
@@ -157,7 +157,7 @@ List&lt;Integer&gt; result = list.parallelStream().collect(toList());</code></pr
   <p><code>Stream&lt;Integer&gt;.map(n -> n * 2)</code> boxes every int. <code>IntStream.range(0, n).map(i -> i * 2)</code> stays primitive. Parallel primitive streams often beat parallel boxed streams on large N.</p>
 
   <h3>Measure Before Switching</h3>
-  <p>Use JMH or at minimum warm-up loops with representative data sizes. "Parallel is faster" without numbers is a red flag in senior interviews. Profile GC too — bad parallel collect can increase allocation pressure.</p>
+  <p>Use <a href="https://openjdk.org/projects/code-tools/jmh/">JMH (Java Microbenchmark Harness)</a> — the OpenJDK tool for reliable JVM microbenchmarks — or at minimum warm-up loops with representative data sizes. Start from the <a href="https://github.com/openjdk/jmh/tree/master/jmh-samples/src/main/java/org/openjdk/jmh/samples">official JMH samples</a> or the <a href="https://javadoc.io/doc/org.openjdk.jmh/jmh-core/latest/index.html">JMH Core Javadoc</a>. "Parallel is faster" without numbers is a red flag in senior interviews. Profile GC too — bad parallel collect can increase allocation pressure.</p>
 
   <h2>7. Enterprise Hazards</h2>
   <ul>
@@ -289,6 +289,5 @@ List&lt;Integer&gt; result = list.parallelStream().collect(toList());</code></pr
     <li><strong>Pool isolation:</strong> Write CPU-heavy parallel processing using a custom <code>ForkJoinPool(2)</code> so a batch job does not compete with other parallel streams on commonPool.</li>
   </ol>
 
-  <p class="meta">Questions on ordering, pool starvation, or when to parallelize? Ask your AI mentor anytime.</p>
 </body>
 </html>

@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 6 — Stream Internals</title>
+  <meta name="description" content="Java Stream internals: AbstractPipeline, Sink chain, Spliterator characteristics, StreamOpFlag, parallel node trees, JVM performance, Module 02 capstone.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot; <a href="streams-0005-parallel-streams.html">⬅️ Prev: Parallel Streams</a>
+  </nav>
+
+  <h1>Deep Dive: Stream Internals</h1>
+  <p class="meta">~25 minutes &middot; Module 02 capstone &middot; <a href="../reference/streams-0006-stream-internals.html">Cheat sheet</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Syntax is the easy part. Seniors explain what the JVM actually builds: a linked <code>AbstractPipeline</code> that does nothing until a terminal op compiles a <code>Sink</code> chain, fuses loops, respects <code>StreamOpFlag</code> metadata, and buffers at stateful barriers. This lesson is the execution engine behind Sections 1–5.
+  </div>
+
+  <p><strong>Primary source:</strong> Read <a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/AbstractPipeline.java">OpenJDK <code>AbstractPipeline.java</code></a> and <a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/Sink.java"><code>Sink.java</code></a> — the runtime contract every stream operation implements.</p>
+
+  <h2>1. Why Stream Internals Matter</h2>
+
+  <h3>Streams as Compiled Pipelines, Not Collections</h3>
+  <p>A <code>Stream&lt;T&gt;</code> does not store elements. After <code>list.stream().map(...).filter(...)</code>, the heap holds a small graph of pipeline nodes pointing at the source — not a new list of mapped values. Elements materialize only when a terminal operation runs.</p>
+  <pre><code class="language-java">List&lt;String&gt; names = users.stream()
+    .filter(User::isActive)   // builds FilterOp node — zero elements read
+    .map(User::getName);      // builds MapOp node — still zero elements read
+// names is NOT assigned yet — no terminal op, no execution</code></pre>
+
+  <h3>What "Lazy Until Terminal" Means at Runtime</h3>
+  <p><strong>Build phase:</strong> each intermediate op allocates an <code>AbstractPipeline</code> child linked via <code>previousStage</code>. No spliterator traversal occurs.</p>
+  <p><strong>Run phase:</strong> terminal op calls <code>evaluate()</code> on the head pipeline. Only then does the engine construct sinks, traverse the source, and produce a result.</p>
+
+  <h3>Bridge from Syntax to JVM Execution</h3>
+  <p>Sections 1–3 taught <em>what</em> you write. This lesson covers <em>what runs</em>:</p>
+  <ul>
+    <li>Section 1 — source spliterator, pipeline linking</li>
+    <li>Section 2 — stateless vs stateful op classes</li>
+    <li>Section 3 — terminal op triggers <code>evaluate()</code></li>
+    <li>Section 4 — <code>collect()</code> attaches a <code>TerminalOp</code> with collector sinks (<a href="streams-0004-collectors-deep-dive.html">Collectors lesson</a>)</li>
+    <li>Section 5 — parallel path calls <code>evaluateParallel()</code> (<a href="streams-0005-parallel-streams.html">Parallel Streams lesson</a>)</li>
+  </ul>
+
+  <h2>2. Pipeline Architecture (AbstractPipeline)</h2>
+
+  <h3>Head vs StatelessOp vs StatefulOp</h3>
+  <p>Every stream pipeline is a singly linked list of <code>AbstractPipeline</code> nodes:</p>
+  <ul>
+    <li><strong>Head (source stage):</strong> holds <code>sourceSpliterator</code> or <code>sourceSupplier</code>, <code>parallel</code> flag, <code>onClose</code> handlers. <code>sourceStage == this</code>.</li>
+    <li><strong>StatelessOp:</strong> <code>map</code>, <code>filter</code>, <code>flatMap</code>, <code>peek</code> — fuse into a single traversal; no buffering across elements (except flatMap's per-element sub-pipelines).</li>
+    <li><strong>StatefulOp:</strong> <code>distinct</code>, <code>sorted</code>, <code>limit</code>, <code>skip</code> — act as <strong>execution barriers</strong>. Must see some or all elements before forwarding downstream.</li>
+  </ul>
+  <p>Terminal operations implement <code>TerminalOp</code> — they are not another <code>AbstractPipeline</code> stage. They receive the built pipeline and drive evaluation.</p>
+
+  <h3>previousStage Linking and Pipeline Depth</h3>
+  <pre><code class="language-java">// Conceptual shape after:
+list.stream().filter(p).map(f).sorted();
+
+HeadPipeline (sourceStage, depth=0)
+  └── FilterOp (previousStage=head, depth=1)
+        └── MapOp (previousStage=filter, depth=2)
+              └── SortedOp (previousStage=map, depth=3)  ← stateful barrier</code></pre>
+  <p><code>depth</code> increments per stage. The terminal op walks to <code>sourceStage</code> to start evaluation from the head.</p>
+
+  <h3>sourceStage, sourceSpliterator, parallel Flag</h3>
+  <ul>
+    <li><code>sourceStage</code> — always the head; owns close handlers and parallel flag inheritance.</li>
+    <li><code>sourceSpliterator</code> — live spliterator for collection-backed streams; null if supplier-based.</li>
+    <li><code>parallel</code> — stored on head; child stages read it via <code>sourceStage.parallel</code>.</li>
+  </ul>
+
+  <h3>evaluate() vs wrapAndCopyInto() vs evaluateParallel()</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background:#f7f7f0;">
+      <th align="left" style="padding:0.5rem;">Method</th>
+      <th align="left" style="padding:0.5rem;">When</th>
+      <th align="left" style="padding:0.5rem;">Role</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>evaluate(TerminalOp)</code></td>
+      <td style="padding:0.5rem;">Terminal op entry</td>
+      <td style="padding:0.5rem;">Dispatches sequential or parallel evaluation</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>wrapAndCopyInto(sink, spliterator)</code></td>
+      <td style="padding:0.5rem;">Sequential</td>
+      <td style="padding:0.5rem;">Wraps terminal sink with upstream stages, pushes source elements through chain</td>
+    </tr>
+    <tr>
+      <td style="padding:0.5rem;"><code>evaluateParallel(TerminalOp)</code></td>
+      <td style="padding:0.5rem;">Parallel</td>
+      <td style="padding:0.5rem;">Splits spliterator, builds <code>Node</code> trees at barriers, merges results</td>
+    </tr>
+  </table>
+
+  <h3>When Pipeline Is Built vs When It Runs</h3>
+  <pre><code class="language-java">Stream&lt;String&gt; s = list.stream().map(String::trim);  // BUILD only
+long count = s.count();                                 // RUN — evaluate() fires</code></pre>
+  <p>Reusing a stream after terminal op throws <code>IllegalStateException</code> — the pipeline is consumed; spliterator may be exhausted.</p>
+
+  <h2>3. Stream Sources & Spliterators</h2>
+
+  <h3>StreamSupport.stream(spliterator, parallel)</h3>
+  <p>Low-level factory: wrap any <code>Spliterator</code> in a <code>ReferencePipeline</code>. Custom sources and library integrations use this instead of <code>Collection.stream()</code>.</p>
+  <pre><code class="language-java">Spliterator&lt;Order&gt; spliterator = new OrderSpliterator(connection);
+Stream&lt;Order&gt; orders = StreamSupport.stream(spliterator, false);</code></pre>
+
+  <h3>Collection Spliterators</h3>
+  <ul>
+    <li><code>ArrayList</code> — index-based, <code>SIZED | SUBSIZED | ORDERED</code>, splits in O(1).</li>
+    <li><code>HashSet</code> — hash table traversal, <code>DISTINCT</code>, poor split characteristics.</li>
+    <li><code>LinkedList</code> — node walk, splits often yield single elements.</li>
+  </ul>
+
+  <h3>Spliterator Contract</h3>
+  <ul>
+    <li><code>tryAdvance(Consumer)</code> — process next element; return false when done.</li>
+    <li><code>trySplit()</code> — return new spliterator for a partition; null if cannot split.</li>
+    <li><code>forEachRemaining(Consumer)</code> — bulk traverse remainder.</li>
+    <li><code>estimateSize()</code> — hint for array allocation (sorted buffer sizing).</li>
+    <li><code>characteristics()</code> — bitmask of properties (see below).</li>
+  </ul>
+
+  <h3>Characteristics</h3>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background:#f7f7f0;">
+      <th align="left" style="padding:0.5rem;">Flag</th>
+      <th align="left" style="padding:0.5rem;">Meaning</th>
+      <th align="left" style="padding:0.5rem;">Optimization unlocked</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>SIZED / SUBSIZED</code></td>
+      <td style="padding:0.5rem;">Known element count</td>
+      <td style="padding:0.5rem;">Pre-size buffers; skip extra size checks</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>ORDERED</code></td>
+      <td style="padding:0.5rem;">Encounter order defined</td>
+      <td style="padding:0.5rem;">Ordered collect, findFirst, forEachOrdered</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>SORTED</code></td>
+      <td style="padding:0.5rem;">Already sorted</td>
+      <td style="padding:0.5rem;"><code>sorted()</code> may become no-op</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>DISTINCT</code></td>
+      <td style="padding:0.5rem;">No duplicates</td>
+      <td style="padding:0.5rem;"><code>distinct()</code> may become no-op</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>NONNULL</code></td>
+      <td style="padding:0.5rem;">No null elements</td>
+      <td style="padding:0.5rem;">Skip null checks in ops</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>IMMUTABLE</code></td>
+      <td style="padding:0.5rem;">Source won't change structurally</td>
+      <td style="padding:0.5rem;">Skip CME checks</td>
+    </tr>
+    <tr>
+      <td style="padding:0.5rem;"><code>CONCURRENT</code></td>
+      <td style="padding:0.5rem;">Thread-safe source</td>
+      <td style="padding:0.5rem;">Safe parallel without synchronization</td>
+    </tr>
+  </table>
+
+  <h2>4. The Sink Chain (Deep Dive)</h2>
+
+  <h3>Sink Lifecycle</h3>
+  <pre><code class="language-java">interface Sink&lt;T&gt; {
+    void begin(long size);           // notify downstream: traversal starting
+    void accept(T t);                // one element
+    void end();                      // traversal complete
+    boolean cancellationRequested(); // short-circuit propagation
+}</code></pre>
+  <p><code>begin(size)</code> lets stateful sinks allocate buffers. <code>cancellationRequested()</code> lets <code>findFirst</code> / <code>anyMatch</code> stop upstream spliterator early.</p>
+
+  <h3>Building the Chain Backward (wrapSink)</h3>
+  <p>Terminal op provides the tail sink. <code>PipelineHelper.wrapSink()</code> walks <em>upstream</em>, wrapping each stage's <code>opWrapSink()</code>:</p>
+  <pre><code class="language-java">// filter → map → terminal collect
+// Build order (conceptual):
+Sink tail = collectorSink;           // terminal
+Sink withMap = mapOp.wrapSink(tail);
+Sink withFilter = filterOp.wrapSink(withMap);
+// Source pushes elements into withFilter.accept()</code></pre>
+
+  <h3>ChainedSink / Sink.ChainedReference</h3>
+  <p>Each intermediate op extends <code>Sink.ChainedReference&lt;T, T&gt;</code> (or primitive variants). <code>accept(t)</code> applies the op logic, then calls <code>downstream.accept(transformed)</code>. This nesting is the fused loop.</p>
+
+  <h3>Loop Fusion</h3>
+  <p>Stateless ops between barriers compile to one logical loop:</p>
+  <pre><code class="language-java">// Written as three passes mentally:
+list.stream().filter(x -> x > 0).map(x -> x * 2).forEach(System.out::println);
+
+// Executed as one fused pass:
+for (element : source) {
+    if (element &lt;= 0) continue;
+    int mapped = element * 2;
+    System.out.println(mapped);
+}</code></pre>
+  <p>No intermediate collections. JIT can inline the entire chain into a hot loop.</p>
+
+  <h3>Stateful Sinks as Execution Barriers</h3>
+  <ul>
+    <li><code>sorted()</code> — <code>begin()</code> allocates array; buffers all elements in <code>accept()</code>; sorts in <code>end()</code> before flushing downstream.</li>
+    <li><code>distinct()</code> — buffers seen keys (often <code>LinkedHashSet</code> or <code>HashSet</code>) before forwarding.</li>
+    <li><code>limit(n)</code> — counts elements; sets cancellation after <code>n</code>.</li>
+    <li><code>skip(n)</code> — discards first <code>n</code> before forwarding.</li>
+  </ul>
+  <p>Fusion stops at stateful barriers — each barrier may require a full buffer pass.</p>
+
+  <h2>5. StreamOpFlag & Pipeline Metadata</h2>
+
+  <h3>StreamShape</h3>
+  <p>Pipelines are specialized by primitive type to avoid boxing:</p>
+  <ul>
+    <li><code>REFERENCE</code> — <code>Stream&lt;T&gt;</code></li>
+    <li><code>INT_VALUE</code> — <code>IntStream</code></li>
+    <li><code>LONG_VALUE</code> — <code>LongStream</code></li>
+    <li><code>DOUBLE_VALUE</code> — <code>DoubleStream</code></li>
+  </ul>
+  <p>Each shape has its own <code>ReferencePipeline</code>, <code>IntPipeline</code>, etc., with typed sinks (<code>Sink.OfInt</code>, ...).</p>
+
+  <h3>opFlags on Pipeline Stages</h3>
+  <p><code>StreamOpFlag</code> tracks metadata across the pipeline: <code>DISTINCT</code>, <code>SORTED</code>, <code>ORDERED</code>, <code>SIZED</code>, <code>SHORT_CIRCUIT</code>. Each op declares flags it preserves, clears, or injects via <code>opFlags</code> bitmask math in <code>AbstractPipeline.combineOpFlags()</code>.</p>
+
+  <h3>Flag Propagation</h3>
+  <ul>
+    <li><code>sorted()</code> injects <code>SORTED</code>.</li>
+    <li><code>distinct()</code> injects <code>DISTINCT</code>.</li>
+    <li><code>unordered()</code> clears <code>ORDERED</code> — unlocks parallel merge optimizations.</li>
+  </ul>
+  <p>Downstream ops read combined flags to skip redundant work (e.g. skip second <code>distinct()</code> if already distinct).</p>
+
+  <h2>6. Parallel Pipeline Internals (Internals Angle)</h2>
+
+  <h3>opEvaluateParallel and Node Trees</h3>
+  <p>Sequential path: spliterator pushes elements through wrapped sinks in one thread.</p>
+  <p>Parallel path: each stateful stage may call <code>opEvaluateParallel()</code>, which:</p>
+  <ol>
+    <li>Splits spliterator via <code>trySplit()</code> until chunks are small enough.</li>
+    <li>Runs <code>evaluateToNode()</code> on each chunk — produces a <code>Node&lt;T&gt;</code> (internal tree/array structure).</li>
+    <li>Merges sibling nodes via <code>Nodes.concat()</code> or op-specific combiners.</li>
+  </ol>
+  <p>This is <em>not</em> the same as <code>Collector</code> combiners — pipeline-level merging happens at stateful barriers; collector combiners run at the terminal <code>collect()</code> step (<a href="../reference/streams-0004-collectors-deep-dive.html">Collectors reference</a>).</p>
+
+  <h3>trySplit Feeding ForkJoin Tasks</h3>
+  <p><code>AbstractTask</code> subclasses (in <code>java.util.stream</code>) wrap split spliterators as <code>ForkJoinTask</code> work units. Work-stealing schedules them on <code>commonPool()</code> (see <a href="streams-0005-parallel-streams.html">Parallel Streams</a> for pool hazards — not repeated here).</p>
+
+  <h3>Ordered vs Unordered Parallel Paths</h3>
+  <ul>
+    <li><strong>Ordered:</strong> node merge must preserve encounter order — may serialize merges, reducing speedup.</li>
+    <li><strong>Unordered:</strong> <code>Nodes</code> can flatten without order constraints; <code>UNORDERED</code> collector flags align with this.</li>
+  </ul>
+
+  <h2>7. Source Wrappers & Edge Cases</h2>
+
+  <h3>Stream.concat</h3>
+  <p>Builds a <code>ConcatSpliterator</code> over two sources. Loses <code>SIZED</code> unless both sides are sized. Closing propagates to both sources.</p>
+
+  <h3>Stream.generate / Stream.iterate</h3>
+  <p>Supplier/iterator-backed — typically infinite or unknown size. <code>estimateSize()</code> returns <code>Long.MAX_VALUE</code>. Short-circuiting terminals essential.</p>
+
+  <h3>flatMap Sub-Pipeline Creation</h3>
+  <pre><code class="language-java">users.stream().flatMap(u -> u.getOrders().stream())</code></pre>
+  <p>For each user, <code>flatMap</code> creates a child pipeline + spliterator, drains it into the parent sink, then discards it. High allocation: <code>AbstractPipeline</code> nodes per element. Production latency spikes often trace here.</p>
+
+  <h3>Closeable Streams and onClose</h3>
+  <p>Head pipeline accumulates <code>onClose</code> handlers. <code>BaseStream.close()</code> runs them after terminal completion — useful for I/O-backed spliterators.</p>
+
+  <h3>CME and Structural Modification</h3>
+  <p>Collection spliterators snapshot <code>modCount</code> (or equivalent). Structural change during traversal throws <code>ConcurrentModificationException</code> — same family as fail-fast iterators (<a href="0016-failfast-failsafe.html">Fail-Fast lesson</a>).</p>
+
+  <h2>8. JVM & Performance Internals</h2>
+
+  <h3>Allocation Profile</h3>
+  <ul>
+    <li>Pipeline nodes: one <code>AbstractPipeline</code> per intermediate op (small, short-lived).</li>
+    <li><code>flatMap</code>: child pipelines per element — dominant cost in nested streams.</li>
+    <li><code>sorted()</code>: full element array + possibly boxed wrappers.</li>
+    <li>Parallel: <code>Node</code> arrays, task objects, combiner temporaries.</li>
+  </ul>
+
+  <h3>JIT / Loop Optimizations</h3>
+  <ul>
+    <li>Fused sink chains inline into a single hot loop — no iterator <code>hasNext/next</code> overhead.</li>
+    <li><code>SIZED</code> sources let <code>begin(n)</code> pre-allocate exact buffers.</li>
+    <li><code>peek()</code> may be elided if JVM proves side-effect-free (don't rely on this — <code>peek</code> is for debugging).</li>
+  </ul>
+
+  <h3>When Internals Explain Production Latency</h3>
+  <ul>
+    <li>P99 spike after adding <code>.sorted()</code> on 500k rows — full in-memory sort barrier.</li>
+    <li>GC churn after <code>flatMap</code> over nested collections — millions of short-lived pipeline objects.</li>
+    <li>Thread dump shows <code>ReferencePipeline</code> / <code>AbstractTask</code> — parallel stream work on commonPool.</li>
+  </ul>
+
+  <h3>Reading OpenJDK Source</h3>
+  <p>Start here:</p>
+  <ul>
+    <li><a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/ReferencePipeline.java"><code>ReferencePipeline.java</code></a> — <code>map</code>, <code>filter</code>, <code>flatMap</code> op classes</li>
+    <li><a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/AbstractPipeline.java"><code>AbstractPipeline.java</code></a> — <code>evaluate</code>, <code>wrapAndCopyInto</code>, flag combination</li>
+    <li><a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/StreamOpFlag.java"><code>StreamOpFlag.java</code></a> — flag propagation rules</li>
+    <li><a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/Nodes.java"><code>Nodes.java</code></a> — parallel node builders and concat</li>
+  </ul>
+
+  <h2>9. Module 02 Synthesis & Interview Traps</h2>
+
+  <h3>Full Picture</h3>
+  <pre><code>BUILD:  source → [StatelessOp | StatefulOp]*  (AbstractPipeline linked list)
+RUN:    TerminalOp.evaluate()
+          → wrapSink (backward chain)
+          → sequential: wrapAndCopyInto OR parallel: evaluateParallel + Node merge
+          → Collector combiner (if collect) / reduction / forEach</code></pre>
+
+  <h3>Interview Traps</h3>
+  <ul>
+    <li><strong>"Stream stores elements"</strong> — No. It stores pipeline metadata + source reference.</li>
+    <li><strong>Lazy vs deferred timing</strong> — Lazy means no traversal until terminal; not "runs later on another thread."</li>
+    <li><strong>sorted() as barrier</strong> — Must buffer all elements (or chunk in parallel). O(n log n) memory + CPU. Deadly on infinite streams.</li>
+    <li><strong>Sink chain vs iterator</strong> — Push model (source drives) with fused callbacks, not pull <code>next()</code>.</li>
+    <li><strong>Thread dumps</strong> — <code>java.util.stream.ReferencePipeline$Head.forEach</code>, <code>AbstractTask.compute</code> = stream execution in flight.</li>
+    <li><strong>Collectors tie-in</strong> — Terminal <code>collect</code> wraps a <code>Collector</code> as a <code>TerminalSink</code>; parallel uses combiner at merge time.</li>
+    <li><strong>Parallel tie-in</strong> — Same pipeline classes; different evaluate path. Pool contention is operational, not structural.</li>
+    <li><strong>Short-circuit</strong> — <code>cancellationRequested()</code> propagates up; spliterator stops advancing. Works only if terminal supports it.</li>
+  </ul>
+
+  <hr>
+
+  <h2>Key Takeaways</h2>
+  <ul>
+    <li>Streams compile to <code>AbstractPipeline</code> linked lists — built lazily, executed once.</li>
+    <li>Terminal ops compile a <code>Sink</code> chain backward; stateless ops fuse into one traversal.</li>
+    <li>Stateful ops (<code>sorted</code>, <code>distinct</code>, <code>limit</code>, <code>skip</code>) are barriers that buffer or count.</li>
+    <li><code>Spliterator</code> characteristics + <code>StreamOpFlag</code> drive optimizations and parallel behavior.</li>
+    <li>Parallel evaluation uses <code>Node</code> trees and splits — separate from collector combiners.</li>
+    <li><code>flatMap</code> and <code>sorted</code> are the usual production latency suspects — know the internals, not just the API.</li>
+  </ul>
+
+  <hr>
+
+  <h2>10. 5 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: When does a stream pipeline actually traverse source elements?</p>
+        <ol type="A">
+          <li>When terminal operation runs.</li>
+          <li>When intermediate operation runs.</li>
+          <li>When stream object is created.</li>
+          <li>When source collection is built.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (When terminal operation runs.)</strong></p>
+          <p>Intermediate ops only link <code>AbstractPipeline</code> nodes. <code>evaluate()</code> fires on terminal invocation — that's when spliterator traversal begins.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Which operation acts as a stateful execution barrier?</p>
+        <ol type="A">
+          <li>sorted intermediate operation.</li>
+          <li>map intermediate operation.</li>
+          <li>filter intermediate operation.</li>
+          <li>peek intermediate operation.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (sorted intermediate operation.)</strong></p>
+          <p><code>sorted()</code> buffers elements in its sink until <code>end()</code>, then sorts — breaking single-pass fusion. <code>map</code>/<code>filter</code>/<code>peek</code> are stateless.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: How is the Sink chain assembled at runtime?</p>
+        <ol type="A">
+          <li>Wrapped backward from terminal.</li>
+          <li>Wrapped forward from source.</li>
+          <li>Built as iterator pull chain.</li>
+          <li>Built as collection copy chain.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Wrapped backward from terminal.)</strong></p>
+          <p><code>PipelineHelper.wrapSink()</code> starts at the terminal sink and wraps each upstream <code>opWrapSink()</code>. Source pushes into the outermost wrapped sink.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: What does unordered() clear on the pipeline?</p>
+        <ol type="A">
+          <li>ORDERED stream op flag.</li>
+          <li>SIZED stream op flag.</li>
+          <li>DISTINCT stream op flag.</li>
+          <li>SHORT_CIRCUIT op flag.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (ORDERED stream op flag.)</strong></p>
+          <p><code>unordered()</code> clears <code>StreamOpFlag.ORDERED</code>, allowing parallel merges and collectors to skip encounter-order constraints.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: Primary allocation cost of flatMap internally?</p>
+        <ol type="A">
+          <li>Child pipeline per element.</li>
+          <li>Terminal sink per element.</li>
+          <li>Source spliterator per element.</li>
+          <li>Combined flags per element.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Child pipeline per element.)</strong></p>
+          <p>Each upstream element spawns a sub-stream (pipeline + spliterator) that is drained into the parent sink — high allocation under large N.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>11. Reasoning Exercises</h2>
+  <ol>
+    <li><strong>Barrier map:</strong> For <code>list.stream().filter().map().distinct().sorted().collect()</code>, identify which stages fuse and where barriers force buffering.</li>
+    <li><strong>Thread dump read:</strong> Given a stack with <code>ReferencePipeline$Head.forEach</code> and <code>ForkJoinPool$WorkQueue</code>, explain what the JVM is doing.</li>
+    <li><strong>flatMap vs map:</strong> Estimate allocation difference for 10k users each with 5 orders — <code>map</code> vs <code>flatMap</code>. Which internal structures multiply?</li>
+  </ol>
+</body>
+</html>

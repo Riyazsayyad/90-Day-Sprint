@@ -7,6 +7,10 @@
 2. **Queries** — When user asks follow-ups, answer with a **human tone**: natural, clear, conversational. Prefer concrete examples over abstract lectures. Explain like a senior mentor sitting next to them.
 3. Persist these preferences across sessions; do not drift into terse caveman-only reply style when answering learning questions — substance + warmth + examples win.
 
+**Lesson content (stated 2026-08-06):**
+- Do **not** add "ask your AI mentor anytime" (or similar agent CTA) lines at the end of lessons.
+- Reason: workspace is a personal knowledge base now, will be public later — those lines do not belong in published content.
+
 ## Session 1 (2026-07-02)
 - User invoked `/teach functional interface in java`
 - Mission drafted but not yet confirmed — need: why they're learning, prior Java/lambda experience, success criteria beyond defaults.

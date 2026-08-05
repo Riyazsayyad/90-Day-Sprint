@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stream Internals — Reference</title>
+  <meta name="description" content="Quick reference: AbstractPipeline, Sink chain, Spliterator, StreamOpFlag, parallel nodes, Module 02 capstone.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/streams-0006-stream-internals.html">&larr; Lesson 06</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Stream Internals Cheat Sheet</h1>
+  <p class="meta">Module 02 capstone — execution engine</p>
+
+  <h2>1. Two Phases</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background:#f7f7f0;">
+      <th align="left" style="padding:0.5rem;">Phase</th>
+      <th align="left" style="padding:0.5rem;">What happens</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>Build</strong></td>
+      <td style="padding:0.5rem;">Link <code>AbstractPipeline</code> nodes via <code>previousStage</code>. No traversal.</td>
+    </tr>
+    <tr>
+      <td style="padding:0.5rem;"><strong>Run</strong></td>
+      <td style="padding:0.5rem;">Terminal <code>evaluate()</code> → wrap sinks → traverse spliterator.</td>
+    </tr>
+  </table>
+
+  <h2>2. Pipeline Node Types</h2>
+  <ul>
+    <li><strong>Head</strong> — source spliterator/supplier, parallel flag, onClose</li>
+    <li><strong>StatelessOp</strong> — map, filter, flatMap, peek (fuse)</li>
+    <li><strong>StatefulOp</strong> — sorted, distinct, limit, skip (barriers)</li>
+    <li><strong>TerminalOp</strong> — not a pipeline node; drives evaluation</li>
+  </ul>
+
+  <h2>3. Evaluation Paths</h2>
+  <ul>
+    <li><code>evaluate(TerminalOp)</code> — entry point</li>
+    <li><code>wrapAndCopyInto</code> — sequential push through sink chain</li>
+    <li><code>evaluateParallel</code> — split → <code>Node</code> trees → merge</li>
+  </ul>
+
+  <h2>4. Sink Lifecycle</h2>
+  <pre><code>begin(size) → accept(element)* → end()
+cancellationRequested() — short-circuit upstream</code></pre>
+  <p>Chain built <strong>backward</strong> from terminal via <code>wrapSink()</code>.</p>
+
+  <h2>5. Spliterator Characteristics</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background:#f7f7f0;">
+      <th align="left" style="padding:0.5rem;">Flag</th>
+      <th align="left" style="padding:0.5rem;">Enables</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);"><td style="padding:0.5rem;"><code>SIZED/SUBSIZED</code></td><td style="padding:0.5rem;">Pre-size buffers</td></tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);"><td style="padding:0.5rem;"><code>ORDERED</code></td><td style="padding:0.5rem;">Encounter order preserved</td></tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);"><td style="padding:0.5rem;"><code>SORTED</code></td><td style="padding:0.5rem;">Skip redundant sort</td></tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);"><td style="padding:0.5rem;"><code>DISTINCT</code></td><td style="padding:0.5rem;">Skip redundant distinct</td></tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);"><td style="padding:0.5rem;"><code>NONNULL</code></td><td style="padding:0.5rem;">Skip null checks</td></tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);"><td style="padding:0.5rem;"><code>IMMUTABLE</code></td><td style="padding:0.5rem;">Skip CME checks</td></tr>
+    <tr><td style="padding:0.5rem;"><code>CONCURRENT</code></td><td style="padding:0.5rem;">Safe parallel source</td></tr>
+  </table>
+
+  <h2>6. StreamOpFlag</h2>
+  <p>Pipeline-level metadata: <code>DISTINCT</code>, <code>SORTED</code>, <code>ORDERED</code>, <code>SIZED</code>, <code>SHORT_CIRCUIT</code>. Combined per stage via <code>combineOpFlags()</code>. <code>unordered()</code> clears <code>ORDERED</code>.</p>
+
+  <h2>7. StreamShape</h2>
+  <p><code>REFERENCE</code> | <code>INT_VALUE</code> | <code>LONG_VALUE</code> | <code>DOUBLE_VALUE</code> — typed pipelines and sinks avoid boxing.</p>
+
+  <h2>8. Stateful Barriers</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background:#f7f7f0;">
+      <th align="left" style="padding:0.5rem;">Op</th>
+      <th align="left" style="padding:0.5rem;">Barrier behavior</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);"><td style="padding:0.5rem;"><code>sorted()</code></td><td style="padding:0.5rem;">Buffer all → sort → flush</td></tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);"><td style="padding:0.5rem;"><code>distinct()</code></td><td style="padding:0.5rem;">Buffer seen keys</td></tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);"><td style="padding:0.5rem;"><code>limit(n)</code></td><td style="padding:0.5rem;">Count + cancel</td></tr>
+    <tr><td style="padding:0.5rem;"><code>skip(n)</code></td><td style="padding:0.5rem;">Discard first n</td></tr>
+  </table>
+
+  <h2>9. Parallel Internals</h2>
+  <ul>
+    <li><code>trySplit()</code> → <code>AbstractTask</code> on ForkJoinPool</li>
+    <li>Stateful stages → <code>opEvaluateParallel()</code> → <code>Node</code> merge</li>
+    <li>Pipeline combiner ≠ Collector combiner</li>
+    <li>Ordered parallel merges cost more — see <a href="streams-0005-parallel-streams.html">Parallel Streams ref</a></li>
+  </ul>
+
+  <h2>10. Edge Cases</h2>
+  <ul>
+    <li><code>flatMap</code> — child pipeline per element (allocation hotspot)</li>
+    <li><code>Stream.concat</code> — loses SIZED; ConcatSpliterator</li>
+    <li><code>generate/iterate</code> — infinite; needs short-circuit</li>
+    <li><code>onClose</code> — head pipeline cleanup handlers</li>
+    <li>CME — collection spliterator modCount check</li>
+  </ul>
+
+  <h2>11. OpenJDK Entry Points</h2>
+  <ul>
+    <li><a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/AbstractPipeline.java"><code>AbstractPipeline.java</code></a></li>
+    <li><a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/ReferencePipeline.java"><code>ReferencePipeline.java</code></a></li>
+    <li><a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/Sink.java"><code>Sink.java</code></a></li>
+    <li><a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/StreamOpFlag.java"><code>StreamOpFlag.java</code></a></li>
+    <li><a href="https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/Nodes.java"><code>Nodes.java</code></a></li>
+  </ul>
+
+  <h2>12. Interview One-Liners</h2>
+  <ul>
+    <li>Stream ≠ collection — pipeline metadata only</li>
+    <li>Lazy = no traversal until terminal</li>
+    <li>Sink = push/fused loop, not Iterator pull</li>
+    <li><code>sorted()</code> = full buffer + O(n log n)</li>
+    <li>Thread dump <code>ReferencePipeline$Head</code> = stream running</li>
+  </ul>
+</body>
+</html>

@@ -64,6 +64,20 @@
   commonPool parallelism (`availableProcessors - 1`), work-stealing, and custom-pool interaction with parallel streams.
 - [Baeldung: When to Use Parallel Streams](https://www.baeldung.com/java-when-to-use-parallel-stream)
   Practical guidance on when parallel streams win or lose; complements benchmark-first discipline.
+- [OpenJDK `AbstractPipeline` source](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/AbstractPipeline.java)
+  Core pipeline evaluation: `evaluate`, `wrapAndCopyInto`, `evaluateParallel`, op flag combination.
+- [OpenJDK `ReferencePipeline` source](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/ReferencePipeline.java)
+  Stateless and stateful op implementations (`MapOp`, `FilterOp`, `SortedOp`, etc.).
+- [OpenJDK `Sink` source](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/Sink.java)
+  Sink lifecycle contract, `ChainedReference`, and primitive sink variants.
+- [OpenJDK `StreamOpFlag` source](https://github.com/openjdk/jdk/blob/master/src/java.base/share/classes/java/util/stream/StreamOpFlag.java)
+  Pipeline metadata flags and propagation rules across stages.
+- [OpenJDK `Spliterator` javadoc](https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/util/Spliterator.html)
+  Authoritative spliterator contract: tryAdvance, trySplit, characteristics bitmask.
+- [OpenJDK: JMH (Java Microbenchmark Harness)](https://openjdk.org/projects/code-tools/jmh/)
+  Official microbenchmarking tool for JVM code. Use for: measuring sequential vs parallel stream performance with warm-up, fork, and blackhole discipline.
+- [OpenJDK JMH samples (GitHub)](https://github.com/openjdk/jmh/tree/master/jmh-samples/src/main/java/org/openjdk/jmh/samples)
+  Runnable benchmark examples; adapt for stream pipeline comparisons.
 
 ## Wisdom (Communities)
 
