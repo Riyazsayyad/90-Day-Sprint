@@ -8,14 +8,30 @@
   <link rel="stylesheet" href="../assets/lesson.css">
   <script src="../assets/lesson-tray.js" defer></script>
   <style>
-    .exercise-badge { display: inline-block; background: #1e3a5f; color: #93c5fd; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.2rem 0.6rem; border-radius: 4px; margin-bottom: 0.5rem; }
     .copy-bar { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin: 1rem 0; }
-    .copy-bar button { cursor: pointer; padding: 0.5rem 1rem; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; border-radius: 6px; font-size: 0.9rem; }
-    .copy-bar button:hover { background: #1e293b; }
+    .copy-bar button,
+    .copy-bar .copy-bar-link {
+      font-family: inherit;
+      font-size: 0.95rem;
+      padding: 0.6rem 0.85rem;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      cursor: pointer;
+      color: var(--text);
+      text-decoration: none;
+      border-bottom: 1px solid var(--border);
+    }
+    .copy-bar button:hover,
+    .copy-bar .copy-bar-link:hover {
+      border-color: var(--accent);
+      background: #fafaf5;
+      border-bottom-color: var(--accent);
+    }
     #javaSource { max-height: 70vh; overflow: auto; font-size: 0.8rem; }
     .scenario-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
-    .scenario-table th, .scenario-table td { border: 1px solid #334155; padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; }
-    .scenario-table th { background: #1e293b; }
+    .scenario-table th, .scenario-table td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; }
+    .scenario-table th { background: var(--surface); font-weight: normal; }
   </style>
 </head>
 <body>
@@ -23,9 +39,8 @@
     <a href="../index.html">🏠 Home</a> &middot; <a href="../lessons/streams-0006-stream-internals.html">⬅️ Prev: Stream Internals</a>
   </nav>
 
-  <span class="exercise-badge">Exercise · Not a Lesson</span>
   <h1>Streams API Capstone Exercise</h1>
-  <p class="meta">Module 02 &bull; 18 interview scenarios &bull; JUnit 5 &bull; <a href="StreamsCapstoneExercise.java">StreamsCapstoneExercise.java</a></p>
+  <p class="meta">Capstone exercise &bull; Module 02 &bull; 18 scenarios &bull; JUnit 5 &bull; <a href="StreamsCapstoneExercise.java">StreamsCapstoneExercise.java</a></p>
 
   <div class="callout">
     <strong>How to use:</strong> Copy the single Java file below into IntelliJ or <code>java-interview-lab</code>. Add JUnit Jupiter 5 to the classpath. Implement each <code>TODO</code> stub — tests encode the expected interview answer. Run all tests until green.
@@ -69,7 +84,7 @@
   <h2>Copy-Paste Source</h2>
   <div class="copy-bar">
     <button type="button" id="copyBtn">Copy entire file</button>
-    <a href="StreamsCapstoneExercise.java" download>Download .java</a>
+    <a href="StreamsCapstoneExercise.java" download class="copy-bar-link">Download .java</a>
   </div>
   <pre id="javaSource"><code>Loading StreamsCapstoneExercise.java…</code></pre>
 
