@@ -42,7 +42,8 @@
     { num: '03', file: 'streams-0003-terminal-operations.html', title: 'Terminal Operations', meta: '15 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' },
     { num: '04', file: 'streams-0004-collectors-deep-dive.html', title: 'Collectors Deep Dive', meta: '20 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' },
     { num: '05', file: 'streams-0005-parallel-streams.html', title: 'Parallel Streams', meta: '20 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' },
-    { num: '06', file: 'streams-0006-stream-internals.html', title: 'Stream Internals', meta: '25 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' }
+    { num: '06', file: 'streams-0006-stream-internals.html', title: 'Stream Internals', meta: '25 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' },
+    { num: 'Ex', file: 'streams-capstone-exercise.html', title: 'Capstone Exercise', meta: '18 scenarios &bull; Coding', module: 'Streams API', moduleNum: '02', kind: 'exercise' }
   ];
 
 
@@ -55,12 +56,21 @@
     let currentFile = pathParts[pathParts.length - 1] || 'oop-0001-why-object-oriented-programming.html';
 
     // Find the active lesson object to identify its module
-    const activeLesson = lessons.find(l => l.file === currentFile) || lessons[0];
+    const activeLesson = lessons.find(l => l.file === currentFile || currentFile.endsWith('/' + l.file)) || lessons[0];
     const currentModule = activeLesson.module;
     const currentModuleNum = activeLesson.moduleNum;
 
     // Filter lessons belonging to the active module
     const moduleLessons = lessons.filter(l => l.module === currentModule);
+
+    const lessonCount = moduleLessons.filter(l => l.kind !== 'exercise').length;
+    const exerciseCount = moduleLessons.filter(l => l.kind === 'exercise').length;
+    const countLabel = exerciseCount > 0
+      ? `${lessonCount} Lessons &bull; ${exerciseCount} Exercise`
+      : `${moduleLessons.length} ${moduleLessons.length === 1 ? 'Lesson' : 'Lessons'}`;
+
+    // Detect page context for correct relative links
+    const inExercises = window.location.pathname.includes('/exercises/');
 
     // 1. Create and inject backdrop
     const backdrop = document.createElement('div');
@@ -94,7 +104,7 @@
     header.innerHTML = `
       <div class="lesson-tray-title-group">
         <h2>${currentModule}</h2>
-        <p>Module ${currentModuleNum} &bull; ${moduleLessons.length} ${moduleLessons.length === 1 ? 'Lesson' : 'Lessons'}</p>
+        <p>Module ${currentModuleNum} &bull; ${countLabel}</p>
       </div>
       <button class="lesson-tray-close" id="lessonTrayClose" aria-label="Close tray">
         <svg viewBox="0 0 24 24">
@@ -115,10 +125,13 @@
     let activeItem = null;
     moduleLessons.forEach(lesson => {
       const li = document.createElement('li');
-      const isActive = currentFile === lesson.file;
+      const lessonHref = lesson.kind === 'exercise'
+        ? (inExercises ? lesson.file : '../exercises/' + lesson.file)
+        : (inExercises ? '../lessons/' + lesson.file : lesson.file);
+      const isActive = currentFile === lesson.file || currentFile.endsWith('/' + lesson.file);
       
       const link = document.createElement('a');
-      link.href = lesson.file;
+      link.href = lessonHref;
       link.className = 'lesson-tray-item' + (isActive ? ' active' : '');
       link.innerHTML = `
         <span class="lesson-tray-num">${lesson.num}</span>

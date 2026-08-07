@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Exercise — Streams API Capstone</title>
+  <meta name="description" content="Module 02 capstone coding exercise: 18 interview-style Java Streams scenarios with JUnit tests and expected results.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+  <style>
+    .exercise-badge { display: inline-block; background: #1e3a5f; color: #93c5fd; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.2rem 0.6rem; border-radius: 4px; margin-bottom: 0.5rem; }
+    .copy-bar { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin: 1rem 0; }
+    .copy-bar button { cursor: pointer; padding: 0.5rem 1rem; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; border-radius: 6px; font-size: 0.9rem; }
+    .copy-bar button:hover { background: #1e293b; }
+    #javaSource { max-height: 70vh; overflow: auto; font-size: 0.8rem; }
+    .scenario-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+    .scenario-table th, .scenario-table td { border: 1px solid #334155; padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; }
+    .scenario-table th { background: #1e293b; }
+  </style>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot; <a href="../lessons/streams-0006-stream-internals.html">⬅️ Prev: Stream Internals</a>
+  </nav>
+
+  <span class="exercise-badge">Exercise · Not a Lesson</span>
+  <h1>Streams API Capstone Exercise</h1>
+  <p class="meta">Module 02 &bull; 18 interview scenarios &bull; JUnit 5 &bull; <a href="StreamsCapstoneExercise.java">StreamsCapstoneExercise.java</a></p>
+
+  <div class="callout">
+    <strong>How to use:</strong> Copy the single Java file below into IntelliJ or <code>java-interview-lab</code>. Add JUnit Jupiter 5 to the classpath. Implement each <code>TODO</code> stub — tests encode the expected interview answer. Run all tests until green.
+  </div>
+
+  <h2>Setup</h2>
+  <ol>
+    <li>Create a new Java class (default package is fine).</li>
+    <li>Paste the entire contents of <code>StreamsCapstoneExercise.java</code>.</li>
+    <li>Let IntelliJ add JUnit 5 dependency (Alt+Enter on <code>@Test</code>).</li>
+    <li>Implement stubs one by one; run tests after each.</li>
+  </ol>
+
+  <h2>Scenario Index</h2>
+  <table class="scenario-table">
+    <thead>
+      <tr><th>#</th><th>Topic</th><th>Expected (from tests)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>01</td><td>Lazy fusion trace</td><td><code>"F2M20F3M30"</code></td></tr>
+      <tr><td>02</td><td>Late list mutation before count</td><td><code>4</code></td></tr>
+      <tr><td>03</td><td><code>toMap</code> duplicate keys (first wins)</td><td>Alice kept, Alicia discarded</td></tr>
+      <tr><td>04</td><td><code>groupingBy</code> + <code>counting</code></td><td><code>{PAID=2, PENDING=1}</code></td></tr>
+      <tr><td>05</td><td>Parallel 3-arg <code>reduce</code> sum</td><td><code>500500</code> (1..1000)</td></tr>
+      <tr><td>06</td><td>Parallel <code>findFirst</code> ordered</td><td><code>Optional.of(0)</code></td></tr>
+      <tr><td>07</td><td>Short-circuit <code>limit</code></td><td>sum <code>6</code> (2+4 only)</td></tr>
+      <tr><td>08</td><td><code>flatMap</code> nested lists</td><td><code>["A1","A2"]</code></td></tr>
+      <tr><td>09</td><td><code>partitioningBy</code></td><td>evens / odds buckets</td></tr>
+      <tr><td>10</td><td>Fix parallel mutable <code>HashMap</code></td><td>thread-safe word count</td></tr>
+      <tr><td>11</td><td><code>distinct</code> + <code>sorted</code></td><td><code>["a","b","c"]</code></td></tr>
+      <tr><td>12</td><td><code>joining</code> collector</td><td><code>"Amy | Bob | Cy"</code></td></tr>
+      <tr><td>13</td><td>Fail-fast / CME</td><td><code>ConcurrentModificationException</code></td></tr>
+      <tr><td>14</td><td>Top N per group (downstream)</td><td>top 2 sales per dept</td></tr>
+      <tr><td>15</td><td><code>joining</code> ids</td><td><code>"10,20,30"</code></td></tr>
+      <tr><td>16</td><td><code>IntStream</code> primitive sum</td><td><code>328350</code></td></tr>
+      <tr><td>17</td><td><code>Optional</code> stream pattern</td><td>first long name uppercased</td></tr>
+      <tr><td>18</td><td><code>allMatch</code></td><td>all amounts positive</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Copy-Paste Source</h2>
+  <div class="copy-bar">
+    <button type="button" id="copyBtn">Copy entire file</button>
+    <a href="StreamsCapstoneExercise.java" download>Download .java</a>
+  </div>
+  <pre id="javaSource"><code>Loading StreamsCapstoneExercise.java…</code></pre>
+
+  <p class="meta">Stuck on a scenario? Ask your AI mentor — reference the exercise number.</p>
+
+  <script>
+    const sourceEl = document.getElementById('javaSource');
+    const copyBtn = document.getElementById('copyBtn');
+    let fileText = '';
+
+    fetch('StreamsCapstoneExercise.java')
+      .then(r => r.text())
+      .then(text => {
+        fileText = text;
+        sourceEl.innerHTML = '<code>' + text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</code>';
+      })
+      .catch(() => {
+        sourceEl.innerHTML = '<code>Open exercises/StreamsCapstoneExercise.java in your editor and copy manually.</code>';
+      });
+
+    copyBtn.addEventListener('click', () => {
+      if (!fileText) return;
+      navigator.clipboard.writeText(fileText).then(() => {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy entire file'; }, 2000);
+      });
+    });
+  </script>
+</body>
+</html>
