@@ -2,9 +2,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Animate global progress bar
   const progressFill = document.getElementById('progressFill');
   if (progressFill) {
-    // 2 of 11 modules = 18.2%
+    // 3 of 11 modules = 27.3%
     setTimeout(() => {
-      progressFill.style.width = '18.2%';
+      progressFill.style.width = '27.3%';
     }, 200);
   }
 
