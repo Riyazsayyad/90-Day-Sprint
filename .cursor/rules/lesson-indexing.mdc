@@ -1,6 +1,6 @@
 ---
 description: Update curriculum indexes when lessons are added, modified, or reordered
-globs: lessons/**/*.html,reference/**/*.html,index.html,assets/lesson-tray.js
+globs: lessons/**/*.html,reference/**/*.html,exercises/**/*.html,exercises/**/*.java,index.html,assets/lesson-tray.js
 alwaysApply: false
 ---
 
@@ -37,5 +37,6 @@ Match the module's existing naming pattern (`streams-0005-...`, `oop-0014-...`, 
 - [ ] New lesson has Home + prev/next links
 - [ ] Neighbor lessons' prev/next links updated
 - [ ] Matching `reference/` sheet created when the lesson has one
+- [ ] If adding an **exercise** (not a lesson), follow `.cursor/rules/exercise-pages.mdc` instead
 
-Full spec: `.cursor/AGENTS.md` → Lesson Curriculum Indexing.
+Full spec: `.cursor/AGENTS.md` → Lesson Curriculum Indexing / Exercise Pages.

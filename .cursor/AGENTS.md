@@ -10,6 +10,14 @@ Whenever a new lesson is added, modified, or reordered in the project, agents MU
 2. **Lessons Tray Configuration ([lesson-tray.js](file:///c:/Riyaz/Study/Learn/assets/lesson-tray.js)):** Add the lesson object to the `lessons` array with its correct lesson number, path, title, and metadata.
 3. **Lesson Navigation ([lessons/](file:///c:/Riyaz/Study/Learn/lessons/) HTML pages):** Update the next/prev links in the HTML `<nav class="lesson-nav">` bars to maintain a sequential chain between lessons, and ensure every navigation bar contains a link back to the Dashboard Home Page (`<a href="../index.html">🏠 Home</a>`).
 
+## Exercise Pages
+
+Exercises are **not** lessons. See `.cursor/rules/exercise-pages.mdc` for full rules. Summary:
+
+- **Label:** Exercise / Ex in meta and tray — no redundant badges; never call them lessons.
+- **Theme:** Must use `lesson.css` CSS variables and quiz-button styling — no custom dark palettes.
+- **Files:** `exercises/*.html` + companion `.java` stub; index in `index.html`, `lesson-tray.js` (`kind: 'exercise'`), and lesson prev/next chain.
+
 ## Study Tracker Maintenance
 
 **Local only — never commit or push `tracker/`.** The repo is public; tracker files contain PII (finance, salary, personal goals). They are listed in `.gitignore`. Update them locally after study activity; do not add them to git or suggest removing the ignore rule.

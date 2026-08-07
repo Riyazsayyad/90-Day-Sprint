@@ -1,0 +1,45 @@
+---
+description: Exercise pages — naming, theme, indexing (not lessons)
+globs: exercises/**/*.html,exercises/**/*.java,index.html,assets/lesson-tray.js,lessons/**/*.html
+alwaysApply: false
+---
+
+# Exercise Pages (Not Lessons)
+
+Coding exercises are separate from lessons. Follow these rules so pages match the Tufte lesson theme.
+
+## Naming & labels
+
+- Call them **Exercise** / **Ex** — never "Lesson" in title, tray, or dashboard.
+- Say it **once** in `<p class="meta">` (e.g. `Capstone exercise &bull; Module 02`).
+- **No redundant badges** like "Exercise · Not a Lesson" above the title.
+
+## Visual theme (mandatory)
+
+- Link `../assets/lesson.css` from `exercises/*.html`.
+- **Reuse lesson design tokens** — never invent a dark/alternate palette:
+  - `var(--text)`, `var(--muted)`, `var(--accent)`, `var(--bg)`, `var(--border)`, `var(--surface)`
+- **Buttons** match `.quiz-options button` in `lesson.css`:
+  - white background, `1px solid var(--border)`, accent border on hover, `#fafaf5` hover bg
+- **Tables**: `border: 1px solid var(--border)`; header `background: var(--surface)`
+- **Forbidden**: ad-hoc dark colors (`#0f172a`, `#334155`, `#1e293b`, blue badge chips, etc.)
+
+## File layout
+
+- HTML: `exercises/<module>-<name>-exercise.html`
+- Java stub: `exercises/<Name>Exercise.java` (single copy-paste file, JUnit 5, JavaDoc scenarios + tests)
+
+## Indexing (same discipline as lessons)
+
+1. **`index.html`** — drawer entry with `Ex` number, meta `Coding` not `min read`; counts `X Lessons &bull; Y Exercise`
+2. **`lesson-tray.js`** — `{ kind: 'exercise', num: 'Ex', file: '...-exercise.html', ... }`; tray uses `../exercises/` from lessons
+3. **Nav chain** — last lesson `➡️ Next: … Exercise`; exercise page `⬅️ Prev: …` + Home
+
+## Checklist
+
+- [ ] Uses `lesson.css` variables only (no off-theme colors)
+- [ ] No duplicate exercise badge if meta already says exercise
+- [ ] Indexed in dashboard + lesson-tray with `kind: 'exercise'`
+- [ ] Prev/next nav wired from last lesson
+
+Full spec: `.cursor/AGENTS.md` → Exercise Pages.
