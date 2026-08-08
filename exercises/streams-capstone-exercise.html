@@ -40,7 +40,7 @@
   </nav>
 
   <h1>Streams API Capstone Exercise</h1>
-  <p class="meta">Capstone exercise &bull; Module 02 &bull; 18 scenarios &bull; JUnit 5 &bull; <a href="StreamsCapstoneExercise.java">StreamsCapstoneExercise.java</a></p>
+  <p class="meta">Capstone exercise &bull; Module 02 &bull; 18 scenarios &bull; JUnit 5 &bull; <a href="StreamsCapstoneExercise.java">Stub</a> &bull; <a href="reference/StreamsCapstoneExercise.solved.java">Solved reference</a></p>
 
   <div class="callout">
     <strong>How to use:</strong> Copy the single Java file below into IntelliJ or <code>java-interview-lab</code>. Add JUnit Jupiter 5 to the classpath. Implement each <code>TODO</code> stub — tests encode the expected interview answer. Run all tests until green.
@@ -81,10 +81,37 @@
     </tbody>
   </table>
 
+  <h2>Next — LeetCode (streams collectors)</h2>
+  <p>Apply the same patterns from Exercises 03–04, 08, and 14 on real problems. Copy stubs into <code>java-interview-lab</code> after each solve.</p>
+  <table class="scenario-table">
+    <thead>
+      <tr><th>Problem</th><th>Pattern</th><th>Maps to exercise</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a href="https://leetcode.com/problems/top-k-frequent-elements/">LC 347 — Top K Frequent Elements</a></td>
+        <td><code>groupingBy</code> / frequency map, top-N per group</td>
+        <td>04, 14</td>
+      </tr>
+      <tr>
+        <td><a href="https://leetcode.com/problems/group-anagrams/">LC 49 — Group Anagrams</a></td>
+        <td><code>groupingBy</code> on normalized key</td>
+        <td>04, 08</td>
+      </tr>
+      <tr>
+        <td><a href="https://leetcode.com/problems/reorder-data-in-log-files/">LC 937 — Reorder Data in Log Files</a></td>
+        <td><code>sorted</code>, custom <code>Comparator</code>, <code>partitioningBy</code></td>
+        <td>09, 11</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="meta">LC 49 already in your DSA log — good spaced redo with streams. LC 347 is the priority new solve.</p>
+
   <h2>Copy-Paste Source</h2>
   <div class="copy-bar">
     <button type="button" id="copyBtn">Copy entire file</button>
-    <a href="StreamsCapstoneExercise.java" download class="copy-bar-link">Download .java</a>
+    <a href="StreamsCapstoneExercise.java" download class="copy-bar-link">Download stub</a>
+    <a href="reference/StreamsCapstoneExercise.solved.java" download class="copy-bar-link">Download solved</a>
   </div>
   <pre id="javaSource"><code>Loading StreamsCapstoneExercise.java…</code></pre>
 
