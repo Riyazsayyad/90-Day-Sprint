@@ -129,3 +129,9 @@
 - Created Lesson 10 (oop-0010-object-class.html) and reference sheet (oop-0010-object-class.html) covering implicit inheritance, object headers, standard method contracts, wait/notify monitor models, generics erasure, and framework reflection usage.
 - Created learning record 21 (0021-java-lang-object.md).
 - Updated index.html and oop-0009-abstraction.html navigation lines to link to the new lesson.
+
+## Session (2026-08-11) — Module 03 kickoff
+- Continued from Day 34 handoff. Module 03 curriculum started.
+- Lesson 01: `concurrency-0001-thread-fundamentals.html` + cheat sheet.
+- Indexed: index drawer, lesson-tray, dashboard.js, MISSION, RESOURCES, GLOSSARY.
+- Planned module arc: Thread fundamentals → sync/monitors → volatile/JMM → locks → executors → concurrent collections → CompletableFuture → virtual threads.

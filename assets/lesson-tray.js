@@ -43,7 +43,10 @@
     { num: '04', file: 'streams-0004-collectors-deep-dive.html', title: 'Collectors Deep Dive', meta: '20 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' },
     { num: '05', file: 'streams-0005-parallel-streams.html', title: 'Parallel Streams', meta: '20 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' },
     { num: '06', file: 'streams-0006-stream-internals.html', title: 'Stream Internals', meta: '25 min read &bull; Streams API', module: 'Streams API', moduleNum: '02' },
-    { num: 'Ex', file: 'streams-capstone-exercise.html', title: 'Capstone Exercise', meta: '18 scenarios &bull; Coding', module: 'Streams API', moduleNum: '02', kind: 'exercise' }
+    { num: 'Ex', file: 'streams-capstone-exercise.html', title: 'Capstone Exercise', meta: '18 scenarios &bull; Coding', module: 'Streams API', moduleNum: '02', kind: 'exercise' },
+
+    // Module 03: Concurrency & Threads
+    { num: '01', file: 'concurrency-0001-thread-fundamentals.html', title: 'Thread Fundamentals & Lifecycle', meta: '25 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' }
   ];
 
 

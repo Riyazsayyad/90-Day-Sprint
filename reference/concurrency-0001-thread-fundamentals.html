@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thread Fundamentals — Reference</title>
+  <meta name="description" content="Quick reference: process vs thread, start vs run, Thread.State, Runnable, daemon, join, interrupt.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/concurrency-0001-thread-fundamentals.html">&larr; Lesson 01</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Thread Fundamentals Cheat Sheet</h1>
+  <p class="meta">Lifecycle, start vs run, daemon, coordination</p>
+
+  <h2>1. Process vs Thread</h2>
+  <ul>
+    <li><strong>Process:</strong> own address space</li>
+    <li><strong>Thread:</strong> shared heap, private stack</li>
+    <li>Races live on shared heap objects</li>
+  </ul>
+
+  <h2>2. Concurrency vs Parallelism</h2>
+  <ul>
+    <li><strong>Concurrency:</strong> tasks in progress (may time-slice)</li>
+    <li><strong>Parallelism:</strong> tasks run at same instant on multiple cores</li>
+    <li>Parallel streams = data parallelism, not general concurrency</li>
+  </ul>
+
+  <h2>3. Create & Start</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background:#f7f7f0;">
+      <th align="left" style="padding:0.5rem;">API</th>
+      <th align="left" style="padding:0.5rem;">Note</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>new Thread(runnable).start()</code></td>
+      <td style="padding:0.5rem;">Classic platform thread</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>Thread.ofPlatform().start(r)</code></td>
+      <td style="padding:0.5rem;">Builder (Java 21+)</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>Thread.ofVirtual().start(r)</code></td>
+      <td style="padding:0.5rem;">Virtual; always daemon</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>t.run()</code></td>
+      <td style="padding:0.5rem;"><strong>No new thread</strong> — same call stack</td>
+    </tr>
+  </table>
+  <p>Prefer <code>Runnable</code> over extending <code>Thread</code>. Start once only.</p>
+
+  <h2>4. Thread.State</h2>
+  <ul>
+    <li><code>NEW</code> → <code>RUNNABLE</code> ↔ <code>BLOCKED</code> / <code>WAITING</code> / <code>TIMED_WAITING</code> → <code>TERMINATED</code></li>
+    <li><code>BLOCKED</code> = waiting to enter <code>synchronized</code></li>
+    <li><code>WAITING</code> = <code>wait</code> / <code>join</code> / <code>park</code> (no timeout)</li>
+    <li><code>TIMED_WAITING</code> = <code>sleep</code> / timed wait/join</li>
+  </ul>
+
+  <h2>5. Coordination</h2>
+  <ul>
+    <li><code>join()</code> — wait for termination</li>
+    <li><code>interrupt()</code> — cooperative cancel; restore flag on catch</li>
+    <li><code>sleep</code> — does not release monitors</li>
+  </ul>
+
+  <h2>6. Daemon</h2>
+  <ul>
+    <li>Non-daemon keeps JVM alive</li>
+    <li>Daemon alone → JVM may exit</li>
+    <li><code>setDaemon(true)</code> before <code>start()</code></li>
+  </ul>
+
+  <h2>7. Production One-Liners</h2>
+  <ul>
+    <li>No unbounded <code>new Thread</code> per request — use executor</li>
+    <li>Shared mutable heap = race until synchronized/volatile/JMM proven</li>
+    <li>Uncaught exception kills the thread, not necessarily the JVM</li>
+  </ul>
+
+  <h2>8. Primary Sources</h2>
+  <ul>
+    <li><a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/runthread.html">Defining and Starting a Thread</a></li>
+    <li><a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/lang/Thread.html">Thread javadoc</a></li>
+  </ul>
+
+</body>
+</html>

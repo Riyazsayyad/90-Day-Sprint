@@ -358,6 +358,37 @@ _Avoid_: late binding bypass
 A performance optimization where the JIT compiler replaces method invocation instructions with the direct method body, typically applied to devirtualized final methods.
 _Avoid_: macro expansion
 
+## Concurrency & Threads Terms
+
+**Platform thread**:
+A thread typically mapped 1:1 to an OS kernel thread, with a large stack and limited availability. Suitable for all task types; may be daemon or non-daemon.
+_Avoid_: OS thread (acceptable informally; prefer platform thread in lessons)
+
+**Virtual thread**:
+A lightweight JVM-scheduled thread (Java 21+) that runs on carrier platform threads. Designed for blocking I/O at scale; always daemon; not for long CPU-bound work.
+_Avoid_: green thread (historical; prefer virtual thread)
+
+**Runnable**:
+The task protocol (`run()`) separate from the thread that executes it. Preferred over subclassing `Thread`.
+_Avoid_: thread class, worker class (too vague)
+
+**start() vs run()**:
+`start()` schedules a new thread that will invoke `run()`. Calling `run()` directly executes on the current thread with no concurrency.
+_Avoid_: launch vs execute (too vague for interviews)
+
+**Thread.State**:
+JVM-visible lifecycle: `NEW`, `RUNNABLE`, `BLOCKED`, `WAITING`, `TIMED_WAITING`, `TERMINATED`.
+_Avoid_: RUNNING (not a Java `Thread.State`)
+
+**Daemon thread**:
+A thread that does not keep the JVM alive. When only daemon threads remain, the JVM may exit.
+_Avoid_: background thread (ambiguous)
+
+**Interrupt**:
+Cooperative cancellation signal. Blocking calls may throw `InterruptedException` and clear the status; restore with `Thread.currentThread().interrupt()` if not handling fully.
+_Avoid_: kill, stop (deprecated/`stop()` is unsafe)
+
+
 
 
 

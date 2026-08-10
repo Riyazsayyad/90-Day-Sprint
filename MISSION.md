@@ -1,24 +1,32 @@
-# Mission: Core Java & OOP
+# Mission: Concurrency & Threads
 
 ## Why
-You want to master key object-oriented programming fundamentals, including encapsulation, inheritance, polymorphism, abstraction, interface design guidelines, and fundamental SOLID principles.
+You are aiming for Senior Backend / SWE II roles where production services must handle many overlapping requests safely. Parallel streams already showed data parallelism; you now need the thread, lock, and memory-model foundations that power Spring executors, async workflows, and virtual threads — so you can reason about races, pool sizing, and interview scenarios under load.
 
 ## Success looks like
-- Explain the physical and logical concepts of Encapsulation and representation hiding.
-- Describe Polymorphism, Dynamic Dispatch, and method lookup mechanics in Java.
-- Detail Liskov Substitution Principle (LSP) and Interface Segregation Principle (ISP).
-- Compare and reason about Composition vs Inheritance trade-offs and when to use each.
-- Apply SOLID principles to design clean, maintainable, and extensible interface structures.
+- Explain process vs thread, concurrency vs parallelism, and `start()` vs `run()` with JVM-level precision.
+- Read a thread dump: map `Thread.State` values to real wait/block causes.
+- Choose executors over raw threads; justify bounded pools and rejection policies.
+- Reason about shared-heap races and when `synchronized` / `volatile` / JMM rules apply.
+- Frame CompletableFuture and virtual-thread designs in production terms (I/O-bound vs CPU-bound).
 
 ## Constraints
-- Focus on modern Java class design, access modifiers, method dispatch, and interface design guidelines.
-- Focus on practical, clean design examples and complexity trade-offs.
+- Build on Module 00 (stack/heap) and Module 02 (parallel streams / commonPool).
+- Prefer Oracle docs + OpenJDK contracts over blog folklore.
+- Interview + enterprise framing first; toy demos second.
 
-## Out of scope
-- Design patterns beyond structural inheritance/composition.
-- Advanced framework-level OOP setups.
+## Out of scope (for now)
+- Full distributed systems (Kafka, Kubernetes) — later modules.
+- Deep GC tuning — Module 04.
+- Writing production Spring config — Module 05 (after concurrency primitives).
 
 ---
+
+<details>
+<summary>Previous mission: Core Java & OOP (completed)</summary>
+
+Lessons `oop-0001`–`oop-0015` and related references remain in this workspace.
+</details>
 
 <details>
 <summary>Previous mission: Java Collection Internals (completed)</summary>

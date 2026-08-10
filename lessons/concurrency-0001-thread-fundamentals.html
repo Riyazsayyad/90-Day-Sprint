@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 1 — Thread Fundamentals & Lifecycle</title>
+  <meta name="description" content="Java threads from a Senior Backend perspective: process vs thread, concurrency vs parallelism, start vs run, lifecycle states, Runnable vs Thread, daemon threads, join/interrupt, and why production code uses executors.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot; <a href="../exercises/streams-capstone-exercise.html">⬅️ Prev: Streams Capstone</a>
+  </nav>
+
+  <h1>Deep Dive: Thread Fundamentals & Lifecycle</h1>
+  <p class="meta">~25 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; <a href="../reference/concurrency-0001-thread-fundamentals.html">Cheat sheet</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Interviewers rarely ask you to subclass <code>Thread</code>. They probe whether you know <code>start()</code> vs <code>run()</code>, thread states under load, daemon shutdown rules, why raw thread creation is a production smell, and how this connects to the shared heap you already studied. Parallel streams (Module 02) sit on top of this model — you already used the shared pool; now you own the primitives underneath.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/runthread.html">Oracle — Defining and Starting a Thread</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/lang/Thread.html">Oracle — <code>Thread</code> javadoc (SE 23)</a> ·
+    <a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/procthread.html">Oracle — Processes and Threads</a>
+  </p>
+
+  <h2>1. Why Threads Exist (Enterprise Framing)</h2>
+  <p>A Spring Boot service handling 500 HTTP requests cannot run them one-after-another on a single call stack. Threads let the JVM keep many units of work <em>in progress</em> — waiting on DB I/O, computing, or coordinating — without blocking the whole process.</p>
+  <p>You already saw one abstraction: <strong>parallel streams</strong> fork work onto <code>ForkJoinPool.commonPool()</code>. That pool is made of threads. This module starts at the primitive those pools manage.</p>
+
+  <h2>2. Process vs Thread</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Concept</th>
+        <th>Process</th>
+        <th>Thread</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>What it is</strong></td>
+        <td>OS-isolated program with own address space</td>
+        <td>Unit of execution inside a process</td>
+      </tr>
+      <tr>
+        <td><strong>Memory</strong></td>
+        <td>Private virtual memory</td>
+        <td>Shares process heap; owns its own stack</td>
+      </tr>
+      <tr>
+        <td><strong>Failure isolation</strong></td>
+        <td>Crash usually stops the process</td>
+        <td>Uncaught exception kills <em>that</em> thread; JVM may keep running</td>
+      </tr>
+      <tr>
+        <td><strong>Cost</strong></td>
+        <td>Heavy to create / switch</td>
+        <td>Lighter than a process (platform threads still non-trivial)</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>JVM mental model (ties to Stack vs Heap):</strong> one JVM process → one shared <strong>Heap</strong> + Metaspace → many threads, each with a private <strong>call stack</strong> (frames, locals, operand stack). Shared mutable heap objects are where races live.</p>
+  <pre>
+┌──────────── JVM Process ────────────┐
+│  Heap (shared objects)              │
+│  ┌────────┐ ┌────────┐ ┌────────┐   │
+│  │ Stack  │ │ Stack  │ │ Stack  │   │
+│  │ main   │ │ worker │ │ http-1 │   │
+│  └────────┘ └────────┘ └────────┘   │
+└─────────────────────────────────────┘
+  </pre>
+
+  <h2>3. Concurrency vs Parallelism (Bridge from Streams)</h2>
+  <ul>
+    <li><strong>Concurrency:</strong> Multiple tasks <em>in progress</em>. May time-slice on one core. Classic for I/O-bound request handling.</li>
+    <li><strong>Parallelism:</strong> Multiple tasks <em>executing at the same instant</em> on multiple cores. Classic for CPU-bound splits (parallel streams).</li>
+  </ul>
+  <p>Interview line: concurrency is about <em>structure</em> (overlapping work); parallelism is about <em>execution</em> (simultaneous cores). You can have concurrency without parallelism (single core + blocking I/O). Parallel streams are a parallelism tool — not a general concurrency framework.</p>
+
+  <h2>4. Platform Threads vs Virtual Threads (Preview)</h2>
+  <p>Per the <a href="https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/lang/Thread.html"><code>Thread</code> javadoc</a>:</p>
+  <ul>
+    <li><strong>Platform thread:</strong> Typically 1:1 with an OS kernel thread. Large stack. Limited resource. Suitable for all task types. Can be daemon or non-daemon.</li>
+    <li><strong>Virtual thread (Java 21+):</strong> User-mode thread scheduled by the JVM onto a small pool of carrier platform threads. Cheap; designed for blocking I/O at scale. Always daemon. Not for long CPU-bound work.</li>
+  </ul>
+  <p>This lesson focuses on <strong>platform thread fundamentals</strong> — you need them to understand pools, locks, and the JMM. Virtual threads get their own section later; do not invent them as a free speedup for CPU work.</p>
+
+  <h2>5. Creating Work: Runnable vs Extending Thread</h2>
+  <p>Oracle's tutorial prefers separating the <strong>task</strong> from the <strong>execution vehicle</strong>.</p>
+
+  <h3>Preferred: implement Runnable (or lambda)</h3>
+  <pre><code class="language-java">Runnable task = () -> System.out.println(
+    "running on " + Thread.currentThread().getName());
+
+Thread t = new Thread(task, "worker-1");
+t.start(); // schedules a new thread; returns immediately to caller</code></pre>
+
+  <h3>Legacy: subclass Thread</h3>
+  <pre><code class="language-java">class Worker extends Thread {
+  @Override public void run() { /* work */ }
+}
+new Worker().start();</code></pre>
+  <p><strong>Why Runnable wins:</strong> your task class can still extend something else; the same task can run on an <code>Executor</code>, a virtual thread, or a test harness without being locked into the <code>Thread</code> type hierarchy. Production code almost never subclasses <code>Thread</code>.</p>
+
+  <h3>Modern: Thread.Builder (Java 21+)</h3>
+  <pre><code class="language-java">Thread.ofPlatform().name("worker-1").start(task);
+Thread.ofVirtual().name("vt-1").start(task);</code></pre>
+
+  <h2>6. The Critical Trap: start() vs run()</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Call</th>
+        <th>What happens</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>t.start()</code></td>
+        <td>JVM schedules a <em>new</em> thread. That thread eventually invokes <code>run()</code>. Caller continues concurrently.</td>
+      </tr>
+      <tr>
+        <td><code>t.run()</code></td>
+        <td>Ordinary method call on the <em>current</em> thread. No new thread. No concurrency.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Calling <code>run()</code> directly is a classic junior bug and a favorite interview trap. Also: a thread may be started <strong>only once</strong>. A second <code>start()</code> throws <code>IllegalThreadStateException</code>.</p>
+
+  <h2>7. Thread Lifecycle (getState())</h2>
+  <p><code>Thread.State</code> (via <code>t.getState()</code>) — interview-ready names:</p>
+  <pre>
+NEW ──start()──► RUNNABLE ◄──► BLOCKED / WAITING / TIMED_WAITING
+                      │
+                      └── run ends / uncaught ──► TERMINATED
+  </pre>
+  <ul>
+    <li><strong>NEW:</strong> constructed, not started.</li>
+    <li><strong>RUNNABLE:</strong> executing or ready to execute (includes waiting for CPU — Java does not expose a separate "RUNNING").</li>
+    <li><strong>BLOCKED:</strong> waiting to enter a <code>synchronized</code> monitor held by another thread.</li>
+    <li><strong>WAITING:</strong> waiting indefinitely (<code>Object.wait()</code>, <code>LockSupport.park()</code>, <code>join()</code> without timeout).</li>
+    <li><strong>TIMED_WAITING:</strong> waiting with a timeout (<code>sleep</code>, <code>wait(timeout)</code>, <code>join(timeout)</code>).</li>
+    <li><strong>TERMINATED:</strong> <code>run</code> finished (normal or via uncaught exception after handler runs).</li>
+  </ul>
+  <p><strong>Production note:</strong> thread dumps (<code>jstack</code>, VisualVM) show these states. A pile of <code>BLOCKED</code> threads on one monitor is a lock contention smell. A pile of <code>WAITING</code> on a pool queue may be healthy idle workers.</p>
+
+  <h2>8. Coordination Basics: join, sleep, interrupt</h2>
+
+  <h3>join()</h3>
+  <p><code>worker.join()</code> — current thread waits until <code>worker</code> reaches <code>TERMINATED</code>. Use when the caller needs the worker's result before continuing (or prefer higher-level <code>Future.get()</code> later).</p>
+
+  <h3>sleep()</h3>
+  <p><code>Thread.sleep(ms)</code> — current thread enters <code>TIMED_WAITING</code>. Does <strong>not</strong> release monitors you hold. Rarely correct for production coordination (prefer locks, latches, conditions).</p>
+
+  <h3>interrupt()</h3>
+  <p>Cooperative cancellation. <code>t.interrupt()</code> sets the interrupt status. Blocking methods (<code>sleep</code>, <code>join</code>, <code>wait</code>, many I/O ops) throw <code>InterruptedException</code> and clear the status. Your code should either restore the interrupt flag (<code>Thread.currentThread().interrupt()</code>) or exit cleanly — never swallow and continue as if nothing happened.</p>
+  <pre><code class="language-java">try {
+  Thread.sleep(1000);
+} catch (InterruptedException e) {
+  Thread.currentThread().interrupt(); // restore status
+  return; // stop work
+}</code></pre>
+
+  <h2>9. Daemon vs Non-Daemon</h2>
+  <ul>
+    <li><strong>Non-daemon:</strong> keeps the JVM alive. <code>main</code> starts as non-daemon. Worker pools are usually non-daemon unless you deliberately want fire-and-forget.</li>
+    <li><strong>Daemon:</strong> JVM can exit when only daemon threads remain. Useful for background helpers (e.g. cache cleaner) that must not block shutdown.</li>
+  </ul>
+  <p>Set before start: <code>t.setDaemon(true)</code>. Virtual threads are always daemon. Unstarted non-daemon threads do <em>not</em> block shutdown — only started ones count.</p>
+
+  <h2>10. Uncaught Exceptions</h2>
+  <p>An exception that escapes <code>run()</code> does not crash the JVM by default. It goes to the thread's <code>UncaughtExceptionHandler</code> (or the thread group's / default handler), then the thread terminates. In a servlet container, a dead worker with a silent handler = mysterious capacity loss. Always log in handlers for long-lived pools.</p>
+
+  <h2>11. Why Production Rarely Calls new Thread()</h2>
+  <p>Spawning unbounded raw threads under load → OOM / native thread exhaustion. No reuse, no queueing policy, no metrics. Senior answer:</p>
+  <blockquote>Prefer an <code>ExecutorService</code> (fixed/cached/work-stealing pool) with bounded queues and rejection policy. Raw <code>Thread</code> is for teaching and rare special cases — not for request paths.</blockquote>
+  <p>Executors are the next major section. You already met one: <code>ForkJoinPool.commonPool()</code> behind parallel streams.</p>
+
+  <h2>12. Shared State Warning (Foreshadow)</h2>
+  <p>Two threads reading/writing the same heap field without coordination → data races. Visibility and atomicity are <strong>not</strong> guaranteed by "it worked on my machine." Next lessons: <code>synchronized</code>, <code>volatile</code>, the Java Memory Model. Until then: treat shared mutable state as unsafe unless proven otherwise.</p>
+
+  <hr>
+
+  <h2>13. Revision Notes</h2>
+  <ul>
+    <li>Process = address space; thread = stack + shared heap.</li>
+    <li><code>start()</code> schedules; <code>run()</code> is just a method on the current thread.</li>
+    <li>States: NEW → RUNNABLE ↔ BLOCKED/WAITING/TIMED_WAITING → TERMINATED.</li>
+    <li>Prefer <code>Runnable</code> / builders; prefer executors over raw threads in production.</li>
+    <li>Daemon threads do not keep the JVM alive; restore interrupt status on catch.</li>
+  </ul>
+
+  <hr>
+
+  <h2>14. 5 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Calling thread.run() instead of start() does what?</p>
+        <ol type="A">
+          <li>Runs task on current thread.</li>
+          <li>Starts new OS kernel thread.</li>
+          <li>Queues task on common pool.</li>
+          <li>Creates daemon virtual thread.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Runs task on current thread.)</strong></p>
+          <p><code>run()</code> is a normal method invocation. Only <code>start()</code> asks the JVM to schedule a new thread that will then call <code>run()</code>.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Which Thread.State means waiting on a monitor enter?</p>
+        <ol type="A">
+          <li>BLOCKED waiting for lock.</li>
+          <li>WAITING waiting for lock.</li>
+          <li>RUNNABLE waiting for lock.</li>
+          <li>NEW waiting for lock.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (BLOCKED waiting for lock.)</strong></p>
+          <p><code>BLOCKED</code> is specifically for threads waiting to enter a <code>synchronized</code> block/method. <code>WAITING</code> covers <code>wait()</code>/<code>join()</code>/<code>park()</code> without timeout.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: Best default way to define concurrent work?</p>
+        <ol type="A">
+          <li>Implement Runnable then submit.</li>
+          <li>Extend Thread then override.</li>
+          <li>Extend Thread then sleep.</li>
+          <li>Implement Thread then submit.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Implement Runnable then submit.)</strong></p>
+          <p>Oracle and production practice separate task from thread. <code>Runnable</code> (or <code>Callable</code>) plugs into executors and builders; subclassing <code>Thread</code> burns your single inheritance slot.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: When can the JVM exit despite live threads?</p>
+        <ol type="A">
+          <li>Only daemon threads remain.</li>
+          <li>Only non-daemon threads remain.</li>
+          <li>Any NEW threads remain.</li>
+          <li>Any BLOCKED threads remain.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Only daemon threads remain.)</strong></p>
+          <p>Shutdown begins when all started non-daemon threads have terminated. Remaining daemon threads are abandoned.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: Why avoid new Thread per HTTP request?</p>
+        <ol type="A">
+          <li>Unbounded create risks exhaustion.</li>
+          <li>Thread start always throws error.</li>
+          <li>Runnable cannot run on pools.</li>
+          <li>join always blocks forever.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Unbounded create risks exhaustion.)</strong></p>
+          <p>Each platform thread costs native memory and scheduling. Under spike load, unbounded creation OOMs the process. Use a bounded executor with a queue and rejection policy.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>15. Reasoning Exercises</h2>
+  <ol>
+    <li><strong>Trace:</strong> Write a main that starts two threads printing 0..4. Explain why output order is non-deterministic without synchronization.</li>
+    <li><strong>Bug hunt:</strong> A teammate writes <code>new Thread(task).run()</code> and says "concurrency is broken." Fix and explain.</li>
+    <li><strong>Lifecycle:</strong> Start a thread that <code>sleep(5000)</code>. From main, print <code>getState()</code> before start, after start (briefly), and after <code>join()</code>.</li>
+    <li><strong>Interrupt:</strong> Loop in a worker checking <code>Thread.interrupted()</code>. From main, interrupt after 1s and confirm clean exit with flag restored in a catch path.</li>
+    <li><strong>Daemon:</strong> Start a daemon thread with an infinite loop. Let <code>main</code> return. Observe JVM exit — contrast with non-daemon.</li>
+  </ol>
+
+</body>
+</html>

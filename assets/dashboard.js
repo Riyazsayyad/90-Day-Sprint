@@ -24,6 +24,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const streamsDrawer = document.getElementById('streamsDrawer');
   const closeStreamsBtn = document.getElementById('closeStreamsDrawerBtn');
 
+  // Drawer Elements for Concurrency (Module 3)
+  const concurrencyCard = document.getElementById('concurrencyCard');
+  const concurrencyDrawer = document.getElementById('concurrencyDrawer');
+  const closeConcurrencyBtn = document.getElementById('closeConcurrencyDrawerBtn');
+
   // Open / Close Drawer Functions for Collections
   const openDrawer = () => {
     drawer.classList.add('open');
@@ -63,10 +68,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.style.overflow = '';
   };
 
+  const openConcurrencyDrawer = () => {
+    if (concurrencyDrawer) concurrencyDrawer.classList.add('open');
+    if (backdrop) backdrop.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  };
+
+  const closeConcurrencyDrawer = () => {
+    if (concurrencyDrawer) concurrencyDrawer.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('open');
+    document.body.style.overflow = '';
+  };
+
   const closeAllDrawers = () => {
     closeDrawer();
     closeOopDrawer();
     closeStreamsDrawer();
+    closeConcurrencyDrawer();
   };
 
   // Click active cards to open
@@ -91,10 +109,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  if (concurrencyCard) {
+    concurrencyCard.addEventListener('click', (e) => {
+      if (e.target.closest('a')) return;
+      openConcurrencyDrawer();
+    });
+  }
+
   // Close triggers
   if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
   if (closeOopBtn) closeOopBtn.addEventListener('click', closeOopDrawer);
   if (closeStreamsBtn) closeStreamsBtn.addEventListener('click', closeStreamsDrawer);
+  if (closeConcurrencyBtn) closeConcurrencyBtn.addEventListener('click', closeConcurrencyDrawer);
   if (backdrop) backdrop.addEventListener('click', closeAllDrawers);
 
   // Esc key listener to close drawer

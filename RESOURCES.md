@@ -79,6 +79,19 @@
 - [OpenJDK JMH samples (GitHub)](https://github.com/openjdk/jmh/tree/master/jmh-samples/src/main/java/org/openjdk/jmh/samples)
   Runnable benchmark examples; adapt for stream pipeline comparisons.
 
+## Concurrency & Threads (Module 03)
+
+- [Oracle: Defining and Starting a Thread](https://docs.oracle.com/javase/tutorial/essential/concurrency/runthread.html)
+  Official tutorial: Runnable vs subclassing Thread, and why `start()` is required.
+- [Oracle: Processes and Threads](https://docs.oracle.com/javase/tutorial/essential/concurrency/procthread.html)
+  Process vs thread basics in the Java platform model.
+- [Oracle: Thread Objects](https://docs.oracle.com/javase/tutorial/essential/concurrency/threads.html)
+  Strategies: direct Thread control vs executors.
+- [Oracle: `Thread` javadoc (SE 23)](https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/lang/Thread.html)
+  Platform vs virtual threads, Builder API, daemon rules, lifecycle contract.
+- [Oracle: `Runnable` javadoc](https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/lang/Runnable.html)
+  Task protocol separate from Thread execution vehicle.
+
 ## Wisdom (Communities)
 
 - [Stack Overflow — OOP tag](https://stackoverflow.com/questions/tagged/oop)
