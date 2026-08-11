@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Synchronization & Monitors — Reference</title>
+  <meta name="description" content="Quick reference: intrinsic locks, synchronized, monitor wait set, wait/notify, reentrancy, classic bugs.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/concurrency-0002-synchronization-monitors.html">&larr; Lesson 02</a> &middot;
+    <a href="../lessons/concurrency-0001-thread-fundamentals.html">Lesson 01</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Synchronization & Monitors Cheat Sheet</h1>
+  <p class="meta">Locks, wait/notify, races, traps</p>
+
+  <h2>1. Why Sync</h2>
+  <ul>
+    <li><strong>Data race:</strong> concurrent access + write + no sync</li>
+    <li><strong>Lost update:</strong> <code>count++</code> is read-modify-write</li>
+    <li><strong>Check-then-act:</strong> compound actions need one lock</li>
+  </ul>
+
+  <h2>2. Monitor Model</h2>
+  <ul>
+    <li>Every object → one intrinsic lock + one wait set</li>
+    <li><strong>Owner:</strong> one thread holds lock at a time</li>
+    <li><strong>Entry queue:</strong> blocked on <code>synchronized</code> → <code>BLOCKED</code></li>
+    <li><strong>Wait set:</strong> <code>wait()</code> → <code>WAITING</code></li>
+    <li>Mark Word: biased → thin → fat under contention</li>
+  </ul>
+
+  <h2>3. synchronized — Which Lock?</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background:#f7f7f0;">
+      <th align="left" style="padding:0.5rem;">Form</th>
+      <th align="left" style="padding:0.5rem;">Lock object</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;">Instance method</td>
+      <td style="padding:0.5rem;"><code>this</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;">Static method</td>
+      <td style="padding:0.5rem;"><code>ClassName.class</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;">Block</td>
+      <td style="padding:0.5rem;">Expression you specify</td>
+    </tr>
+  </table>
+
+  <h2>4. Reentrancy</h2>
+  <ul>
+    <li>Same thread may acquire same monitor multiple times</li>
+    <li>Each acquire matched by release on unwind</li>
+  </ul>
+
+  <h2>5. wait / notify / notifyAll</h2>
+  <ul>
+    <li>Must hold object's monitor — else <code>IllegalMonitorStateException</code></li>
+    <li><code>wait()</code> — release lock, enter wait set</li>
+    <li><code>notify()</code> — wake one waiter (arbitrary)</li>
+    <li><code>notifyAll()</code> — wake all; prefer default</li>
+    <li>Always: <code>while (!condition) { wait(); }</code></li>
+    <li><code>sleep</code> does <strong>not</strong> release monitors</li>
+  </ul>
+
+  <h2>6. Atomicity vs Visibility</h2>
+  <ul>
+    <li><code>synchronized</code> → both (for guarded region)</li>
+    <li><code>volatile</code> → visibility + ordering, not compound atomicity (S03)</li>
+  </ul>
+
+  <h2>7. Classic Traps</h2>
+  <ul>
+    <li>Wrong lock object — no mutual exclusion</li>
+    <li><code>synchronized ("literal")</code> — shared interned monitor</li>
+    <li>Lock held during I/O — convoy / throughput collapse</li>
+    <li><code>notify</code> without holding lock</li>
+  </ul>
+
+  <h2>8. When to Upgrade</h2>
+  <ul>
+    <li>Simple short guards → <code>synchronized</code> OK</li>
+    <li>Try/timed/fair locks, pools, concurrent maps → <code>java.util.concurrent</code></li>
+  </ul>
+
+  <h2>9. Primary Sources</h2>
+  <ul>
+    <li><a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/locksync.html">Intrinsic Locks and Synchronization</a></li>
+    <li><a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/guardmeth.html">Guarded Blocks</a></li>
+    <li><a href="https://docs.oracle.com/javase/specs/jls/se23/html/jls-17.html">JLS Chapter 17</a></li>
+  </ul>
+
+</body>
+</html>

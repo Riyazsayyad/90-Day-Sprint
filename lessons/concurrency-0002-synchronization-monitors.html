@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 2 — Synchronization & Monitors</title>
+  <meta name="description" content="Java synchronization from a Senior Backend perspective: data races, intrinsic locks, monitor model, synchronized blocks and methods, reentrancy, wait/notify/notifyAll, classic bugs, and when to reach for java.util.concurrent.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="concurrency-0001-thread-fundamentals.html">&larr; Lesson 1</a> &middot;
+    Lesson 2 of 8 &middot;
+    <a href="../reference/concurrency-0002-synchronization-monitors.html">Cheat sheet</a>
+  </nav>
+
+  <h1>Deep Dive: Synchronization & Monitors</h1>
+  <p class="meta">~28 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; builds on <a href="concurrency-0001-thread-fundamentals.html">Lesson 1</a>, <a href="oop-0010-object-class.html">java.lang.Object</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> You already know threads share the heap and that <code>BLOCKED</code> means waiting on a monitor. Now own the lock model: what <code>synchronized</code> actually guarantees, why <code>counter++</code> is not atomic, how <code>wait()</code> differs from <code>sleep()</code>, and when intrinsic locks are the wrong tool. Interviewers love the broken-counter trace and the "which object is the lock?" question.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/locksync.html">Oracle — Intrinsic Locks and Synchronization</a> ·
+    <a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/guardmeth.html">Oracle — Guarded Blocks (wait/notify)</a> ·
+    <a href="https://docs.oracle.com/javase/specs/jls/se23/html/jls-17.html">JLS Chapter 17 — Threads and Locks</a>
+  </p>
+
+  <h2>1. Why Synchronization Exists</h2>
+  <p>Module 00 taught you: heap is shared, stack is per-thread. Module 03 Section 01 warned: two threads reading/writing the same field without coordination → <strong>data races</strong>.</p>
+  <p>A data race is when two threads access the same memory location, at least one is a write, and there is no happens-before relationship between them. The JVM does not promise a sensible result — you may see lost updates, torn reads, or "works on my laptop" flakiness under load.</p>
+
+  <h3>Lost update (classic)</h3>
+  <pre><code class="language-java">class Counter {
+  int count = 0;
+  void increment() { count++; } // NOT atomic — read, add, write
+}</code></pre>
+  <p>Two threads both read <code>count == 5</code>, both write <code>6</code>. Expected 7, got 6. One increment vanished.</p>
+
+  <h3>Check-then-act (enterprise trap)</h3>
+  <pre><code class="language-java">if (!cache.containsKey(key)) {   // Thread A checks — absent
+  cache.put(key, loadFromDb());  // Thread B checks — absent, both load
+}</code></pre>
+  <p>Even if each line looks safe alone, the <em>compound action</em> is not atomic. Spring singleton services with mutable fields hit this constantly unless designed thread-safe.</p>
+
+  <h2>2. Critical Section & Mutual Exclusion</h2>
+  <p>A <strong>critical section</strong> is code that touches shared mutable state. <strong>Mutual exclusion</strong> means at most one thread executes that section at a time for a given lock.</p>
+  <p>Java's built-in mechanism: every object carries an <strong>intrinsic lock</strong> (monitor lock). <code>synchronized</code> acquires it before entering and releases it on exit — even if an exception escapes.</p>
+
+  <h2>3. JVM Monitor Model (Interview Level)</h2>
+  <p>You met monitors briefly in <a href="oop-0010-object-class.html">java.lang.Object</a>: <code>wait()</code>, <code>notify()</code>, Mark Word lock bits. Here is the operational model:</p>
+  <ul>
+    <li><strong>Every object</strong> has one monitor (intrinsic lock) and one wait set.</li>
+    <li><strong>Entry queue:</strong> threads blocked trying to <code>enter synchronized</code> on this monitor → <code>Thread.State.BLOCKED</code>.</li>
+    <li><strong>Wait set:</strong> threads that called <code>wait()</code> on this object → <code>WAITING</code> / <code>TIMED_WAITING</code>.</li>
+    <li><strong>Owner:</strong> at most one thread holds the lock at a time.</li>
+  </ul>
+
+  <h3>Mark Word lock states (preview)</h3>
+  <p>The object header's Mark Word tracks lock state. HotSpot optimizes:</p>
+  <table class="reference-table">
+    <thead>
+      <tr><th>State</th><th>Meaning</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Biased</strong></td><td>Lock biased toward one thread — uncontended fast path</td></tr>
+      <tr><td><strong>Thin / lightweight</strong></td><td>Simple stack-based lock via CAS when low contention</td></tr>
+      <tr><td><strong>Fat / inflated</strong></td><td>Full monitor with native mutex + wait set under heavy contention</td></tr>
+    </tbody>
+  </table>
+  <p>You do not tune these in application code. Senior value: explain <em>why</em> uncontended <code>synchronized</code> is cheap and why lock convoys under contention hurt throughput — thread dumps show piles of <code>BLOCKED</code>.</p>
+
+  <h2>4. synchronized Methods vs Blocks</h2>
+
+  <h3>Instance method — locks <code>this</code></h3>
+  <pre><code class="language-java">public synchronized void transfer() {
+  // implicitly: synchronized (this) { ... }
+}</code></pre>
+
+  <h3>Static method — locks the Class object</h3>
+  <pre><code class="language-java">public static synchronized void resetAll() {
+  // implicitly: synchronized (MyService.class) { ... }
+}</code></pre>
+  <p>Instance lock and class lock are <strong>different monitors</strong>. A static synchronized method does not block an instance synchronized method on the same object unless they share the same lock object.</p>
+
+  <h3>Block — explicit lock object</h3>
+  <pre><code class="language-java">private final Object lock = new Object();
+
+void update() {
+  synchronized (lock) {
+    // only threads using THIS lock object block each other
+  }
+}</code></pre>
+  <p><strong>Interview rule:</strong> synchronization protects the lock object you chose — not "the method" or "the class" abstractly. Two blocks on different objects do not exclude each other.</p>
+
+  <h2>5. Reentrancy</h2>
+  <p>A thread that already holds a monitor may acquire it again. Each acquire must be matched by a release (nested synchronized blocks/method calls unwind correctly).</p>
+  <pre><code class="language-java">public synchronized void outer() {
+  inner(); // same thread re-enters same monitor — legal
+}
+public synchronized void inner() { /* ... */ }</code></pre>
+  <p>Without reentrancy, code calling synchronized helpers from synchronized methods would self-deadlock. This is why Java monitors are <strong>reentrant</strong>.</p>
+
+  <h2>6. wait / notify / notifyAll</h2>
+  <p>From <a href="oop-0010-object-class.html">Object</a> — now with concurrency framing:</p>
+  <ul>
+    <li>Caller <strong>must own</strong> the object's monitor → else <code>IllegalMonitorStateException</code>.</li>
+    <li><code>wait()</code> atomically <strong>releases the lock</strong> and places the thread in the object's wait set.</li>
+    <li>On <code>notify()</code> / <code>notifyAll()</code>, a waiter moves to re-enter the lock; it does <strong>not</strong> run until it re-acquires the lock.</li>
+    <li><code>sleep()</code> does <strong>not</strong> release monitors — different from <code>wait()</code>.</li>
+  </ul>
+
+  <h3>Always wait in a while loop</h3>
+  <pre><code class="language-java">synchronized (lock) {
+  while (!conditionMet()) {
+    lock.wait();
+  }
+  // work — condition still true after re-acquire
+}</code></pre>
+  <p>Reasons: <strong>spurious wakeups</strong> (allowed by spec), another thread may steal the condition between notify and your re-entry, multiple waiters with <code>notifyAll()</code>.</p>
+  <p><strong>Default:</strong> prefer <code>notifyAll()</code> unless you have a massive homogeneous pool and proven single-waiter semantics.</p>
+
+  <h3>Producer–consumer sketch</h3>
+  <pre><code class="language-java">class Drop {
+  private String message;
+  private boolean empty = true;
+
+  public synchronized void put(String msg) {
+    while (!empty) { wait(); }
+    message = msg;
+    empty = false;
+    notifyAll();
+  }
+
+  public synchronized String take() {
+    while (empty) { wait(); }
+    String msg = message;
+    empty = true;
+    notifyAll();
+    return msg;
+  }
+}</code></pre>
+  <p>Oracle's guarded-block pattern — same lock guards both the condition and the wait/notify calls.</p>
+
+  <h2>7. IllegalMonitorStateException</h2>
+  <p>Thrown when:</p>
+  <ul>
+    <li><code>wait()</code>, <code>notify()</code>, or <code>notifyAll()</code> called without holding that object's monitor.</li>
+    <li>(Related) <code>LockSupport.unpark</code> misuse — different API, same "wrong state" family.</li>
+  </ul>
+  <p>Common bug: calling <code>someObject.wait()</code> while holding a <em>different</em> lock than <code>someObject</code>.</p>
+
+  <h2>8. Atomicity vs Visibility (Preview — S03 Next)</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Property</th><th>What it means</th><th>synchronized gives?</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Atomicity</strong></td><td>Action completes as one indivisible step</td><td>Yes — only one thread in block</td></tr>
+      <tr><td><strong>Visibility</strong></td><td>Thread B sees Thread A's writes promptly</td><td>Yes — unlock establishes happens-before for next acquirer</td></tr>
+    </tbody>
+  </table>
+  <p><code>synchronized</code> provides both. <code>volatile</code> provides visibility + ordering for single reads/writes, not compound check-then-act. Full JMM rules → Section 03.</p>
+
+  <h2>9. Classic Bugs & Interview Traps</h2>
+  <ul>
+    <li><strong>Unsynchronized counter:</strong> <code>count++</code> — fix with synchronized block or <code>AtomicInteger</code> (later).</li>
+    <li><strong>Wrong lock object:</strong> two methods synchronize on different objects — no mutual exclusion.</li>
+    <li><strong>String literal lock:</strong> <code>synchronized ("LOCK")</code> — interned strings share monitors across the JVM → accidental coupling. Use <code>private final Object lock = new Object()</code>.</li>
+    <li><strong>Lock during I/O:</strong> holding monitor while calling DB/HTTP blocks all other threads on that lock — throughput killer.</li>
+    <li><strong>notify without changing condition:</strong> waiter wakes, while-loop re-checks, loops forever if state wrong.</li>
+  </ul>
+
+  <h2>10. When synchronized Is Fine vs java.util.concurrent</h2>
+  <p><strong>synchronized is fine when:</strong></p>
+  <ul>
+    <li>Simple invariants on a few fields</li>
+    <li>Short critical sections, no I/O inside lock</li>
+    <li>Coarse-grained guarding of a small object's state</li>
+  </ul>
+  <p><strong>Reach for <code>java.util.concurrent</code> (Sections 04–06) when:</strong></p>
+  <ul>
+    <li>Need timed/try locks, fair ordering, read/write split</li>
+    <li>Executor pools, concurrent maps, latches, semaphores</li>
+    <li>High contention — explicit locks + better structures reduce convoys</li>
+  </ul>
+  <blockquote>Senior line: start with the simplest correct lock; measure; upgrade when contention or API limits bite.</blockquote>
+
+  <h2>11. Enterprise Framing</h2>
+  <ul>
+    <li><strong>Spring singleton beans:</strong> one instance, many request threads. Mutable fields (counters, caches without sync) = latent races. Prefer immutable state, concurrent collections, or confine mutation to a single-thread executor.</li>
+    <li><strong>Shared service cache:</strong> check-then-act on <code>HashMap</code> is unsafe. <code>ConcurrentHashMap.computeIfAbsent</code> (Section 06) or synchronized guard around the whole check+put.</li>
+    <li><strong>Thread-safe by design:</strong> minimize shared mutable state; make races structurally impossible before sprinkling <code>synchronized</code>.</li>
+  </ul>
+
+  <hr>
+
+  <h2>12. Revision Notes</h2>
+  <ul>
+    <li>Data race = concurrent access, at least one write, no synchronization.</li>
+    <li>Every object has a monitor; <code>synchronized</code> acquires/releases it.</li>
+    <li>Instance method → <code>this</code>; static → <code>Class</code>; block → object you name.</li>
+    <li><code>wait</code> releases lock; <code>sleep</code> does not. Always <code>while</code> + prefer <code>notifyAll</code>.</li>
+    <li><code>synchronized</code> = atomicity + visibility; <code>volatile</code> deep dive is next section.</li>
+  </ul>
+
+  <hr>
+
+  <h2>13. 5 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Instance synchronized method locks which monitor?</p>
+        <ol type="A">
+          <li>The instance monitor (this).</li>
+          <li>The class monitor (Class).</li>
+          <li>The thread monitor (Thread).</li>
+          <li>The stack monitor (Stack).</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (The instance monitor (this).)</strong></p>
+          <p>JLS: instance <code>synchronized</code> methods lock the monitor of the object invoked (<code>this</code>). Static methods lock the <code>Class</code> object instead.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Calling wait() on a held monitor does what?</p>
+        <ol type="A">
+          <li>Releases lock and suspends.</li>
+          <li>Keeps lock and suspends.</li>
+          <li>Releases lock and terminates.</li>
+          <li>Keeps lock and terminates.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Releases lock and suspends.)</strong></p>
+          <p><code>wait()</code> adds the thread to the wait set and releases the monitor so others can enter. <code>sleep()</code> suspends without releasing locks.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: Why guard wait() with a while loop?</p>
+        <ol type="A">
+          <li>Guard against spurious wakeup.</li>
+          <li>Guard against thread death.</li>
+          <li>Guard against daemon shutdown.</li>
+          <li>Guard against GC collection.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Guard against spurious wakeup.)</strong></p>
+          <p>Also: other threads may change the condition before you re-acquire. Re-test the predicate every time you wake.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: Static synchronized method locks what?</p>
+        <ol type="A">
+          <li>The Class object monitor.</li>
+          <li>The instance monitor (this).</li>
+          <li>The Thread object monitor.</li>
+          <li>The Method object monitor.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (The Class object monitor.)</strong></p>
+          <p>Static synchronized methods lock the <code>Class</code> object for the declaring class — not any instance.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: Two threads unsynchronized increment—result?</p>
+        <ol type="A">
+          <li>Lost updates are possible.</li>
+          <li>Lost updates are impossible.</li>
+          <li>Deadlock is always guaranteed.</li>
+          <li>JVM throws on second write.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Lost updates are possible.)</strong></p>
+          <p><code>count++</code> is read-modify-write. Without synchronization or atomics, increments can be lost — no exception, just wrong counts.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>14. Reasoning Exercises</h2>
+  <ol>
+    <li><strong>Race trace:</strong> Two threads call <code>increment()</code> 1000 times each on the same unsynchronized counter. Can the final value be below 2000? Explain the lost-update window.</li>
+    <li><strong>Fix the counter:</strong> Add the minimal <code>synchronized</code> fix. Would synchronizing on <code>Integer.valueOf(0)</code> be safe? Why not?</li>
+    <li><strong>Lock object:</strong> Class has <code>synchronized void a()</code> and <code>synchronized void b()</code>. Thread 1 in <code>a()</code> calls <code>b()</code>. Deadlock or OK? Why?</li>
+    <li><strong>wait/notify bug:</strong> Producer calls <code>notify()</code> outside synchronized block. What exception? Fix it.</li>
+    <li><strong>Enterprise:</strong> Spring <code>@Service</code> holds <code>HashMap&lt;String, User&gt; cache</code> mutated on every request. Name two failure modes and one structural fix.</li>
+  </ol>
+
+  <hr>
+
+  <p class="meta">Questions? Ask your coach — walk through a race trace, thread dump <code>BLOCKED</code> lines, or a guarded-block design together.</p>
+
+</body>
+</html>

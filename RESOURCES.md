@@ -91,6 +91,12 @@
   Platform vs virtual threads, Builder API, daemon rules, lifecycle contract.
 - [Oracle: `Runnable` javadoc](https://docs.oracle.com/en/java/javase/23/docs/api/java.base/java/lang/Runnable.html)
   Task protocol separate from Thread execution vehicle.
+- [Oracle: Intrinsic Locks and Synchronization](https://docs.oracle.com/javase/tutorial/essential/concurrency/locksync.html)
+  synchronized methods/blocks, reentrancy, happens-before via unlock.
+- [Oracle: Guarded Blocks (wait/notify)](https://docs.oracle.com/javase/tutorial/essential/concurrency/guardmeth.html)
+  wait/notifyAll pattern, while-loop guard, producer-consumer.
+- [JLS Chapter 17 — Threads and Locks (SE 23)](https://docs.oracle.com/javase/specs/jls/se23/html/jls-17.html)
+  Monitor semantics, wait sets, synchronized lock actions.
 
 ## Wisdom (Communities)
 

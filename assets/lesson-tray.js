@@ -46,7 +46,8 @@
     { num: 'Ex', file: 'streams-capstone-exercise.html', title: 'Capstone Exercise', meta: '18 scenarios &bull; Coding', module: 'Streams API', moduleNum: '02', kind: 'exercise' },
 
     // Module 03: Concurrency & Threads
-    { num: '01', file: 'concurrency-0001-thread-fundamentals.html', title: 'Thread Fundamentals & Lifecycle', meta: '25 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' }
+    { num: '01', file: 'concurrency-0001-thread-fundamentals.html', title: 'Thread Fundamentals & Lifecycle', meta: '25 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' },
+    { num: '02', file: 'concurrency-0002-synchronization-monitors.html', title: 'Synchronization & Monitors', meta: '28 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' }
   ];
 
 

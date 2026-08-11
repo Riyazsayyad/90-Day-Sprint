@@ -388,6 +388,30 @@ _Avoid_: background thread (ambiguous)
 Cooperative cancellation signal. Blocking calls may throw `InterruptedException` and clear the status; restore with `Thread.currentThread().interrupt()` if not handling fully.
 _Avoid_: kill, stop (deprecated/`stop()` is unsafe)
 
+**Intrinsic lock (monitor lock)**:
+Every Java object has an intrinsic lock. A thread acquires it via `synchronized` before entering a critical section and releases on exit. At most one thread owns it at a time.
+_Avoid_: mutex (acceptable informally; prefer intrinsic lock in Java lessons)
+
+**Critical section**:
+Code that accesses shared mutable state and must run under mutual exclusion.
+_Avoid_: danger zone (too vague)
+
+**Data race**:
+Two threads access the same memory location, at least one write, with no happens-before between them. Undefined behavior for non-volatile/non-synchronized access.
+_Avoid_: race condition (broader; data race is the JMM term)
+
+**Reentrant synchronization**:
+A thread that already holds a monitor may acquire it again. Each nested acquire must be released on unwind.
+_Avoid_: recursive lock (use reentrant in Java context)
+
+**wait / notify / notifyAll**:
+`Object` methods for condition coordination. Caller must hold the object's monitor. `wait()` releases the lock and enters the wait set. Always call `wait()` inside a `while` loop re-checking the condition.
+_Avoid_: sleep for coordination (sleep does not release monitors)
+
+**IllegalMonitorStateException**:
+Thrown when `wait`, `notify`, or `notifyAll` is invoked without holding the target object's monitor.
+_Avoid_: lock exception (too vague)
+
 
 
 

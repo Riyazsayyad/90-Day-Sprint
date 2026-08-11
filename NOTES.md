@@ -135,3 +135,9 @@
 - Lesson 01: `concurrency-0001-thread-fundamentals.html` + cheat sheet.
 - Indexed: index drawer, lesson-tray, dashboard.js, MISSION, RESOURCES, GLOSSARY.
 - Planned module arc: Thread fundamentals → sync/monitors → volatile/JMM → locks → executors → concurrent collections → CompletableFuture → virtual threads.
+
+## Session (2026-08-12) — Module 03 Section 02
+- User invoked `/teach Module 03 Section 02 — Synchronization & Monitors`.
+- Lesson 02: `concurrency-0002-synchronization-monitors.html` + cheat sheet.
+- Scope: data races, critical sections, monitor model, synchronized, reentrancy, wait/notify, classic bugs, enterprise framing. Deferred volatile/JMM to S03.
+- Indexed: lesson-tray, index drawer (2/8), nav chain from L01.
