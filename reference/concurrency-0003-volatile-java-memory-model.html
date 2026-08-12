@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>volatile & JMM — Reference</title>
+  <meta name="description" content="Quick reference: Java Memory Model, happens-before, volatile semantics, DCL, safe publication.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/concurrency-0003-volatile-java-memory-model.html">&larr; Lesson 03</a> &middot;
+    <a href="../lessons/concurrency-0002-synchronization-monitors.html">Lesson 02</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>volatile & JMM Cheat Sheet</h1>
+  <p class="meta">happens-before, visibility, DCL, publication</p>
+
+  <h2>1. Core Idea</h2>
+  <ul>
+    <li>No happens-before → stale reads & reorderings allowed</li>
+    <li>JMM = contract, not "what my laptop did once"</li>
+    <li>CPU caches + compiler reordering are why plain fields fail</li>
+  </ul>
+
+  <h2>2. happens-before (Interview Set)</h2>
+  <ul>
+    <li>Program order within thread</li>
+    <li>Unlock → subsequent lock (same monitor)</li>
+    <li>volatile write → subsequent volatile read (same var)</li>
+    <li><code>start()</code> → actions in new thread</li>
+    <li>Actions in thread → <code>join()</code> returns</li>
+    <li>Transitive chaining</li>
+  </ul>
+
+  <h2>3. volatile</h2>
+  <ul>
+    <li>Visibility + ordering for that field's read/write</li>
+    <li>Read sees latest write + prior writer actions (via hb)</li>
+    <li><strong>NOT</strong> compound atomicity — <code>count++</code> still broken</li>
+    <li><code>long</code>/<code>double</code> need volatile (or sync) for atomicity</li>
+  </ul>
+
+  <h2>4. volatile vs synchronized</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid #ddd; background:#f7f7f0;">
+      <th align="left" style="padding:0.5rem;">Need</th>
+      <th align="left" style="padding:0.5rem;">Pick</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;">Status flag visibility</td>
+      <td style="padding:0.5rem;"><code>volatile boolean</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;">Multi-step invariant</td>
+      <td style="padding:0.5rem;"><code>synchronized</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;">Atomic counter</td>
+      <td style="padding:0.5rem;"><code>AtomicInteger</code> / <code>LongAdder</code></td>
+    </tr>
+  </table>
+
+  <h2>5. Safe Publication</h2>
+  <ul>
+    <li>Static initializer (class init lock)</li>
+    <li>Store ref in <code>volatile</code> field</li>
+    <li>Store ref inside <code>synchronized</code>, then unlock</li>
+    <li>Pass to thread via <code>start()</code></li>
+    <li><code>final</code> fields safe if ref published safely</li>
+  </ul>
+
+  <h2>6. Double-Checked Locking</h2>
+  <ul>
+    <li>Broken without <code>volatile</code> on holder — partial construction visible</li>
+    <li>Correct: <code>private static volatile Instance instance</code></li>
+    <li>Production: holder-class idiom or enum singleton</li>
+  </ul>
+
+  <h2>7. Enterprise Patterns</h2>
+  <ul>
+    <li>Shutdown flag → <code>volatile boolean</code></li>
+    <li>Config reload → <code>volatile</code> ref to immutable snapshot</li>
+    <li>Metrics under contention → atomics, not volatile++</li>
+  </ul>
+
+  <h2>8. Primary Sources</h2>
+  <ul>
+    <li><a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/memconsist.html">Memory Consistency Errors</a></li>
+    <li><a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/atomic.html">Atomic Access</a></li>
+    <li><a href="https://docs.oracle.com/javase/specs/jls/se23/html/jls-17.html">JLS Chapter 17</a></li>
+    <li><a href="https://www.cs.umd.edu/~pugh/java/memoryModel/jsr-133-faq.html">JSR-133 FAQ</a></li>
+  </ul>
+
+</body>
+</html>

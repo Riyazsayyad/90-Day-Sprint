@@ -412,6 +412,26 @@ _Avoid_: sleep for coordination (sleep does not release monitors)
 Thrown when `wait`, `notify`, or `notifyAll` is invoked without holding the target object's monitor.
 _Avoid_: lock exception (too vague)
 
+**Java Memory Model (JMM)**:
+The specification defining which values a read may observe across threads. Programmers establish visibility via happens-before relationships; the JVM may reorder and cache but cannot break those guarantees.
+_Avoid_: hardware memory model (different layer)
+
+**happens-before**:
+A partial order between actions. If A happens-before B, A's effects are visible to B. Established by program order, monitor unlock→lock, volatile write→read, thread start/join, and transitivity.
+_Avoid_: execution order (program order is only within one thread)
+
+**volatile**:
+Field modifier guaranteeing visibility and ordering: a write happens-before subsequent reads of that variable. Does not make compound operations (e.g. `count++`) atomic.
+_Avoid_: volatile = thread-safe object (only that field's read/write chain)
+
+**Safe publication**:
+Publishing an object reference so other threads see a fully constructed object. Idioms: static initializer, volatile ref store, synchronized store+unlock, `Thread.start()`.
+_Avoid_: leaking `this` from constructor (unsafe publication)
+
+**Double-checked locking (DCL)**:
+Lazy-init pattern with two null checks. Broken without `volatile` on the holder field — readers may see a partially constructed object. Prefer holder-class idiom or enum singleton in production.
+_Avoid_: DCL without volatile (classic interview trap)
+
 
 
 

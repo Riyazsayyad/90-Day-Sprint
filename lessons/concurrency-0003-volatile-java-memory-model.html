@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 3 — volatile & Java Memory Model</title>
+  <meta name="description" content="Java volatile and JMM from a Senior Backend perspective: memory consistency, happens-before, visibility vs atomicity, double-checked locking, safe publication, and enterprise flag patterns.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="concurrency-0002-synchronization-monitors.html">&larr; Lesson 2</a> &middot;
+    Lesson 3 of 8 &middot;
+    <a href="../reference/concurrency-0003-volatile-java-memory-model.html">Cheat sheet</a>
+  </nav>
+
+  <h1>Deep Dive: volatile & the Java Memory Model</h1>
+  <p class="meta">~30 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; builds on <a href="concurrency-0002-synchronization-monitors.html">Lesson 2</a>, <a href="oop-0003-stack-vs-heap.html">Stack vs Heap</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> <code>synchronized</code> gives atomicity + visibility — but coarse locks hurt throughput, and not every shared field needs a monitor. Interviewers probe: why a plain <code>boolean shutdown</code> can loop forever, what <code>volatile</code> actually guarantees (and what it does <em>not</em>), and why broken double-checked locking was a JDK-era classic. This is the bridge from "locks work" to "why java.util.concurrent exists."
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/memconsist.html">Oracle — Memory Consistency Errors</a> ·
+    <a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/atomic.html">Oracle — Atomic Access</a> ·
+    <a href="https://docs.oracle.com/javase/specs/jls/se23/html/jls-17.html">JLS Chapter 17 — Threads and Locks</a> ·
+    <a href="https://www.cs.umd.edu/~pugh/java/memoryModel/jsr-133-faq.html">JSR-133 FAQ (Doug Lea)</a>
+  </p>
+
+  <h2>1. Why synchronized Alone Isn't Always Enough</h2>
+  <p>Lesson 2 taught: <code>synchronized</code> provides mutual exclusion <em>and</em> visibility (unlock happens-before next lock). That is correct — but production code often needs:</p>
+  <ul>
+    <li><strong>Visibility without holding a lock</strong> — e.g. a shutdown flag read in a hot loop while another thread sets it once.</li>
+    <li><strong>Lower overhead</strong> — acquiring a monitor on every read of a status flag serializes threads unnecessarily.</li>
+    <li><strong>One-way publication</strong> — writer initializes state once; many readers need to see it without synchronizing every read.</li>
+  </ul>
+  <p>Senior framing: use the <em>weakest</em> synchronization that is correct. Over-synchronizing is a latency and deadlock-risk smell.</p>
+
+  <h2>2. The Hardware Reality (Interview Level)</h2>
+  <p>Threads share the heap, but CPUs cache memory locally for speed. Without coordination:</p>
+  <ul>
+    <li><strong>Store buffers / caches:</strong> Thread A writes <code>flag = true</code> — Thread B may still see <code>false</code> from its cache.</li>
+    <li><strong>Instruction reordering:</strong> Compiler and CPU may reorder independent statements if the single-thread result is unchanged — breaking naive multi-thread assumptions.</li>
+  </ul>
+  <p>You do not need to model cache lines in interviews. You need one line: <strong>without a happens-before edge, the JMM allows stale reads and surprising orderings.</strong> "It worked on my machine" is not a memory model.</p>
+
+  <h2>3. Java Memory Model (JMM)</h2>
+  <p>The JMM (formalized by JSR-133, Java 5+) defines which values a read is allowed to observe. It is a contract between your code, the compiler, and the runtime — not a description of one CPU.</p>
+  <blockquote>Programmers reason in happens-before. The JVM may reorder and cache — but cannot break happens-before guarantees.</blockquote>
+  <p><strong>Memory consistency error:</strong> different threads have inconsistent views of what should be the same data. Fix: establish happens-before between writer and reader.</p>
+
+  <h2>4. happens-before Rules (Core Set)</h2>
+  <p>If action A happens-before B, then A's effects are visible to B. Key edges for interviews:</p>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Rule</th><th>Meaning</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Program order</strong></td><td>Within one thread, earlier statements happen-before later ones</td></tr>
+      <tr><td><strong>Monitor unlock → lock</strong></td><td>Unlock on monitor M happens-before every subsequent lock on M</td></tr>
+      <tr><td><strong>volatile write → read</strong></td><td>Write to volatile v happens-before every subsequent read of v</td></tr>
+      <tr><td><strong>Thread.start</strong></td><td>Everything before <code>start()</code> happens-before actions in the new thread</td></tr>
+      <tr><td><strong>Thread.join</strong></td><td>All actions in thread T happen-before <code>join()</code> returns</td></tr>
+      <tr><td><strong>Transitivity</strong></td><td>If A hb B and B hb C, then A hb C</td></tr>
+    </tbody>
+  </table>
+  <p>The volatile rule is powerful: a read of volatile <code>v</code> sees the latest write to <code>v</code> <em>and</em> (transitively) prior writes that happened-before that write in the writer thread.</p>
+
+  <h2>5. volatile Semantics</h2>
+  <p><code>volatile</code> on a field means:</p>
+  <ul>
+    <li>Reads and writes go through main memory semantics — no stale cached copy indefinitely.</li>
+    <li>Writes establish happens-before with subsequent reads of that variable.</li>
+    <li>Reordering constraints: volatile accesses cannot be reordered with each other; post-JSR-133, normal field accesses around volatiles are also constrained.</li>
+  </ul>
+
+  <h3>What volatile does NOT do</h3>
+  <pre><code class="language-java">volatile int count = 0;
+void increment() { count++; } // STILL BROKEN — read-modify-write</code></pre>
+  <p><code>volatile</code> makes each individual read/write visible — not compound operations. For atomic counters → <code>AtomicInteger</code> (Section 06) or <code>synchronized</code>.</p>
+
+  <h2>6. volatile vs synchronized</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th></th><th><code>volatile</code></th><th><code>synchronized</code></th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Atomicity</strong></td><td>Single read/write only</td><td>Whole block/method</td></tr>
+      <tr><td><strong>Visibility</strong></td><td>Yes (write → read hb)</td><td>Yes (unlock → lock hb)</td></tr>
+      <tr><td><strong>Blocking</strong></td><td>No</td><td>Yes — mutual exclusion</td></tr>
+      <tr><td><strong>Best for</strong></td><td>Status flags, one-shot publish, DCL holder</td><td>Multi-step invariants, wait/notify</td></tr>
+    </tbody>
+  </table>
+
+  <h2>7. long and double Without volatile</h2>
+  <p>JLS: reads/writes of <code>long</code> and <code>double</code> are atomic <strong>only</strong> when declared <code>volatile</code> (or accessed under synchronization). Without that, a read may see a "torn" value — high 32 bits from one write, low 32 from another.</p>
+  <p>Modern 64-bit JVMs often make this safe in practice — but the language contract still matters in interviews and for portability.</p>
+
+  <h2>8. final Fields & Safe Publication (Preview)</h2>
+  <p>If an object's <code>final</code> fields are set in the constructor and the reference is published safely, readers see fully constructed <code>final</code> values without extra synchronization on those fields.</p>
+  <p><strong>Safe publication</strong> means the reader's first access to the object happens-after construction completes via one of:</p>
+  <ul>
+    <li>Static initializer (class init is JVM-synchronized)</li>
+    <li>Storing ref into <code>volatile</code> field</li>
+    <li>Storing ref under <code>synchronized</code> and releasing lock</li>
+    <li><code>Thread.start()</code> passing the object to the new thread</li>
+  </ul>
+  <p>Unsafe: publishing <code>this</code> from constructor (escape) — another thread may see partially constructed state.</p>
+
+  <h2>9. Double-Checked Locking (Interview Classic)</h2>
+
+  <h3>Broken (pre-JSR-133 / missing volatile)</h3>
+  <pre><code class="language-java">// BROKEN — do not use
+class BrokenSingleton {
+  private static BrokenSingleton instance;
+
+  static BrokenSingleton getInstance() {
+    if (instance == null) {
+      synchronized (BrokenSingleton.class) {
+        if (instance == null) {
+          instance = new BrokenSingleton(); // reordering hazard
+        }
+      }
+    }
+    return instance;
+  }
+}</code></pre>
+  <p>Another thread may see a non-null reference to a <em>partially constructed</em> object (reordered writes). Also: without volatile, the outer null check has no happens-before with the writer.</p>
+
+  <h3>Correct — volatile holder (idiom)</h3>
+  <pre><code class="language-java">class SafeSingleton {
+  private static volatile SafeSingleton instance;
+
+  static SafeSingleton getInstance() {
+    SafeSingleton local = instance;
+    if (local == null) {
+      synchronized (SafeSingleton.class) {
+        local = instance;
+        if (local == null) {
+          instance = local = new SafeSingleton();
+        }
+      }
+    }
+    return local;
+  }
+}</code></pre>
+  <p><code>volatile</code> on <code>instance</code> publishes the fully constructed object. <strong>Production today:</strong> prefer enum singleton or holder-class idiom — but know DCL for interviews.</p>
+
+  <h3>Holder class idiom (no volatile needed)</h3>
+  <pre><code class="language-java">class Holder {
+  private static class LazyHolder {
+    static final Holder INSTANCE = new Holder();
+  }
+  static Holder getInstance() { return LazyHolder.INSTANCE; }
+}</code></pre>
+  <p>JVM class initialization is synchronized — safe lazy init without explicit locks in application code.</p>
+
+  <h2>10. Classic Bugs</h2>
+  <ul>
+    <li><strong>Flag without volatile:</strong> worker loop never exits after main sets <code>shutdown = true</code>.</li>
+    <li><strong>Stale config:</strong> reload thread writes new settings; request threads read cached values forever.</li>
+    <li><strong>DCL singleton:</strong> returns broken half-built instance.</li>
+    <li><strong>volatile counter:</strong> still loses increments — wrong tool.</li>
+  </ul>
+
+  <pre><code class="language-java">// Bug: shutdown may never be seen
+boolean shutdown = false;
+
+void worker() {
+  while (!shutdown) { doWork(); }
+}
+
+void stop() { shutdown = true; }
+
+// Fix:
+volatile boolean shutdown = false;</code></pre>
+
+  <h2>11. Enterprise Framing</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Scenario</th><th>Typical choice</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Shutdown / running flag</td><td><code>volatile boolean</code></td></tr>
+      <tr><td>One-shot config publish</td><td><code>volatile</code> ref to immutable config object</td></tr>
+      <tr><td>Metrics counter under contention</td><td><code>LongAdder</code> / <code>AtomicLong</code> (not volatile++)</td></tr>
+      <tr><td>Multi-field invariant update</td><td><code>synchronized</code> or atomic snapshot</td></tr>
+      <tr><td>Spring bean field visibility</td><td>Prefer immutable beans; if mutable, understand @Scope and thread confinement</td></tr>
+    </tbody>
+  </table>
+  <blockquote>Senior line: volatile = visibility for one variable's write/read chain. Atomics = CAS for compound updates. synchronized = multi-statement invariants + wait/notify.</blockquote>
+
+  <hr>
+
+  <h2>12. Revision Notes</h2>
+  <ul>
+    <li>No happens-before → stale reads and reorderings allowed.</li>
+    <li><code>volatile</code> write → read establishes visibility (and transitively prior writes in writer).</li>
+    <li><code>volatile</code> does not make <code>count++</code> atomic.</li>
+    <li>DCL needs <code>volatile</code> holder; holder-class / enum safer in production.</li>
+    <li><code>long</code>/<code>double</code> need <code>volatile</code> or sync for atomicity guarantee.</li>
+  </ul>
+
+  <hr>
+
+  <h2>13. 5 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: volatile int count; count++ is safe?</p>
+        <ol type="A">
+          <li>No — compound op not atomic.</li>
+          <li>Yes — volatile makes all atomic.</li>
+          <li>Yes — if only two threads.</li>
+          <li>No — unless count is final.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (No — compound op not atomic.)</strong></p>
+          <p><code>count++</code> is read-modify-write. <code>volatile</code> only guarantees visibility of individual reads/writes, not the whole operation.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Write to volatile v guarantees what?</p>
+        <ol type="A">
+          <li>Later read of v sees it.</li>
+          <li>Later read of v may miss.</li>
+          <li>All fields become volatile.</li>
+          <li>All threads stop immediately.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Later read of v sees it.)</strong></p>
+          <p>Volatile write happens-before subsequent volatile read of same variable. Transitivity pulls in prior writes in the writer thread.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: Broken DCL singleton lacks what?</p>
+        <ol type="A">
+          <li>Volatile on instance field.</li>
+          <li>Final on instance field.</li>
+          <li>Static on instance field.</li>
+          <li>Private on instance field.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Volatile on instance field.)</strong></p>
+          <p>Without <code>volatile</code>, another thread can see a non-null reference to a partially constructed object due to reordering.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: long read without volatile may be?</p>
+        <ol type="A">
+          <li>Torn across two 32-bit halves.</li>
+          <li>Always atomic on all JVMs.</li>
+          <li>Blocked until monitor held.</li>
+          <li>Promoted to double width.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Torn across two 32-bit halves.)</strong></p>
+          <p>JLS: 64-bit primitives are only guaranteed atomic when <code>volatile</code> or accessed under synchronization.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: Shutdown flag never seen — fix?</p>
+        <ol type="A">
+          <li>Declare flag as volatile.</li>
+          <li>Declare flag as final.</li>
+          <li>Declare flag as static.</li>
+          <li>Declare flag as transient.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Declare flag as volatile.)</strong></p>
+          <p>Writer thread's <code>shutdown = true</code> needs happens-before with reader's check. <code>volatile</code> establishes that edge without a lock.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>14. Reasoning Exercises</h2>
+  <ol>
+    <li><strong>Visibility trace:</strong> Thread A sets <code>x = 5</code> then <code>volatileReady = true</code>. Thread B loops on <code>volatileReady</code> then prints <code>x</code>. Can B ever print 0? Why or why not?</li>
+    <li><strong>Fix the flag:</strong> Worker never stops when <code>shutdown</code> is plain <code>boolean</code>. Minimal fix? Would <code>synchronized</code> on <code>stop()</code> alone suffice without syncing the read loop?</li>
+    <li><strong>DCL interview:</strong> Explain to an interviewer why <code>new Singleton()</code> inside DCL is dangerous without volatile — use "partially constructed object."</li>
+    <li><strong>Choose the tool:</strong> (a) one-writer shutdown flag, (b) 50 threads incrementing a hit counter, (c) transfer between two accounts. volatile, AtomicInteger, or synchronized for each?</li>
+    <li><strong>Safe publication:</strong> Why is <code>static final Holder INSTANCE = new Holder()</code> inside a static nested class safe without volatile on the outer class?</li>
+  </ol>
+
+  <hr>
+
+  <p class="meta">Questions? Ask your coach — walk through a happens-before diagram, a broken DCL, or when to pick AtomicInteger over volatile.</p>
+
+</body>
+</html>

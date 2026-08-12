@@ -141,3 +141,10 @@
 - Lesson 02: `concurrency-0002-synchronization-monitors.html` + cheat sheet.
 - Scope: data races, critical sections, monitor model, synchronized, reentrancy, wait/notify, classic bugs, enterprise framing. Deferred volatile/JMM to S03.
 - Indexed: lesson-tray, index drawer (2/8), nav chain from L01.
+
+## Session (2026-08-13) — Module 03 Section 03
+- User invoked `/teach Module 03 Section 03 — volatile & Java Memory Model`.
+- Lesson 03: `concurrency-0003-volatile-java-memory-model.html` + cheat sheet.
+- Scope: JMM, happens-before, volatile semantics, DCL, safe publication, enterprise flags. Deferred explicit locks (S04), executors (S05).
+- Indexed: lesson-tray, index drawer (3/8), nav chain from L02.
+- User preference: note-taking deferred until after Lesson 04 (S04 explicit locks).

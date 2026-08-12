@@ -97,6 +97,12 @@
   wait/notifyAll pattern, while-loop guard, producer-consumer.
 - [JLS Chapter 17 — Threads and Locks (SE 23)](https://docs.oracle.com/javase/specs/jls/se23/html/jls-17.html)
   Monitor semantics, wait sets, synchronized lock actions.
+- [Oracle: Memory Consistency Errors](https://docs.oracle.com/javase/tutorial/essential/concurrency/memconsist.html)
+  happens-before intuition, visibility between threads.
+- [Oracle: Atomic Access](https://docs.oracle.com/javase/tutorial/essential/concurrency/atomic.html)
+  Atomic reads/writes, volatile and long/double rules.
+- [JSR-133 FAQ (Doug Lea)](https://www.cs.umd.edu/~pugh/java/memoryModel/jsr-133-faq.html)
+  Authoritative happens-before and volatile semantics reference.
 
 ## Wisdom (Communities)
 
