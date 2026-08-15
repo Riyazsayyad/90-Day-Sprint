@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Explicit Locks — Reference</title>
+  <meta name="description" content="Quick reference: Lock, ReentrantLock, ReadWriteLock, StampedLock, Condition, tryLock, fairness, liveness.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/concurrency-0004-explicit-locks.html">&larr; Lesson 04</a> &middot;
+    <a href="../lessons/concurrency-0003-volatile-java-memory-model.html">Lesson 03</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Explicit Locks Cheat Sheet</h1>
+  <p class="meta">Lock, RW, StampedLock, Condition, liveness</p>
+
+  <h2>1. Core Idea</h2>
+  <ul>
+    <li><code>synchronized</code> default — auto unlock, one wait-set</li>
+    <li>Explicit lock = tryLock / timed / interruptible / fair / many Conditions</li>
+    <li>You must <code>unlock()</code> in <code>finally</code></li>
+  </ul>
+
+  <h2>2. Lock Contract</h2>
+  <ul>
+    <li><code>lock</code> / <code>unlock</code> / <code>lockInterruptibly</code> / <code>tryLock</code> / timed <code>tryLock</code></li>
+    <li>Successful unlock happens-before next successful lock (same as monitor)</li>
+    <li>Failed <code>tryLock</code> → no memory edge; do not unlock</li>
+    <li>Never <code>synchronized</code> on the <code>Lock</code> instance</li>
+  </ul>
+
+  <h2>3. ReentrantLock</h2>
+  <ul>
+    <li>Reentrant hold count; <code>isHeldByCurrentThread()</code>, <code>getHoldCount()</code></li>
+    <li><code>new ReentrantLock()</code> non-fair (throughput); <code>(true)</code> fair (less starvation, slower)</li>
+    <li>Untimed <code>tryLock()</code> barges even on fair locks</li>
+  </ul>
+
+  <h2>4. ReadWriteLock</h2>
+  <ul>
+    <li>Many readers <strong>or</strong> one writer</li>
+    <li>Write unlock happens-before later read lock</li>
+    <li>Downgrade write→read OK; upgrade read→write deadlocks</li>
+    <li>Hurts: write-heavy, tiny reads, frequent upgrades</li>
+  </ul>
+
+  <h2>5. StampedLock</h2>
+  <ul>
+    <li>Optimistic read: copy locals, then <code>validate(stamp)</code></li>
+    <li><strong>Not reentrant</strong>; no ownership</li>
+    <li>Skip validate = torn data</li>
+    <li>Prefer for short hot reads, rare writes — not a general mutex</li>
+  </ul>
+
+  <h2>6. Condition vs wait/notify</h2>
+  <ul>
+    <li><code>await</code> / <code>signal</code> / <code>signalAll</code></li>
+    <li>Must hold lock; loop on predicate</li>
+    <li>Two Conditions: bounded buffer <code>notFull</code> + <code>notEmpty</code></li>
+  </ul>
+
+  <h2>7. Liveness</h2>
+  <ul>
+    <li>Global lock order; avoid nested inversion</li>
+    <li><code>tryLock</code> both + release held + backoff (Safelock)</li>
+    <li>Fair lock ≠ scheduler fairness</li>
+  </ul>
+
+  <h2>8. Enterprise Picks</h2>
+  <ul>
+    <li>Read-heavy cache → RW lock or volatile immutable snapshot</li>
+    <li>Skip-if-busy metrics → <code>tryLock()</code></li>
+    <li>Spring singleton rare mutate → private lock object, not <code>this</code></li>
+  </ul>
+
+  <h2>9. Primary Sources</h2>
+  <ul>
+    <li><a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/newlocks.html">Lock Objects</a></li>
+    <li><a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Lock.html">Lock</a></li>
+    <li><a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/ReentrantLock.html">ReentrantLock</a></li>
+    <li><a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Condition.html">Condition</a></li>
+    <li><a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/ReadWriteLock.html">ReadWriteLock</a></li>
+    <li><a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/StampedLock.html">StampedLock</a></li>
+    <li><a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/deadlock.html">Deadlock</a></li>
+  </ul>
+
+</body>
+</html>

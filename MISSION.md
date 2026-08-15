@@ -7,7 +7,7 @@ You are aiming for Senior Backend / SWE II roles where production services must 
 - Explain process vs thread, concurrency vs parallelism, and `start()` vs `run()` with JVM-level precision.
 - Read a thread dump: map `Thread.State` values to real wait/block causes.
 - Choose executors over raw threads; justify bounded pools and rejection policies.
-- Reason about shared-heap races and when `synchronized` / `volatile` / JMM rules apply.
+- Reason about shared-heap races and when `synchronized` / `Lock` / `volatile` / JMM rules apply.
 - Frame CompletableFuture and virtual-thread designs in production terms (I/O-bound vs CPU-bound).
 
 ## Constraints

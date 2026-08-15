@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 4 — Explicit Locks</title>
+  <meta name="description" content="Java explicit locks from a Senior Backend perspective: Lock, ReentrantLock, ReadWriteLock, StampedLock, Condition, tryLock, fairness, interruptible acquire, and liveness.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="concurrency-0003-volatile-java-memory-model.html">&larr; Lesson 3</a> &middot;
+    Lesson 4 of 8 &middot;
+    <a href="../reference/concurrency-0004-explicit-locks.html">Cheat sheet</a>
+  </nav>
+
+  <h1>Deep Dive: Explicit Locks</h1>
+  <p class="meta">~35 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; builds on <a href="concurrency-0002-synchronization-monitors.html">Lesson 2</a>, <a href="concurrency-0003-volatile-java-memory-model.html">Lesson 3</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> <code>synchronized</code> is the default. Interviewers ask when it is <em>not</em> enough: timed/interruptible acquire, fairness, multiple wait-sets, lock downgrade. They also hunt the trap <code>synchronized</code> never has — forgetting <code>unlock()</code>. This lesson is the <code>java.util.concurrent.locks</code> toolkit, not AQS internals.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/newlocks.html">Oracle — Lock Objects</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Lock.html">Lock javadoc</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/ReentrantLock.html">ReentrantLock</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Condition.html">Condition</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/ReadWriteLock.html">ReadWriteLock</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/StampedLock.html">StampedLock</a> ·
+    <a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/deadlock.html">Oracle — Deadlock / Liveness</a>
+  </p>
+
+  <h2>1. Why Explicit Locks Exist</h2>
+  <p>Lesson 2: intrinsic locks are block-structured — acquire and release are tied to a <code>synchronized</code> scope. The JVM always unlocks on exit, even via exception. That safety has a cost: you cannot try-and-give-up, time out, interrupt a thread stuck in lock acquisition, choose FIFO fairness, or split waiters onto two condition queues.</p>
+  <p><code>java.util.concurrent.locks.Lock</code> exists for those cases. Flexibility means <strong>you</strong> own unlock. Miss the <code>finally</code> and the lock is gone for the process lifetime of that object.</p>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Need</th><th>Intrinsic lock</th><th>Explicit <code>Lock</code></th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Auto unlock on exception</td><td>Yes</td><td>Only if you write <code>finally</code></td></tr>
+      <tr><td><code>tryLock</code> / timed wait</td><td>No</td><td>Yes</td></tr>
+      <tr><td>Interruptible acquire</td><td>No (block is not interruptible)</td><td><code>lockInterruptibly</code></td></tr>
+      <tr><td>Fairness policy</td><td>No API</td><td>Constructor flag</td></tr>
+      <tr><td>Multiple wait-sets</td><td>One wait set per object</td><td>Many <code>Condition</code>s per lock</td></tr>
+      <tr><td>Hand-over-hand / unlock in other method</td><td>Awkward</td><td>Designed for it</td></tr>
+    </tbody>
+  </table>
+  <p>Senior default: <code>synchronized</code> until one of those rows is a real requirement. Explicit locks are not "more thread-safe."</p>
+
+  <h2>2. Lock Interface Contract</h2>
+  <p>Core methods:</p>
+  <ul>
+    <li><code>lock()</code> — block until acquired. Reentrant implementations increment hold count if you already own it.</li>
+    <li><code>unlock()</code> — release one hold. Wrong thread / not held → typically <code>IllegalMonitorStateException</code>.</li>
+    <li><code>lockInterruptibly()</code> — like <code>lock()</code> but abort with <code>InterruptedException</code> if interrupted while waiting.</li>
+    <li><code>tryLock()</code> — return immediately; <code>true</code> if acquired.</li>
+    <li><code>tryLock(timeout, unit)</code> — wait up to a bound; interruptible.</li>
+    <li><code>newCondition()</code> — bind a condition queue to this lock.</li>
+  </ul>
+
+  <h3>Always finally</h3>
+  <pre><code class="language-java">lock.lock();
+try {
+  // critical section
+} finally {
+  lock.unlock();
+}</code></pre>
+  <p>For <code>tryLock</code>: unlock <em>only</em> if acquire succeeded.</p>
+  <pre><code class="language-java">if (lock.tryLock()) {
+  try {
+    // work
+  } finally {
+    lock.unlock();
+  }
+} else {
+  // skip / degrade — never unlock
+}</code></pre>
+
+  <h3>happens-before (same as monitor)</h3>
+  <p>From the <code>Lock</code> javadoc: a successful <code>lock</code> has the same memory effects as a JLS Lock action; a successful <code>unlock</code> matches Unlock. So <strong>unlock happens-before the next successful lock on the same <code>Lock</code></strong> — same visibility story as Lesson 2/3. Unsuccessful <code>tryLock</code> does <em>not</em> create that edge. Reentrant lock/unlock of an already-held lock also need not publish new memory effects.</p>
+  <p>Never <code>synchronized (lockInstance)</code> on a <code>Lock</code> object. That acquires the <em>intrinsic</em> monitor of the lock object — unrelated to <code>lock.lock()</code>.</p>
+
+  <h2>3. ReentrantLock</h2>
+  <p>Same ownership model as <code>synchronized</code>: one owner thread, reentrant hold count, exclusive mutual exclusion. Extra knobs: fairness, interruptible/timed acquire, <code>Condition</code>s, instrumentation.</p>
+  <pre><code class="language-java">private final ReentrantLock lock = new ReentrantLock();      // non-fair (default)
+private final ReentrantLock fair = new ReentrantLock(true);  // FIFO-ish under contention</code></pre>
+  <ul>
+    <li><strong>Reentrancy:</strong> nested <code>lock()</code> from the owner increments <code>getHoldCount()</code>. Each <code>unlock()</code> decrements; lock frees at zero.</li>
+    <li><strong><code>isHeldByCurrentThread()</code>:</strong> analog of <code>Thread.holdsLock(monitor)</code> — asserts and tests, not a sync protocol.</li>
+    <li><strong>Fair vs non-fair:</strong> fair prefers the longest-waiting thread under contention. Throughput is often much worse. Fairness of the <em>lock</em> is not fairness of the <em>scheduler</em> — a thread can still reacquire immediately if others are not yet queued.</li>
+    <li><strong>Barging trap:</strong> untimed <code>tryLock()</code> <em>does not honor fairness</em>. If the lock is free, it takes it even when waiters exist. Timed <code>tryLock(0, SECONDS)</code> respects fairness (and is interruptible).</li>
+  </ul>
+
+  <h3>synchronized vs ReentrantLock — who wins</h3>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Pick</th><th>When</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>synchronized</code></td><td>Simple mutual exclusion, wait/notify on one object, you want the compiler/JVM to guarantee unlock. Default in Spring services for tiny critical sections.</td></tr>
+      <tr><td><code>ReentrantLock</code></td><td>Need try/timed/interruptible acquire, fairness, multiple <code>Condition</code>s, or lock held across non-nested scopes (rare — document it).</td></tr>
+    </tbody>
+  </table>
+  <p>Do not rewrite every <code>synchronized</code> method as <code>ReentrantLock</code> for "performance." Measure. Intrinsic locks are heavily optimized (and Lesson 2's biased/thin/fat story still applies).</p>
+
+  <h2>4. ReadWriteLock / ReentrantReadWriteLock</h2>
+  <p>Pair of locks: <strong>shared read</strong> (many readers) <strong>or exclusive write</strong> (one writer, no readers). Write-unlock happens-before a later read-lock on the same RW lock — readers see the writer's updates.</p>
+  <pre><code class="language-java">private final ReentrantReadWriteLock rw = new ReentrantReadWriteLock();
+
+Object get() {
+  rw.readLock().lock();
+  try { return snapshot; }
+  finally { rw.readLock().unlock(); }
+}
+
+void refresh(Object next) {
+  rw.writeLock().lock();
+  try { snapshot = next; }
+  finally { rw.writeLock().unlock(); }
+}</code></pre>
+  <p>Wins when reads dominate and the protected data is non-trivial (cache, config snapshot, directory). Hurts when:</p>
+  <ul>
+    <li><strong>Write-heavy</strong> — exclusive write serializes everyone; extra RW machinery is waste.</li>
+    <li><strong>Tiny reads</strong> — lock overhead dominates the work.</li>
+    <li><strong>Frequent upgrades</strong> — see deadlock below.</li>
+  </ul>
+
+  <h3>Downgrade (write → read) is supported</h3>
+  <p>Acquire write, mutate, acquire read <em>while still holding write</em>, then release write. You remain a reader; no other writer sneaks in between.</p>
+  <pre><code class="language-java">rw.writeLock().lock();
+try {
+  mutate();
+  rw.readLock().lock(); // downgrade: still exclusive until write unlocks
+} finally {
+  rw.writeLock().unlock();
+}
+try {
+  observe(); // other readers may join; writers still blocked
+} finally {
+  rw.readLock().unlock();
+}</code></pre>
+
+  <h3>Upgrade (read → write) deadlocks</h3>
+  <p>Write lock waits until <em>all</em> readers release — including you. Holding the read lock and then calling <code>writeLock().lock()</code> waits forever for yourself. Pattern: release read, acquire write, re-check the invariant (another writer may have run). Or use <code>StampedLock.tryConvertToWriteLock</code> (next section) with a retry loop — still not a free upgrade.</p>
+
+  <h2>5. StampedLock (Interview Level)</h2>
+  <p>Java 8 capability lock: write, read, and <strong>optimistic read</strong>. Acquisition returns a <code>long</code> stamp. Release/convert needs that stamp. Does <strong>not</strong> implement <code>Lock</code> / <code>ReadWriteLock</code> (views exist: <code>asReadLock()</code> etc.).</p>
+  <p><strong>Optimistic read:</strong> <code>tryOptimisticRead()</code> returns a non-zero stamp if no writer currently holds the lock. You copy fields into locals, then <code>validate(stamp)</code>. If validate is true, those reads are a consistent snapshot (happens-before from the last write-unlock). If false, a writer ran — retry or take a real read lock.</p>
+  <pre><code class="language-java">long stamp = sl.tryOptimisticRead();
+double x = this.x;
+double y = this.y;
+if (!sl.validate(stamp)) {
+  stamp = sl.readLock();
+  try {
+    x = this.x;
+    y = this.y;
+  } finally {
+    sl.unlockRead(stamp);
+  }
+}
+return Math.hypot(x, y);</code></pre>
+  <p>Prefer over RW lock when reads are <em>very</em> short, writes rare, and you can tolerate retry — e.g. a hot coordinate / versioned snapshot. Do not use as a general Spring-service mutex.</p>
+  <p><strong>Misuse traps (interview gold):</strong></p>
+  <ul>
+    <li><strong>Not reentrant.</strong> Nested acquire from the same thread deadlocks or fails. Do not call unknown methods while holding a stamp.</li>
+    <li><strong>No ownership.</strong> Another thread can unlock your stamp. Unlike <code>ReentrantLock</code>.</li>
+    <li><strong>Skip <code>validate</code></strong> — you may compute on torn / half-updated fields. That is the whole point of the API.</li>
+    <li>Optimistic mode is weak: writers can invalidate at any time. Side-effecting reads inside the optimistic window are forbidden.</li>
+  </ul>
+  <p>Out of scope: stamp bit layout, formal proofs, AQS.</p>
+
+  <h2>6. Condition</h2>
+  <p>Lesson 2: one wait set per monitor; <code>wait</code> / <code>notify</code> / <code>notifyAll</code>. <code>Condition</code> splits that into named queues on one <code>Lock</code>.</p>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Monitor</th><th>Condition</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>wait()</code></td><td><code>await()</code></td></tr>
+      <tr><td><code>notify()</code></td><td><code>signal()</code></td></tr>
+      <tr><td><code>notifyAll()</code></td><td><code>signalAll()</code></td></tr>
+    </tbody>
+  </table>
+  <p>Same rules: must hold the lock; <code>await</code> atomically releases it and reacquires before return; always <code>while</code> (spurious wakeup + missed predicate). Signalling without holding the lock: <code>ReentrantLock</code>'s conditions throw <code>IllegalMonitorStateException</code>.</p>
+  <p>Classic win: bounded buffer with <code>notFull</code> and <code>notEmpty</code>. A <code>put</code> that frees a slot signals only consumers; a <code>take</code> that frees space signals only producers. One monitor + <code>notifyAll</code> wakes the wrong waiters and burns CPU.</p>
+  <pre><code class="language-java">final Lock lock = new ReentrantLock();
+final Condition notFull  = lock.newCondition();
+final Condition notEmpty = lock.newCondition();
+
+void put(E x) throws InterruptedException {
+  lock.lock();
+  try {
+    while (count == items.length)
+      notFull.await();
+    items[putptr++] = x;
+    if (putptr == items.length) putptr = 0;
+    count++;
+    notEmpty.signal();
+  } finally {
+    lock.unlock();
+  }
+}
+
+E take() throws InterruptedException {
+  lock.lock();
+  try {
+    while (count == 0)
+      notEmpty.await();
+    E x = items[takeptr++];
+    if (takeptr == items.length) takeptr = 0;
+    count--;
+    notFull.signal();
+    return x;
+  } finally {
+    lock.unlock();
+  }
+}</code></pre>
+  <p>Production: use <code>ArrayBlockingQueue</code> — this pattern is for interviews and for when you own the invariant.</p>
+
+  <h2>7. Deadlock &amp; Liveness</h2>
+  <p>Oracle liveness: deadlock, starvation, livelock. Explicit locks add tools — they do not delete the physics.</p>
+  <ul>
+    <li><strong>Lock ordering:</strong> always acquire A then B globally. Nested inversion (thread 1: A then B; thread 2: B then A) is the Alphonse/Gaston deadlock from the tutorial.</li>
+    <li><strong><code>tryLock</code> + backoff:</strong> acquire both or release what you hold and retry with a timeout — the tutorial's <code>Safelock</code> idiom. Use when lock order cannot be global (graph of peers).</li>
+    <li><strong>Interruptible acquire:</strong> cancellation path when a lock wait is stuck — still need a policy for who retries.</li>
+    <li><strong>Fair locks</strong> reduce lock starvation; they can increase latency. They do not fix livelock (threads keep yielding without progress).</li>
+  </ul>
+
+  <h2>8. Classic Bugs</h2>
+  <ul>
+    <li><strong>Forgot unlock</strong> — exception path, early return, or <code>tryLock</code> success then return without <code>finally</code>. No auto-release.</li>
+    <li><strong>Unlock without holding</strong> — <code>IllegalMonitorStateException</code> (including unlocking after failed <code>tryLock</code>).</li>
+    <li><strong>Locking the wrong object</strong> — <code>synchronized (this)</code> while mutations use a <code>ReentrantLock</code> field (two locks, no exclusion).</li>
+    <li><strong><code>signal</code> without holding the lock</strong> — exception (typical) or lost wakeup (if a custom <code>Condition</code> allowed it).</li>
+    <li><strong>RW upgrade deadlock</strong> — read held, write requested.</li>
+    <li><strong>StampedLock optimistic read without <code>validate</code></strong> — silent data corruption.</li>
+    <li><strong>Reentrant call into StampedLock</strong> — self-deadlock.</li>
+  </ul>
+
+  <h2>9. Enterprise Framing</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Scenario</th><th>Typical choice</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Read-heavy in-memory cache / config refresh</td><td><code>ReentrantReadWriteLock</code> (or immutable snapshot + <code>volatile</code> ref from Lesson 3)</td></tr>
+      <tr><td>Starvation-sensitive work queue (fair access)</td><td><code>new ReentrantLock(true)</code> — measure; fairness is expensive</td></tr>
+      <tr><td>Metrics / logging "skip if busy"</td><td><code>tryLock()</code> — drop the sample rather than stall the request path</td></tr>
+      <tr><td>Rare mutable state on a Spring singleton</td><td>Private <code>final ReentrantLock</code> (or <code>synchronized</code> on a private final object) — never lock on the bean <code>this</code> that callers can steal</td></tr>
+      <tr><td>Hot read of a tiny struct, rare writes</td><td><code>StampedLock</code> optimistic read + validate</td></tr>
+      <tr><td>Simple invariant, one wait-set</td><td>Stay on <code>synchronized</code></td></tr>
+    </tbody>
+  </table>
+  <blockquote>Senior line: explicit lock = extra protocol. Pay for tryLock, fairness, or multiple Conditions — not for looking concurrent.</blockquote>
+
+  <p><strong>Later sections (not here):</strong> executors / pools (S05), concurrent collections / atomics (S06), CompletableFuture / virtual threads, lock-free algorithms, AQS internals.</p>
+
+  <hr>
+
+  <h2>10. Revision Notes</h2>
+  <ul>
+    <li>Unlock in <code>finally</code>. Always. <code>tryLock</code> unlocks only on success.</li>
+    <li>Unlock → next lock on same <code>Lock</code> is happens-before (successful ops).</li>
+    <li>Untimed <code>tryLock()</code> barges on a fair lock.</li>
+    <li>RW: many readers <em>or</em> one writer. Downgrade yes; upgrade no (deadlock).</li>
+    <li>StampedLock: validate optimistic reads; not reentrant.</li>
+    <li><code>Condition.await</code> ≡ <code>wait</code>: hold lock, loop on predicate, two queues beat <code>notifyAll</code> for producer-consumer.</li>
+  </ul>
+
+  <hr>
+
+  <h2>11. 5 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Exception in the critical section, unlock not in finally. Result?</p>
+        <ol type="A">
+          <li>Lock stays held after exception.</li>
+          <li>JVM auto-releases like sync do.</li>
+          <li>Hold count resets itself to 0.</li>
+          <li>Fairness flag flips itself on.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Lock stays held after exception.)</strong></p>
+          <p>Explicit locks have no block-structured auto-release. That is the price of <code>tryLock</code> and cross-method locking.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Fair ReentrantLock; another thread is queued. Untimed tryLock() when free?</p>
+        <ol type="A">
+          <li>Succeeds — barging is allowed.</li>
+          <li>Fails — must honor the queue.</li>
+          <li>Throws — fairness forbids try.</li>
+          <li>Blocks — until the queue drains.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Succeeds — barging is allowed.)</strong></p>
+          <p>Javadoc: untimed <code>tryLock()</code> takes a free lock even if waiters exist. Timed <code>tryLock(0, SECONDS)</code> honors fairness.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: Thread holds RW read lock, then calls writeLock().lock(). Typical result?</p>
+        <ol type="A">
+          <li>Self-deadlock waiting for itself.</li>
+          <li>Silent upgrade to write mode.</li>
+          <li>Read lock converts automatically.</li>
+          <li>Write lock is shared with reads.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Self-deadlock waiting for itself.)</strong></p>
+          <p>Write waits for every reader to leave. You are still a reader. Downgrade (write then read) is the supported direction.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: StampedLock tryOptimisticRead without validate. Risk?</p>
+        <ol type="A">
+          <li>Torn fields used as if consistent.</li>
+          <li>Stamp becomes reentrant safely.</li>
+          <li>Write lock is taken automatically.</li>
+          <li>Happens-before is always granted.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Torn fields used as if consistent.)</strong></p>
+          <p>Optimistic mode is a weak read. Only <code>validate(stamp) == true</code> gives the write-unlock happens-before guarantee.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: Condition.await() without holding the ReentrantLock. Typical result?</p>
+        <ol type="A">
+          <li>IllegalMonitorStateException thrown.</li>
+          <li>Thread sleeps but keeps the lock.</li>
+          <li>Await upgrades lock to fair mode.</li>
+          <li>Signal runs without any waiter.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (IllegalMonitorStateException thrown.)</strong></p>
+          <p>Same discipline as <code>Object.wait()</code>: hold the associated lock. <code>await</code> then releases it atomically.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>12. Reasoning Exercises</h2>
+  <ol>
+    <li><strong>Pick the lock:</strong> (a) request-path metric increment you may drop under load, (b) in-memory catalog searched 10k×/s and rebuilt once a minute, (c) transfer between two accounts with a global lock order, (d) tiny <code>(x,y)</code> point, millions of reads, rare writes. For each: <code>synchronized</code>, <code>ReentrantLock</code>, RW lock, <code>tryLock</code>, or <code>StampedLock</code>?</li>
+    <li><strong>Fix the buffer:</strong> A teammate uses one <code>Condition</code> and <code>signal()</code> after both put and take. Sketch the lost-wakeup / wrong-waker bug. Repair with two Conditions (names + who signals whom).</li>
+    <li><strong>Fair vs non-fair:</strong> A latency SLO cares about p99 wait for a lock, not throughput. Which constructor? What do you tell the interviewer about <code>tryLock()</code> on that lock?</li>
+    <li><strong>Downgrade trace:</strong> Thread W holds write, acquires read, unlocks write. Thread R then acquires read. Thread W2 tries write. Who proceeds, who waits, and why no writer slipped between W's mutate and W's subsequent read?</li>
+    <li><strong>tryLock timeout design:</strong> Two resources, no global order. Write the acquire-both-or-release-held pattern (Oracle Safelock). Where do you sleep/backoff, and why must failed acquires still <code>unlock</code> only the locks you actually got?</li>
+  </ol>
+
+</body>
+</html>

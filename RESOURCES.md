@@ -103,6 +103,20 @@
   Atomic reads/writes, volatile and long/double rules.
 - [JSR-133 FAQ (Doug Lea)](https://www.cs.umd.edu/~pugh/java/memoryModel/jsr-133-faq.html)
   Authoritative happens-before and volatile semantics reference.
+- [Oracle: Lock Objects](https://docs.oracle.com/javase/tutorial/essential/concurrency/newlocks.html)
+  Explicit `Lock` vs intrinsic locks; `tryLock` / `lockInterruptibly`; Safelock deadlock avoidance.
+- [Oracle: `Lock` javadoc (SE 21)](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Lock.html)
+  Contract: unlock in `finally`, memory sync same as monitor lock/unlock.
+- [Oracle: `ReentrantLock` javadoc](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/ReentrantLock.html)
+  Fairness, hold count, barging `tryLock()`, interruptible acquire.
+- [Oracle: `Condition` javadoc](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/Condition.html)
+  Multiple wait-sets; bounded-buffer two-Condition example.
+- [Oracle: `ReadWriteLock` javadoc](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/ReadWriteLock.html)
+  Shared read vs exclusive write; when RW locks do not help.
+- [Oracle: `StampedLock` javadoc](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/locks/StampedLock.html)
+  Optimistic read + `validate`; not reentrant.
+- [Oracle: Deadlock (Liveness)](https://docs.oracle.com/javase/tutorial/essential/concurrency/deadlock.html)
+  Nested lock inversion; pairs with Lock Objects Safelock.
 
 ## Wisdom (Communities)
 

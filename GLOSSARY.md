@@ -417,7 +417,7 @@ The specification defining which values a read may observe across threads. Progr
 _Avoid_: hardware memory model (different layer)
 
 **happens-before**:
-A partial order between actions. If A happens-before B, A's effects are visible to B. Established by program order, monitor unlock→lock, volatile write→read, thread start/join, and transitivity.
+A partial order between actions. If A happens-before B, A's effects are visible to B. Established by program order, monitor unlock→lock, `Lock` unlock→lock, volatile write→read, thread start/join, and transitivity.
 _Avoid_: execution order (program order is only within one thread)
 
 **volatile**:
@@ -431,6 +431,26 @@ _Avoid_: leaking `this` from constructor (unsafe publication)
 **Double-checked locking (DCL)**:
 Lazy-init pattern with two null checks. Broken without `volatile` on the holder field — readers may see a partially constructed object. Prefer holder-class idiom or enum singleton in production.
 _Avoid_: DCL without volatile (classic interview trap)
+
+**Explicit lock (`Lock`)**:
+`java.util.concurrent.locks.Lock` — mutual exclusion with `tryLock`, timed/interruptible acquire, and `Condition`s. Unlock is not automatic; always `unlock()` in `finally`. Successful unlock happens-before the next successful lock on the same `Lock`.
+_Avoid_: treating `Lock` as "faster synchronized"
+
+**ReentrantLock**:
+Reentrant exclusive lock implementing `Lock`. Optional fair constructor. `getHoldCount()` / `isHeldByCurrentThread()`. Untimed `tryLock()` barges even on a fair lock.
+_Avoid_: rewriting every `synchronized` as `ReentrantLock` without a protocol need
+
+**ReadWriteLock**:
+Paired read (shared) and write (exclusive) locks. Many readers or one writer. Write unlock happens-before later read lock. Downgrade (write then read) is supported; upgrade (read then write) deadlocks on `ReentrantReadWriteLock`.
+_Avoid_: RW lock on write-heavy or tiny critical sections
+
+**StampedLock**:
+Capability lock with write, read, and optimistic read modes. Optimistic path: `tryOptimisticRead`, copy fields, `validate(stamp)`. Not reentrant; no ownership. Skip validate = torn data.
+_Avoid_: using StampedLock as a general service mutex
+
+**Condition**:
+Wait-set bound to a `Lock` (`await` / `signal` / `signalAll`). Replaces `wait` / `notify` / `notifyAll`. Caller must hold the lock. Multiple conditions on one lock (e.g. `notFull` and `notEmpty`).
+_Avoid_: signalling without holding the lock; `if` instead of `while` around `await`
 
 
 

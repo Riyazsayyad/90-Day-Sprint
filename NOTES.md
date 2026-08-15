@@ -148,3 +148,10 @@
 - Scope: JMM, happens-before, volatile semantics, DCL, safe publication, enterprise flags. Deferred explicit locks (S04), executors (S05).
 - Indexed: lesson-tray, index drawer (3/8), nav chain from L02.
 - User preference: note-taking deferred until after Lesson 04 (S04 explicit locks).
+
+## Session (2026-08-16) — Module 03 Section 04
+- User invoked `/teach Module 03 Section 04 — Explicit Locks` (with `/update-tracker-handoff` opener).
+- Lesson 04: `concurrency-0004-explicit-locks.html` + cheat sheet.
+- Scope: Lock contract, ReentrantLock, RW lock, StampedLock interview-level, Condition, liveness, enterprise framing. Deferred executors (S05), concurrent collections (S06), CF/virtual threads, AQS/lock-free.
+- Indexed: lesson-tray, index drawer (4/8), nav chain from L03.
+- Notes: user planned written notes after this lesson — they may start now; do not nag.
