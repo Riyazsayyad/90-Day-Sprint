@@ -20,19 +20,34 @@
           <p>Your step-by-step roadmap to advanced backend engineering and system design mastery.</p>
         </div>
         
-        <!-- Global Progress Card -->
-        <div class="progress-stats-box">
-          <div class="progress-header">
-            <span class="progress-label">Sprint Progress</span>
-            <span class="progress-percent">27.3% Complete</span>
+        <!-- Global Progress Cards -->
+        <div class="header-stats-row">
+          <div class="progress-stats-box" id="sprintProgressBox">
+            <div class="progress-header">
+              <span class="progress-label">Sprint Progress</span>
+              <span class="progress-percent">27.3% Complete</span>
+            </div>
+            <div class="progress-bar-container">
+              <div class="progress-bar-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-sub">
+              <span>3 Completed &bull; 1 Active</span>
+              <span>37 Completed Lessons</span>
+            </div>
           </div>
-          <div class="progress-bar-container">
-            <div class="progress-bar-fill" id="progressFill"></div>
-          </div>
-          <div class="progress-sub">
-            <span>3 Completed &bull; 1 Active</span>
-            <span>37 Completed Lessons</span>
 
+          <div class="progress-stats-box dsa-progress-box" id="dsaProgressBox" role="button" tabindex="0" aria-expanded="false" aria-controls="dsaCascadePanel" title="Click to view all DSA patterns and problems">
+            <div class="progress-header">
+              <span class="progress-label">DSA Progress <span class="dsa-click-hint">▾</span></span>
+              <span class="progress-percent dsa-accent" id="dsaProgressPercent">0% Complete</span>
+            </div>
+            <div class="progress-bar-container">
+              <div class="progress-bar-fill dsa-fill" id="dsaProgressFill"></div>
+            </div>
+            <div class="progress-sub">
+              <span id="dsaProgressSubLeft">0 Solved</span>
+              <span id="dsaProgressSubRight">13 Topics • 500 Problems</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1047,6 +1062,19 @@
   </div>
 
 
+  <!-- DSA Cascade Panel -->
+  <div class="dsa-panel-backdrop" id="dsaPanelBackdrop" aria-hidden="true"></div>
+  <aside class="dsa-cascade-panel" id="dsaCascadePanel" aria-hidden="true" aria-label="DSA patterns and problems">
+    <div class="dsa-panel-header">
+      <div>
+        <h2>DSA 500 — Patterns</h2>
+        <p class="dsa-panel-sub"><span id="dsaPanelCount">0 / 0 solved</span></p>
+      </div>
+      <button type="button" class="dsa-panel-close" id="dsaPanelClose" aria-label="Close DSA panel">&times;</button>
+    </div>
+    <div class="dsa-panel-body" id="dsaPanelBody"></div>
+  </aside>
+
   <!-- Dynamic Locked Toast Notification -->
   <div class="toast" id="toast">
     <div class="toast-icon">
@@ -1057,6 +1085,7 @@
     <span class="toast-text" id="toastText">This module is locked.</span>
   </div>
 
+  <script src="assets/dsa-dashboard.js"></script>
   <script src="assets/dashboard.js"></script>
 </body>
 </html>

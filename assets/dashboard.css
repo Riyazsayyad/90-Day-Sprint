@@ -158,6 +158,295 @@ header {
   justify-content: space-between;
 }
 
+/* Header stats row — Sprint + DSA */
+.header-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: stretch;
+  justify-content: flex-end;
+  flex: 1;
+  min-width: min(100%, 420px);
+  max-width: 860px;
+}
+
+.header-stats-row .progress-stats-box {
+  flex: 1 1 280px;
+  max-width: 420px;
+}
+
+.dsa-progress-box {
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  position: relative;
+}
+
+.dsa-progress-box:hover,
+.dsa-progress-box:focus-visible {
+  border-color: var(--border-glow-active);
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.15);
+  outline: none;
+}
+
+.dsa-accent {
+  color: var(--accent-emerald) !important;
+}
+
+.progress-bar-fill.dsa-fill {
+  background: linear-gradient(90deg, #059669, var(--accent-emerald));
+}
+
+.dsa-click-hint {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin-left: 0.15rem;
+}
+
+/* DSA cascade panel */
+.dsa-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.dsa-panel-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.dsa-cascade-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -48%) scale(0.98);
+  width: min(920px, calc(100vw - 2rem));
+  max-height: min(82vh, 900px);
+  background: #0c1220;
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  z-index: 201;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.45);
+}
+
+.dsa-cascade-panel.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.dsa-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.dsa-panel-header h2 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.35rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.dsa-panel-sub {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.dsa-panel-close {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.dsa-panel-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.dsa-panel-body {
+  overflow-y: auto;
+  padding: 0.75rem 1rem 1.25rem;
+  flex: 1;
+}
+
+.dsa-section,
+.dsa-pattern {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  margin-bottom: 0.65rem;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.dsa-pattern {
+  margin: 0.5rem 0.75rem 0.65rem;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.dsa-section-summary,
+.dsa-pattern-summary {
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  cursor: pointer;
+  font-size: 0.92rem;
+  user-select: none;
+}
+
+.dsa-section-summary::-webkit-details-marker,
+.dsa-pattern-summary::-webkit-details-marker {
+  display: none;
+}
+
+.dsa-section-summary::before,
+.dsa-pattern-summary::before {
+  content: '▸';
+  color: var(--accent-emerald);
+  margin-right: 0.35rem;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.dsa-section[open] > .dsa-section-summary::before,
+.dsa-pattern[open] > .dsa-pattern-summary::before {
+  transform: rotate(90deg);
+}
+
+.dsa-section-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dsa-pattern-title {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.dsa-section-meta,
+.dsa-pattern-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.dsa-pattern-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: 0 1rem 0.5rem;
+  line-height: 1.45;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  margin-bottom: 0.25rem;
+}
+
+.dsa-problem-list {
+  list-style: none;
+  padding: 0.35rem 0;
+}
+
+.dsa-problem {
+  display: grid;
+  grid-template-columns: 1.25rem 2.75rem 1fr 1.5rem auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.45rem 1rem;
+  font-size: 0.84rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.dsa-problem.done {
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.dsa-problem-check {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.dsa-problem.done .dsa-problem-check {
+  color: var(--accent-emerald);
+  font-weight: 700;
+}
+
+.dsa-problem-num {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.dsa-problem-link,
+.dsa-problem-title {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.dsa-lc-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: var(--transition-smooth);
+}
+
+.dsa-lc-icon:hover {
+  color: var(--accent-emerald);
+}
+
+.dsa-lc-icon-svg {
+  display: block;
+}
+
+.dsa-problem-link:hover {
+  color: var(--accent-cyan);
+}
+
+.dsa-diff {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.diff-easy {
+  background: rgba(16, 185, 129, 0.15);
+  color: #6ee7b7;
+}
+
+.diff-medium {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+}
+
+.diff-hard {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
 /* Module Grid */
 .modules-grid {
   display: grid;
@@ -679,8 +968,27 @@ footer {
     align-items: stretch;
   }
   
+  .header-stats-row {
+    flex-direction: column;
+    max-width: none;
+  }
+
+  .header-stats-row .progress-stats-box {
+    max-width: none;
+  }
+  
   .progress-stats-box {
     max-width: none;
+  }
+
+  .dsa-cascade-panel {
+    width: calc(100vw - 1rem);
+    max-height: 88vh;
+  }
+
+  .dsa-problem {
+    grid-template-columns: 1.25rem 2.25rem 1fr 1.25rem auto;
+    font-size: 0.8rem;
   }
   
   .drawer {
