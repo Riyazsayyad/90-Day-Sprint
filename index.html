@@ -1,55 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="assets/theme-init.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="90-Day Advanced Engineering Sprint - Module Dashboard & Progress Tracker">
-  <title>90-Day Sprint Curriculum Dashboard</title>
+  <meta name="description" content="Backend engineering curriculum — modules, lessons, and DSA progress">
+  <title>Study Portal — Curriculum</title>
   <link rel="stylesheet" href="assets/dashboard.css">
 </head>
-<body>
-  <!-- Background Elements -->
-  <div class="orb-1"></div>
-  <div class="orb-2"></div>
-
+<body class="dashboard-home" data-dsa-mode="home">
   <div class="dashboard-container">
     <header>
-      <div class="header-top">
-        <div class="title-group">
-          <h1>90-Day Sprint Curriculum</h1>
-          <p>Your step-by-step roadmap to advanced backend engineering and system design mastery.</p>
+      <div class="hero-card">
+        <div class="hero-graph-overlay" aria-hidden="true">
+          <svg class="growth-chart-svg" viewBox="0 0 320 120" xmlns="http://www.w3.org/2000/svg">
+            <line x1="28" y1="108" x2="310" y2="108" stroke="currentColor" stroke-opacity="0.15"/>
+            <line x1="28" y1="108" x2="28" y2="12" stroke="currentColor" stroke-opacity="0.15"/>
+            <path class="growth-curve" d="M 28 104 C 90 100, 140 88, 180 68 S 270 28, 302 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <text x="32" y="24" class="growth-chart-label">(1.001)^x</text>
+            <text x="268" y="118" class="growth-chart-label">days →</text>
+          </svg>
         </div>
-        
-        <!-- Global Progress Cards -->
-        <div class="header-stats-row">
-          <div class="progress-stats-box" id="sprintProgressBox">
-            <div class="progress-header">
-              <span class="progress-label">Sprint Progress</span>
-              <span class="progress-percent">27.3% Complete</span>
-            </div>
-            <div class="progress-bar-container">
-              <div class="progress-bar-fill" id="progressFill"></div>
-            </div>
-            <div class="progress-sub">
-              <span>3 Completed &bull; 1 Active</span>
-              <span>37 Completed Lessons</span>
-            </div>
-          </div>
+        <div class="hero-copy">
+          <h1>Backend engineering curriculum</h1>
+          <p class="hero-tagline">Efforts to get 0.1% better every day.</p>
+          <p class="hero-formula">y = (1.001)<sup>x</sup></p>
+        </div>
+      </div>
 
-          <div class="progress-stats-box dsa-progress-box" id="dsaProgressBox" role="button" tabindex="0" aria-expanded="false" aria-controls="dsaCascadePanel" title="Click to view all DSA patterns and problems">
-            <div class="progress-header">
-              <span class="progress-label">DSA Progress <span class="dsa-click-hint">▾</span></span>
-              <span class="progress-percent dsa-accent" id="dsaProgressPercent">0% Complete</span>
-            </div>
-            <div class="progress-bar-container">
-              <div class="progress-bar-fill dsa-fill" id="dsaProgressFill"></div>
-            </div>
-            <div class="progress-sub">
-              <span id="dsaProgressSubLeft">0 Solved</span>
-              <span id="dsaProgressSubRight">13 Topics • 500 Problems</span>
-            </div>
+      <div class="header-stats-row">
+        <div class="progress-stats-box" id="sprintProgressBox">
+          <div class="progress-header">
+            <span class="progress-label">Curriculum Progress</span>
+            <span class="progress-percent">27.3% Complete</span>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" id="progressFill"></div>
+          </div>
+          <div class="progress-sub">
+            <span>3 Completed &bull; 1 Active</span>
+            <span>37 Completed Lessons</span>
           </div>
         </div>
+
+        <a href="dsa.html" class="progress-stats-box dsa-progress-box" id="dsaProgressBox" title="Open DSA pattern tracker">
+          <div class="progress-header">
+            <span class="progress-label">DSA Progress <span class="dsa-click-hint">→</span></span>
+            <span class="progress-percent dsa-accent" id="dsaProgressPercent">0% Complete</span>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill dsa-fill" id="dsaProgressFill"></div>
+          </div>
+          <div class="progress-sub">
+            <span id="dsaProgressSubLeft">0 Solved</span>
+            <span id="dsaProgressSubRight">13 Topics • 500 Problems</span>
+          </div>
+        </a>
       </div>
     </header>
 
@@ -383,7 +389,7 @@
 
     <footer>
       <div class="footer-left">
-        &copy; 2026 Riyaz Study Sprint. All rights reserved.
+        &copy; 2026 Riyaz Study. All rights reserved.
       </div>
       <div class="footer-right">
         <a href="MISSION.md" class="footer-link">Mission</a>
@@ -1062,19 +1068,6 @@
   </div>
 
 
-  <!-- DSA Cascade Panel -->
-  <div class="dsa-panel-backdrop" id="dsaPanelBackdrop" aria-hidden="true"></div>
-  <aside class="dsa-cascade-panel" id="dsaCascadePanel" aria-hidden="true" aria-label="DSA patterns and problems">
-    <div class="dsa-panel-header">
-      <div>
-        <h2>DSA 500 — Patterns</h2>
-        <p class="dsa-panel-sub"><span id="dsaPanelCount">0 / 0 solved</span></p>
-      </div>
-      <button type="button" class="dsa-panel-close" id="dsaPanelClose" aria-label="Close DSA panel">&times;</button>
-    </div>
-    <div class="dsa-panel-body" id="dsaPanelBody"></div>
-  </aside>
-
   <!-- Dynamic Locked Toast Notification -->
   <div class="toast" id="toast">
     <div class="toast-icon">
@@ -1087,5 +1080,6 @@
 
   <script src="assets/dsa-dashboard.js"></script>
   <script src="assets/dashboard.js"></script>
+  <script src="assets/theme.js" defer></script>
 </body>
 </html>

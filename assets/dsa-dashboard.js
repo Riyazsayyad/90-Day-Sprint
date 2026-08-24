@@ -1,5 +1,5 @@
 /**
- * DSA 500 progress bar + cascading pattern panel (dashboard).
+ * DSA 500 progress — home mini-bar + full page list (dsa.html).
  */
 (function () {
   const CURRICULUM_URL = 'assets/dsa-curriculum.json';
@@ -19,7 +19,6 @@
 
   let curriculum = null;
   let completedSet = new Set();
-  let panelOpen = false;
 
   async function loadData() {
     const [curRes, progRes] = await Promise.all([
@@ -35,36 +34,32 @@
   function stats() {
     let total = 0;
     let done = 0;
-    let patternsWithProgress = 0;
 
     for (const section of curriculum.sections) {
       for (const pattern of section.patterns) {
-        let patDone = 0;
         for (const p of pattern.problems) {
           total += 1;
-          if (completedSet.has(p.id)) {
-            done += 1;
-            patDone += 1;
-          }
+          if (completedSet.has(p.id)) done += 1;
         }
-        if (patDone > 0) patternsWithProgress += 1;
       }
     }
 
     const pct = total ? (done / total) * 100 : 0;
-    return { total, done, pct, patternsWithProgress };
+    return { total, done, pct };
   }
 
   function updateHeader() {
-    const { total, done, pct, patternsWithProgress } = stats();
+    const { total, done, pct } = stats();
     const fill = document.getElementById('dsaProgressFill');
     const percentEl = document.getElementById('dsaProgressPercent');
     const subLeft = document.getElementById('dsaProgressSubLeft');
     const subRight = document.getElementById('dsaProgressSubRight');
+    const panelCount = document.getElementById('dsaPanelCount');
 
     if (percentEl) percentEl.textContent = `${pct.toFixed(1)}% Complete`;
     if (subLeft) subLeft.textContent = `${done} Solved`;
     if (subRight) subRight.textContent = `${curriculum.sections.length} Topics • ${total} Problems`;
+    if (panelCount) panelCount.textContent = `${done} / ${total} solved`;
     if (fill) {
       requestAnimationFrame(() => {
         setTimeout(() => {
@@ -72,13 +67,6 @@
         }, 250);
       });
     }
-
-    const panelCount = document.getElementById('dsaPanelCount');
-    if (panelCount) {
-      panelCount.textContent = `${done} / ${total} solved`;
-    }
-
-    return { patternsWithProgress };
   }
 
   function renderPanel() {
@@ -148,77 +136,15 @@
     }
   }
 
-  function openPanel() {
-    const panel = document.getElementById('dsaCascadePanel');
-    const backdrop = document.getElementById('dsaPanelBackdrop');
-    const box = document.getElementById('dsaProgressBox');
-    if (!panel) return;
-    panel.classList.add('open');
-    backdrop?.classList.add('open');
-    panel.setAttribute('aria-hidden', 'false');
-    backdrop?.setAttribute('aria-hidden', 'false');
-    box?.setAttribute('aria-expanded', 'true');
-    panelOpen = true;
-    renderPanel();
-  }
-
-  function closePanel() {
-    const panel = document.getElementById('dsaCascadePanel');
-    const backdrop = document.getElementById('dsaPanelBackdrop');
-    const box = document.getElementById('dsaProgressBox');
-    if (!panel) return;
-    panel.classList.remove('open');
-    backdrop?.classList.remove('open');
-    panel.setAttribute('aria-hidden', 'true');
-    backdrop?.setAttribute('aria-hidden', 'true');
-    box?.setAttribute('aria-expanded', 'false');
-    panelOpen = false;
-  }
-
-  function togglePanel() {
-    if (panelOpen) closePanel();
-    else openPanel();
-  }
-
-  function bindEvents() {
-    const box = document.getElementById('dsaProgressBox');
-    const closeBtn = document.getElementById('dsaPanelClose');
-    const backdrop = document.getElementById('dsaPanelBackdrop');
-
-    box?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      togglePanel();
-    });
-
-    box?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        togglePanel();
-      }
-    });
-
-    closeBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      closePanel();
-    });
-
-    backdrop?.addEventListener('click', closePanel);
-
-    window.addEventListener('keydown', (e) => {
-      if (panelOpen && (e.key === 'Escape' || e.key === 'Esc')) {
-        closePanel();
-      }
-    });
-  }
-
   async function init() {
+    const mode = document.body.dataset.dsaMode || 'home';
     const box = document.getElementById('dsaProgressBox');
-    if (!box) return;
+    if (!box && mode === 'home') return;
 
     try {
       await loadData();
       updateHeader();
-      bindEvents();
+      if (mode === 'page') renderPanel();
     } catch (err) {
       console.error(err);
       const percentEl = document.getElementById('dsaProgressPercent');

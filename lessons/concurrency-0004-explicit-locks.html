@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="../assets/theme-init.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Lesson 4 — Explicit Locks</title>
@@ -362,5 +363,6 @@ E take() throws InterruptedException {
     <li><strong>tryLock timeout design:</strong> Two resources, no global order. Write the acquire-both-or-release-held pattern (Oracle Safelock). Where do you sleep/backoff, and why must failed acquires still <code>unlock</code> only the locks you actually got?</li>
   </ol>
 
+  <script src="../assets/theme.js" defer></script>
 </body>
 </html>

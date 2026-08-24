@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="DSA 500 — pattern-first problem tracker">
+  <title>DSA Patterns — Study Portal</title>
+  <link rel="stylesheet" href="assets/lesson.css">
+  <link rel="stylesheet" href="assets/dashboard.css">
+</head>
+<body class="dsa-page" data-dsa-mode="page">
+  <div class="dsa-page-wrap">
+    <nav class="portal-nav">
+      <a href="index.html" class="portal-nav-link">← Home</a>
+    </nav>
+
+    <header class="dsa-page-header">
+      <p class="portal-eyebrow">Pattern-first grind</p>
+      <h1>DSA 500</h1>
+      <p class="portal-lead">13 topics · 502 problems · LeetCode links where mapped.</p>
+
+      <div class="progress-stats-box dsa-page-progress" id="dsaProgressBox">
+        <div class="progress-header">
+          <span class="progress-label">DSA Progress</span>
+          <span class="progress-percent dsa-accent" id="dsaProgressPercent">0% Complete</span>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar-fill dsa-fill" id="dsaProgressFill"></div>
+        </div>
+        <div class="progress-sub">
+          <span id="dsaProgressSubLeft">0 Solved</span>
+          <span id="dsaPanelCount">0 / 0 solved</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="dsa-page-body" id="dsaPanelBody" aria-label="DSA patterns and problems"></main>
+  </div>
+
+  <script src="assets/dsa-dashboard.js"></script>
+  <script src="assets/theme.js" defer></script>
+</body>
+</html>

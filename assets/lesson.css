@@ -1,14 +1,5 @@
 /* Lesson stylesheet — Tufte-inspired, print-friendly */
-:root {
-  --text: #111;
-  --muted: #555;
-  --accent: #1a5276;
-  --bg: #fffff8;
-  --border: #ddd;
-  --correct: #1e6f3d;
-  --incorrect: #922b21;
-  --surface: #f7f7f0;
-}
+@import url('theme.css');
 
 * { box-sizing: border-box; }
 
@@ -38,7 +29,7 @@ h3 { font-size: 1.05rem; margin-top: 1.5rem; }
 
 p { margin: 0.75rem 0; }
 
-a { color: var(--accent); text-decoration: none; border-bottom: 1px solid #c5d9e8; }
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--link-underline); }
 a:hover { border-bottom-color: var(--accent); }
 
 code, pre {
@@ -99,23 +90,23 @@ code { background: var(--surface); padding: 0.1em 0.35em; }
   width: 100%;
   text-align: left;
   padding: 0.6rem 0.85rem;
-  background: #fff;
+  background: var(--btn-bg);
   border: 1px solid var(--border);
   border-radius: 2px;
   cursor: pointer;
   color: var(--text);
 }
 
-.quiz-options button:hover { border-color: var(--accent); background: #fafaf5; }
+.quiz-options button:hover { border-color: var(--accent); background: var(--btn-hover); }
 
 .quiz-options button.correct {
   border-color: var(--correct);
-  background: #eaf7ee;
+  background: var(--quiz-correct-bg);
 }
 
 .quiz-options button.incorrect {
   border-color: var(--incorrect);
-  background: #fdf0ef;
+  background: var(--quiz-incorrect-bg);
 }
 
 .quiz-feedback {
@@ -142,7 +133,7 @@ nav.lesson-nav {
 .lesson-tray-backdrop {
   position: fixed;
   inset: 0;
-  background-color: rgba(0, 0, 0, 0.25);
+  background-color: var(--backdrop);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
   z-index: 998;
@@ -165,7 +156,7 @@ nav.lesson-nav {
   max-width: 85vw;
   background: var(--bg);
   border-right: 1px solid var(--border);
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.08);
+  box-shadow: -4px 0 24px var(--shadow-md);
   z-index: 999;
   transform: translateX(-100%);
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -215,7 +206,7 @@ nav.lesson-nav {
 }
 
 .lesson-tray-close:hover {
-  background: #eee;
+  background: var(--border);
   color: var(--text);
   transform: rotate(90deg);
 }
@@ -259,13 +250,13 @@ nav.lesson-nav {
 }
 
 .lesson-tray-item.active {
-  background: #eef5fa;
+  background: var(--code-highlight);
   border-left-color: var(--accent);
   font-weight: bold;
 }
 
 .lesson-tray-item.active:hover {
-  background: #eef5fa;
+  background: var(--code-highlight);
 }
 
 .lesson-tray-num {
@@ -308,7 +299,7 @@ nav.lesson-nav {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px var(--shadow-sm);
   transition: all 0.2s ease;
   font-family: inherit;
   color: var(--accent);
@@ -327,7 +318,7 @@ nav.lesson-nav {
     background: var(--bg);
     border-color: var(--accent);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 12px var(--shadow-md);
   }
 }
 
@@ -339,9 +330,9 @@ nav.lesson-nav {
     height: 48px;
     border-radius: 50%;
     justify-content: center;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px var(--shadow-md);
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     border: none;
   }
   .lesson-tray-toggle:hover {
@@ -371,7 +362,7 @@ body.lesson-tray-open {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px var(--shadow-sm);
   transition: opacity 0.3s ease, transform 0.3s ease, background-color 0.2s ease;
   font-family: inherit;
   color: var(--accent);
@@ -389,7 +380,7 @@ body.lesson-tray-open {
 .scroll-up-btn:hover {
   background: var(--bg);
   border-color: var(--accent);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px var(--shadow-md);
 }
 
 /* Responsive layout for scroll-up button */
@@ -410,15 +401,15 @@ body.lesson-tray-open {
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 12px var(--shadow-md);
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     border: none;
   }
   .scroll-up-btn:hover {
     transform: scale(1.05);
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     opacity: 0.9;
   }
   .scroll-up-btn.visible:active {

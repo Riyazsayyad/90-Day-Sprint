@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="../assets/theme-init.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Stack vs Heap — Reference</title>
@@ -96,5 +97,6 @@
     <li><strong>No Escape:</strong> If the object stays strictly inside the declaring method (no returns or writes to outer fields), the JIT compiler can optimize this via **Scalar Replacement** (allocating instance fields directly onto the Stack).</li>
     <li><strong>Escape:</strong> If the object is returned, passed to threads, or saved to fields, it escapes and must be instantiated on the Heap.</li>
   </ul>
+  <script src="../assets/theme.js" defer></script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="../assets/theme-init.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ArrayList Internals — Reference</title>
@@ -95,5 +96,6 @@ private int size;</code></pre>
   <p>An array is allocated as a contiguous block of memory. To read the element at index <code>i</code>, the computer does not traverse the array. Instead, it computes the exact memory address directly in one math operation:</p>
   <div class="formula">Address(i) = BaseAddress + i * ElementSize</div>
   <p>This memory addressing takes constant time, meaning it is independent of the size of the array.</p>
+  <script src="../assets/theme.js" defer></script>
 </body>
 </html>

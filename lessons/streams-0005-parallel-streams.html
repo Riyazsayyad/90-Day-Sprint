@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="../assets/theme-init.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Lesson 5 — Parallel Streams</title>
@@ -289,5 +290,6 @@ List&lt;Integer&gt; result = list.parallelStream().collect(toList());</code></pr
     <li><strong>Pool isolation:</strong> Write CPU-heavy parallel processing using a custom <code>ForkJoinPool(2)</code> so a batch job does not compete with other parallel streams on commonPool.</li>
   </ol>
 
+  <script src="../assets/theme.js" defer></script>
 </body>
 </html>

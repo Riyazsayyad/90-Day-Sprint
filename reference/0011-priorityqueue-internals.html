@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <script src="../assets/theme-init.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PriorityQueue Internals — Reference</title>
@@ -114,5 +115,6 @@
 
   <h2>The Iterator Ordering Trap</h2>
   <p>The iterator returned by <code>priorityQueue.iterator()</code> is <strong>not guaranteed</strong> to yield elements in order. It simply scans the backing array in linear index order (<code>[0], [1], [2], ...</code>). To retrieve elements in sorted order, you must call <code>poll()</code> repeatedly until the queue is empty.</p>
+  <script src="../assets/theme.js" defer></script>
 </body>
 </html>
