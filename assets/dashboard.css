@@ -57,63 +57,13 @@ body.dsa-page {
   position: relative;
 }
 
-/* Hero — boxed card with graph overlay */
+/* Hero — boxed card */
 .hero-card {
-  position: relative;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--card-bg);
   padding: 2rem 2.25rem;
   margin-bottom: 2rem;
-  overflow: hidden;
-  min-height: 9.5rem;
-}
-
-.hero-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    105deg,
-    var(--card-bg) 0%,
-    var(--card-bg) 38%,
-    color-mix(in srgb, var(--card-bg) 72%, transparent) 58%,
-    transparent 100%
-  );
-  z-index: 1;
-  pointer-events: none;
-}
-
-.hero-graph-overlay {
-  position: absolute;
-  inset: 0;
-  color: var(--accent);
-  opacity: 0.42;
-  pointer-events: none;
-  z-index: 0;
-}
-
-html[data-theme="dark"] .hero-graph-overlay {
-  opacity: 0.28;
-}
-
-.hero-graph-overlay .growth-chart-svg {
-  position: absolute;
-  right: 1.5%;
-  bottom: -6%;
-  width: min(62%, 440px);
-  height: auto;
-  display: block;
-}
-
-.growth-curve {
-  stroke-width: 2.25;
-}
-
-.hero-copy {
-  position: relative;
-  z-index: 2;
-  max-width: 32rem;
 }
 
 .hero-copy h1 {
@@ -129,19 +79,6 @@ html[data-theme="dark"] .hero-graph-overlay {
   font-size: 1.05rem;
   color: var(--muted);
   max-width: 28rem;
-}
-
-.hero-formula {
-  margin-top: 0.75rem;
-  font-family: "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.9rem;
-  color: var(--accent);
-}
-
-.growth-chart-label {
-  font-family: "SF Mono", Menlo, Consolas, monospace;
-  font-size: 9px;
-  fill: var(--muted);
 }
 
 /* Header Section */
@@ -986,14 +923,6 @@ footer {
 @media (max-width: 768px) {
   .hero-card {
     padding: 1.5rem 1.25rem;
-    min-height: 8.5rem;
-  }
-
-  .hero-graph-overlay .growth-chart-svg {
-    width: 78%;
-    right: -4%;
-    bottom: -10%;
-    opacity: 0.9;
   }
 
   .hero-copy h1 {

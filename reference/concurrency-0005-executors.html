@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Executors — Reference</title>
+  <meta name="description" content="Quick reference: ExecutorService, ThreadPoolExecutor, queues, rejection policies, Future, shutdown, pool sizing, commonPool.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/concurrency-0005-executors.html">&larr; Lesson 05</a> &middot;
+    <a href="../lessons/concurrency-0004-explicit-locks.html">Lesson 04</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Executors Cheat Sheet</h1>
+  <p class="meta">Pools, queues, rejection, Future, shutdown</p>
+
+  <h2>1. Why Not Raw Threads</h2>
+  <ul>
+    <li>Reuse workers; bound concurrency + memory</li>
+    <li>Queue + rejection = backpressure</li>
+    <li>Central lifecycle (<code>shutdown</code>)</li>
+  </ul>
+
+  <h2>2. Types</h2>
+  <ul>
+    <li><code>Executor</code> — <code>execute(Runnable)</code></li>
+    <li><code>ExecutorService</code> — <code>submit</code>, <code>invokeAll</code>, shutdown APIs</li>
+    <li><code>ThreadPoolExecutor</code> — core, max, keepAlive, queue, factory, handler</li>
+  </ul>
+
+  <h2>3. TPE Submit Order</h2>
+  <ol>
+    <li>threads &lt; core → new worker</li>
+    <li>queue has room → enqueue</li>
+    <li>threads &lt; max → new worker</li>
+    <li>else → rejection handler</li>
+  </ol>
+
+  <h2>4. Runnable vs Callable / Future</h2>
+  <ul>
+    <li><code>Runnable</code> — void; <code>execute</code> or <code>submit</code></li>
+    <li><code>Callable&lt;V&gt;</code> — result + checked exceptions</li>
+    <li><code>get()</code> / <code>get(timeout)</code> — block; <code>ExecutionException</code> wraps failure</li>
+    <li><code>cancel(mayInterrupt)</code> — <code>isDone</code> / <code>isCancelled</code></li>
+    <li><code>execute</code> — uncaught → handler; <code>submit</code> — stored until <code>get</code></li>
+  </ul>
+
+  <h2>5. Queues</h2>
+  <table class="reference-table">
+    <thead><tr><th>Queue</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td><code>LinkedBlockingQueue</code> unbounded</td><td>Fixed pool trap — heap growth</td></tr>
+      <tr><td><code>ArrayBlockingQueue</code></td><td>Bounded — prod default</td></tr>
+      <tr><td><code>SynchronousQueue</code></td><td>Handoff — cached pool</td></tr>
+    </tbody>
+  </table>
+
+  <h2>6. Executors Factories (Traps)</h2>
+  <ul>
+    <li><code>newFixedThreadPool(n)</code> — unbounded queue OOM</li>
+    <li><code>newCachedThreadPool()</code> — unbounded threads</li>
+    <li><code>newSingleThreadExecutor()</code> — serialized + unbounded queue</li>
+    <li>Prefer explicit <code>ThreadPoolExecutor</code> in prod</li>
+  </ul>
+
+  <h2>7. Rejection Policies</h2>
+  <ul>
+    <li><strong>Abort</strong> — <code>RejectedExecutionException</code> (default)</li>
+    <li><strong>CallerRuns</strong> — submitter runs task (backpressure)</li>
+    <li><strong>Discard</strong> — silent drop</li>
+    <li><strong>DiscardOldest</strong> — drop head, retry</li>
+  </ul>
+
+  <h2>8. Shutdown</h2>
+  <ul>
+    <li><code>shutdown()</code> — no new tasks; finish queue</li>
+    <li><code>shutdownNow()</code> — interrupt + return pending</li>
+    <li><code>awaitTermination(timeout)</code> — wait for idle</li>
+  </ul>
+
+  <h2>9. Sizing</h2>
+  <ul>
+    <li>CPU-bound ≈ <code>cores</code> (+1)</li>
+    <li>I/O-bound ≈ <code>cores × (1 + wait/compute)</code> — tune with metrics</li>
+    <li>Separate pools per dependency class</li>
+  </ul>
+
+  <h2>10. Enterprise</h2>
+  <ul>
+    <li>Tomcat — bounded HTTP worker threads</li>
+    <li>Spring <code>@Async</code> — configure <code>ThreadPoolTaskExecutor</code>; avoid per-task threads</li>
+    <li>Metrics: queue depth, active, rejected</li>
+    <li><code>ForkJoinPool.commonPool</code> — parallel streams; no blocking I/O</li>
+  </ul>
+
+  <h2>11. Interview One-Liners</h2>
+  <ul>
+    <li>Queue between core and max — type picks failure mode</li>
+    <li>Fixed factory ≠ bounded — queue is unbounded</li>
+    <li>CallerRuns on HTTP thread = latency cascade</li>
+    <li>Pool doesn't fix races — still need sync/locks</li>
+  </ul>
+
+  <p class="meta"><a href="../lessons/concurrency-0005-executors.html">Full lesson</a> · <a href="../lessons/concurrency-0001-thread-fundamentals.html">Lesson 1</a> · <a href="../lessons/concurrency-0004-explicit-locks.html">Lesson 4</a></p>
+</body>
+</html>

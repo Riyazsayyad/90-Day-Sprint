@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 5 — Executors & Thread Pools</title>
+  <meta name="description" content="Java executors from a Senior Backend perspective: ExecutorService, ThreadPoolExecutor knobs, queue choice, rejection policies, Future basics, graceful shutdown, ForkJoinPool.commonPool, pool sizing, Spring @Async and Tomcat workers.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="concurrency-0004-explicit-locks.html">&larr; Lesson 4</a> &middot;
+    Lesson 5 of 8 &middot;
+    <a href="../reference/concurrency-0005-executors.html">Cheat sheet</a>
+  </nav>
+
+  <h1>Deep Dive: Executors &amp; Thread Pools</h1>
+  <p class="meta">~40 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; builds on <a href="concurrency-0001-thread-fundamentals.html">Lesson 1</a> (raw threads vs pools), <a href="concurrency-0004-explicit-locks.html">Lesson 4</a> (locks done)</p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Lesson 1 said "don't spawn <code>new Thread()</code> per request." This lesson is <em>how</em> production actually runs work: bounded pools, queue backpressure, rejection policies, graceful shutdown, and sizing heuristics. Interviewers love factory-method traps (<code>newCachedThreadPool</code>, unbounded <code>LinkedBlockingQueue</code> in fixed pools) and "what happens when the queue is full?"
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/executors.html">Oracle — Executors</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executor.html">Executor</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ExecutorService.html">ExecutorService</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html">ThreadPoolExecutor</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html">Executors</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ForkJoinPool.html#commonPool()">ForkJoinPool.commonPool</a>
+  </p>
+
+  <h2>1. Why Executors Over <code>new Thread()</code></h2>
+  <p>Lesson 1: each platform thread costs native stack memory (~1&nbsp;MB order of magnitude), kernel scheduling, and JVM bookkeeping. Under HTTP spikes, <code>new Thread(task).start()</code> per request creates an unbounded thread count → context-switch storm, OOM, or thrashing.</p>
+  <p>An <strong>executor</strong> separates <em>task definition</em> (<code>Runnable</code> / <code>Callable</code>) from <em>thread lifecycle</em>. A fixed set of worker threads pulls work from a queue. You get:</p>
+  <ul>
+    <li><strong>Reuse</strong> — amortize thread creation cost.</li>
+    <li><strong>Bounds</strong> — cap concurrency + queue depth → predictable memory and load.</li>
+    <li><strong>Policy</strong> — what to do when saturated (reject, block caller, drop).</li>
+    <li><strong>Lifecycle</strong> — one place to <code>shutdown</code> instead of hunting stray threads.</li>
+  </ul>
+  <blockquote>Senior line: raw threads are fine for demos; executors are how you survive production traffic.</blockquote>
+
+  <h2>2. Executor → ExecutorService → ThreadPoolExecutor</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Type</th><th>Role</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>Executor</code></td>
+        <td>Minimal: <code>execute(Runnable)</code> — fire-and-forget. No lifecycle API.</td>
+      </tr>
+      <tr>
+        <td><code>ExecutorService</code></td>
+        <td>Extends <code>Executor</code> + <code>submit</code> (returns <code>Future</code>), <code>invokeAll</code>/<code>invokeAny</code>, <code>shutdown</code>/<code>shutdownNow</code>, <code>awaitTermination</code>.</td>
+      </tr>
+      <tr>
+        <td><code>ThreadPoolExecutor</code></td>
+        <td>Concrete pool: core/max threads, keep-alive, work queue, thread factory, rejection handler. The implementation you configure in production.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>Submission model (ThreadPoolExecutor):</strong></p>
+  <ol>
+    <li>If running threads &lt; <code>corePoolSize</code> → create thread, run task.</li>
+    <li>Else if queue not full → enqueue task.</li>
+    <li>Else if running threads &lt; <code>maximumPoolSize</code> → create thread, run task.</li>
+    <li>Else → <code>RejectedExecutionHandler</code>.</li>
+  </ol>
+  <pre>
+  submit task
+      │
+      ├─ threads &lt; core? ──yes──► new worker, run now
+      │
+      ├─ queue has room? ──yes──► enqueue
+      │
+      ├─ threads &lt; max? ──yes──► new worker, run now
+      │
+      └─ else ──► reject policy
+  </pre>
+  <p>Key insight: the queue sits <em>between</em> core and max. A bounded queue forces you to grow toward <code>maxPoolSize</code> before rejecting; an unbounded queue may never grow past core — tasks pile up in memory instead.</p>
+
+  <h2>3. Runnable vs Callable &amp; Future Basics</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th></th><th><code>Runnable</code></th><th><code>Callable&lt;V&gt;</code></th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Returns</td><td><code>void</code></td><td>Typed result <code>V</code></td></tr>
+      <tr><td>Checked exception</td><td>Cannot throw (use unchecked)</td><td>May throw <code>Exception</code></td></tr>
+      <tr><td>Submit API</td><td><code>execute(r)</code> or <code>submit(r)</code> → <code>Future&lt;?&gt;</code></td><td><code>submit(callable)</code> → <code>Future&lt;V&gt;</code></td></tr>
+    </tbody>
+  </table>
+  <pre><code class="language-java">ExecutorService pool = Executors.newFixedThreadPool(4);
+
+Future&lt;Integer&gt; fut = pool.submit(() -&gt; {
+  return restClient.fetchCount(); // may throw
+});
+
+// later on caller thread:
+try {
+  Integer n = fut.get(2, TimeUnit.SECONDS); // blocks until done or timeout
+} catch (TimeoutException e) {
+  fut.cancel(true); // may interrupt worker if running
+} catch (ExecutionException e) {
+  Throwable cause = e.getCause(); // real failure from Callable
+}</code></pre>
+  <ul>
+    <li><code>get()</code> — block until complete; wraps failure in <code>ExecutionException</code>.</li>
+    <li><code>get(timeout, unit)</code> — bounded wait; <code>TimeoutException</code> if not done.</li>
+    <li><code>cancel(mayInterruptIfRunning)</code> — if not started, never runs; if running and <code>true</code>, sends interrupt (task must cooperate — Lesson 1).</li>
+    <li><code>isDone()</code> — <code>true</code> after normal completion, exception, or cancellation.</li>
+    <li><code>isCancelled()</code> — cancelled before completion.</li>
+  </ul>
+  <p><strong>Interview trap:</strong> <code>execute()</code> swallows nothing — uncaught exceptions go to the thread's <code>UncaughtExceptionHandler</code>. <code>submit()</code> stores the exception; you only see it on <code>get()</code>.</p>
+  <p><strong>Out of scope here:</strong> <code>CompletableFuture</code> composition (Module 03 S07).</p>
+
+  <h2>4. ThreadPoolExecutor Knobs</h2>
+  <pre><code class="language-java">ThreadPoolExecutor pool = new ThreadPoolExecutor(
+    4,                              // corePoolSize
+    16,                             // maximumPoolSize
+    60L, TimeUnit.SECONDS,          // keepAlive — idle threads above core die after this
+    new ArrayBlockingQueue&lt;&gt;(100),   // work queue
+  new ThreadFactory() { /* name threads */ },
+    new ThreadPoolExecutor.CallerRunsPolicy()
+);</code></pre>
+
+  <h3>Core vs max vs keepAlive</h3>
+  <ul>
+    <li><strong>corePoolSize</strong> — baseline workers kept alive even when idle (unless <code>allowCoreThreadTimeOut(true)</code>).</li>
+    <li><strong>maximumPoolSize</strong> — hard cap on concurrent workers.</li>
+    <li><strong>keepAliveTime</strong> — threads above core that are idle longer than this are terminated.</li>
+  </ul>
+
+  <h3>Queue choice (shapes behavior)</h3>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Queue</th><th>Behavior</th><th>Typical use</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>LinkedBlockingQueue</code> (unbounded)</td>
+        <td>Never "full" → pool stays at core; tasks accumulate in heap</td>
+        <td><code>newFixedThreadPool</code> trap — hidden OOM under load</td>
+      </tr>
+      <tr>
+        <td><code>ArrayBlockingQueue</code> (bounded)</td>
+        <td>Fixed capacity → pushes pool toward max, then reject</td>
+        <td>Production default when you want backpressure</td>
+      </tr>
+      <tr>
+        <td><code>SynchronousQueue</code></td>
+        <td>Zero capacity — handoff; no storage; submit blocks until a worker takes it</td>
+        <td><code>newCachedThreadPool</code> — grows threads aggressively</td>
+      </tr>
+      <tr>
+        <td><code>PriorityBlockingQueue</code></td>
+        <td>Ordered by priority — rare; know ordering contract</td>
+        <td>Scheduled / priority workloads</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>ThreadFactory</h3>
+  <p>Name threads (<code>billing-worker-%d</code>), set daemon flag, uncaught-exception handler, or wrap for MDC/logging context. Debugging thread dumps without names is pain.</p>
+  <pre><code class="language-java">ThreadFactory named = r -&gt; {
+  Thread t = new Thread(r);
+  t.setName("report-pool-" + t.getId());
+  t.setUncaughtExceptionHandler((th, ex) -&gt; log.error("pool death", ex));
+  return t;
+};</code></pre>
+
+  <h2>5. <code>Executors</code> Factory Methods — What They Build + Traps</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Factory</th><th>What you get</th><th>Trap</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>newFixedThreadPool(n)</code></td>
+        <td>Fixed core=max=n, unbounded <code>LinkedBlockingQueue</code></td>
+        <td>Queue grows forever — no backpressure, OOM under spike</td>
+      </tr>
+      <tr>
+        <td><code>newCachedThreadPool()</code></td>
+        <td>core=0, max=<code>Integer.MAX_VALUE</code>, <code>SynchronousQueue</code>, 60s keepAlive</td>
+        <td>Unbounded thread creation — fine for short tasks, lethal under sustained load</td>
+      </tr>
+      <tr>
+        <td><code>newSingleThreadExecutor()</code></td>
+        <td>One worker, unbounded queue — serialized execution</td>
+        <td>Hidden queue growth; use when strict ordering matters</td>
+      </tr>
+      <tr>
+        <td><code>newScheduledThreadPool(n)</code></td>
+        <td>Delayed / periodic tasks</td>
+        <td>Still need bounds on delayed work volume</td>
+      </tr>
+      <tr>
+        <td><code>newWorkStealingPool()</code></td>
+        <td><code>ForkJoinPool</code>-style work stealing</td>
+        <td>Different semantics — deques, not classic TPE queue story</td>
+      </tr>
+    </tbody>
+  </table>
+  <blockquote>Senior line: treat <code>Executors</code> helpers as interview trivia. Production pools are usually explicit <code>ThreadPoolExecutor</code> with bounded queue + named threads + metrics.</blockquote>
+
+  <h2>6. Rejection Policies — When to Pick Each</h2>
+  <p>Triggered when pool is at <code>maxPoolSize</code> <em>and</em> queue is full (or handoff fails for <code>SynchronousQueue</code>).</p>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Policy</th><th>Behavior</th><th>When</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>AbortPolicy</strong> (default)</td>
+        <td>Throws <code>RejectedExecutionException</code></td>
+        <td>Fail fast — caller handles retry / 503. APIs that must not silently drop.</td>
+      </tr>
+      <tr>
+        <td><strong>CallerRunsPolicy</strong></td>
+        <td>Runs task on the <em>submitting</em> thread</td>
+        <td>Natural backpressure — slows producers (e.g. batch ingest). Risk: blocks HTTP thread if misused.</td>
+      </tr>
+      <tr>
+        <td><strong>DiscardPolicy</strong></td>
+        <td>Silently drops the task</td>
+        <td>Only for loss-tolerant telemetry / sampling — document it.</td>
+      </tr>
+      <tr>
+        <td><strong>DiscardOldestPolicy</strong></td>
+        <td>Drops head of queue, retries submit</td>
+        <td>Freshness over completeness (latest price tick wins).</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Custom handler: log + metric + dead-letter queue. Interviewers want you to name the policy <em>and</em> the user-visible outcome (503 vs slow vs lost event).</p>
+
+  <h2>7. Graceful Shutdown</h2>
+  <pre><code class="language-java">pool.shutdown();           // no new tasks; queued work still runs
+// optional: pool.awaitTermination(30, SECONDS);
+
+List&lt;Runnable&gt; dropped = pool.shutdownNow(); // interrupt workers, drain queue into returned list
+pool.awaitTermination(30, SECONDS);          // wait for workers to finish</code></pre>
+  <ul>
+    <li><code>shutdown()</code> — orderly: stop accepting; finish what's queued.</li>
+    <li><code>shutdownNow()</code> — aggressive: interrupt running tasks, return unstarted tasks. Tasks must handle interrupt (Lesson 1).</li>
+    <li><code>awaitTermination</code> — block until idle or timeout. Pair with retry loop in app shutdown hooks.</li>
+  </ul>
+  <p><strong>Spring / Tomcat:</strong> container calls lifecycle stop on beans and connectors — your <code>@PreDestroy</code> or <code>DisposableBean</code> should shut down custom pools the same way. Leaked pools keep JVM alive or lose in-flight work.</p>
+
+  <h2>8. ForkJoinPool.commonPool — Parallel Streams Tie-In</h2>
+  <p>Module 02: <code>parallelStream()</code> uses <code>ForkJoinPool.commonPool()</code> — shared JVM-wide, sized ~ <code>Runtime.getRuntime().availableProcessors() - 1</code> (with floor). Work-stealing deque, not the classic TPE queue model.</p>
+  <ul>
+    <li>CPU-bound fork/join splits benefit from stealing idle workers.</li>
+    <li>Blocking I/O on common pool <strong>starves</strong> every other parallel stream and <code>CompletableFuture.supplyAsync</code> default — Lesson 2/Streams framing.</li>
+    <li>Custom <code>ForkJoinPool</code> for isolated parallel work is the fix when you must parallelize CPU locally without polluting common pool.</li>
+  </ul>
+  <p>Executors lesson = general task pools; FJP = divide-and-conquer. Both are threads under the hood (Lesson 1).</p>
+
+  <h2>9. Pool Sizing Heuristics</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Workload</th><th>Heuristic</th><th>Why</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>CPU-bound</strong></td>
+        <td>~ <code>cores</code> or <code>cores + 1</code></td>
+        <td>More threads than cores → context switch, cache thrash, no speedup</td>
+      </tr>
+      <tr>
+        <td><strong>I/O-bound</strong></td>
+        <td><code>cores × (1 + wait/compute)</code> — Little's law thinking</td>
+        <td>Threads block on DB/HTTP; while one waits, another can run</td>
+      </tr>
+      <tr>
+        <td><strong>Mixed microservice</strong></td>
+        <td>Separate pools per dependency class</td>
+        <td>One slow downstream must not exhaust the pool for everything</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Example: 8 cores, task spends 90% waiting on DB → rough target <code>8 × (1 + 9) ≈ 80</code> — start conservative, measure queue depth, p99 latency, and CPU. Tuning is empirical.</p>
+  <p><strong>Bounded always wins</strong> over "infinite threads fix I/O." Unbounded growth masks overload until the process dies.</p>
+
+  <h2>10. Enterprise Framing</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Layer</th><th>What runs where</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Tomcat / Jetty worker threads</strong></td>
+        <td>One thread per in-flight HTTP request (bounded connector thread pool). Your service code runs here — don't block it on unbounded custom work.</td>
+      </tr>
+      <tr>
+        <td><strong>Spring <code>@Async</code></strong></td>
+        <td>Submits to a configured <code>TaskExecutor</code> (often <code>ThreadPoolTaskExecutor</code>). Default if misconfigured can be <code>SimpleAsyncTaskExecutor</code> (new thread per task!) — always define a bean with core/max/queue/rejection.</td>
+      </tr>
+      <tr>
+        <td><strong>Custom app pools</strong></td>
+        <td>Reports, webhooks, bulk export — dedicated bounded pool + rejection + metrics (queue size, active count, rejected tasks).</td>
+      </tr>
+      <tr>
+        <td><strong>Backpressure</strong></td>
+        <td>Full queue + Abort → 503 / retry-after. CallerRuns → slows ingress. Message bus → consumer lag. Pick story that matches SLA.</td>
+      </tr>
+    </tbody>
+  </table>
+  <blockquote>Senior line: HTTP thread handles the request; offload slow/fire-and-forget to a named pool you can shut down and observe.</blockquote>
+
+  <h2>11. Classic Bugs</h2>
+  <ul>
+    <li><strong>Unbounded fixed pool</strong> — <code>newFixedThreadPool</code> under load → million-task queue, GC pause, OOM.</li>
+    <li><strong>Cached pool under sustained load</strong> — thousands of threads, scheduler collapse.</li>
+    <li><strong>CallerRuns on HTTP thread</strong> — saturation runs work on Tomcat worker → cascading latency.</li>
+    <li><strong>Never shutdown</strong> — non-daemon workers prevent clean deploy; thread leak on hot reload.</li>
+    <li><strong><code>submit</code> exception swallowed</strong> — never call <code>get()</code> → silent failure.</li>
+    <li><strong>Blocking on common pool</strong> — parallel stream + JDBC inside → global starvation.</li>
+    <li><strong>Shared mutable state without sync</strong> — pool doesn't fix races; Lessons 2–4 still apply.</li>
+  </ul>
+
+  <p><strong>Later sections (not here):</strong> <code>CompletableFuture</code> (S07), concurrent collections / atomics (S06), virtual threads, deep AQS / work-stealing internals.</p>
+
+  <hr>
+
+  <h2>12. Revision Notes</h2>
+  <ul>
+    <li>TPE: core → queue → max → reject. Queue type changes everything.</li>
+    <li><code>execute</code> vs <code>submit</code> — exception path differs.</li>
+    <li><code>Future.get</code> / <code>cancel</code> / <code>isDone</code> — blocking and interrupt semantics.</li>
+    <li>Fixed pool trap = unbounded queue. Cached pool trap = unbounded threads.</li>
+    <li>Abort = fail fast; CallerRuns = backpressure; Discard* = lossy.</li>
+    <li><code>shutdown</code> orderly, <code>shutdownNow</code> interrupt, <code>awaitTermination</code> wait.</li>
+    <li>CPU ≈ cores; I/O ≈ cores × wait ratio; measure in prod.</li>
+    <li>commonPool = shared; no blocking I/O there.</li>
+  </ul>
+
+  <hr>
+
+  <h2>13. 6 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: newFixedThreadPool(8) under heavy load. First failure mode?</p>
+        <ol type="A">
+          <li>Unbounded queue grows until OOM.</li>
+          <li>Pool rejects at eight threads.</li>
+          <li>Creates ninth thread immediately.</li>
+          <li>Tasks run on common pool.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Unbounded queue grows until OOM.)</strong></p>
+          <p>Fixed factory uses unbounded <code>LinkedBlockingQueue</code>. Pool stays at 8 workers; tasks accumulate in the queue — no <code>RejectedExecutionException</code> until memory gives out.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Core=4 max=16 bounded queue full all workers busy. Next submit?</p>
+        <ol type="A">
+          <li>Rejected per handler policy.</li>
+          <li>Always blocks until queue slot.</li>
+          <li>Always spawns unbounded threads.</li>
+          <li>Runs on ForkJoin common pool.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Rejected per handler policy.)</strong></p>
+          <p>At max threads with full queue, TPE cannot accept work — default <code>AbortPolicy</code> throws. <code>CallerRuns</code> would run on submitter instead.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: submit(Callable) throws inside task. When seen?</p>
+        <ol type="A">
+          <li>On Future.get as ExecutionException.</li>
+          <li>Immediately on calling thread.</li>
+          <li>Never if pool has two threads.</li>
+          <li>Only after shutdownNow is called.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (On Future.get as ExecutionException.)</strong></p>
+          <p><code>submit</code> captures failure into the <code>Future</code>. Caller must <code>get()</code> (or <code>isDone</code> + <code>get</code>) to surface <code>ExecutionException</code> with <code>getCause()</code>.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: newCachedThreadPool under sustained blocking I/O. Risk?</p>
+        <ol type="A">
+          <li>Unbounded thread count exhaustion.</li>
+          <li>Queue blocks at core size.</li>
+          <li>Only one thread ever runs.</li>
+          <li>Tasks always run in caller.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Unbounded thread count exhaustion.)</strong></p>
+          <p><code>SynchronousQueue</code> + max=<code>Integer.MAX_VALUE</code> → each blocked submit spawns another thread. Classic production foot-gun.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: CallerRunsPolicy when pool saturated. Effect?</p>
+        <ol type="A">
+          <li>Submitter thread runs the task.</li>
+          <li>Oldest queued task is dropped.</li>
+          <li>RejectedExecutionException is thrown.</li>
+          <li>Task is sent to common pool.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Submitter thread runs the task.)</strong></p>
+          <p>Backpressure: producer slows down. Dangerous if submitter is a Tomcat HTTP worker — latency propagates to clients.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: parallelStream with JDBC inside map. Main risk?</p>
+        <ol type="A">
+          <li>Starves ForkJoin common pool.</li>
+          <li>Creates daemon threads only.</li>
+          <li>Bypasses happens-before rules.</li>
+          <li>Forces single-thread execution.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Starves ForkJoin common pool.)</strong></p>
+          <p>Blocking I/O on common pool ties up shared workers — other parallel streams and default async stall. Use dedicated executor or sequential/stream off common pool.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>14. Reasoning Exercises</h2>
+  <ol>
+    <li><strong>Design a pool:</strong> Bulk PDF export — 30s CPU + 200ms S3 upload per job, peak 200 jobs/min. Propose core, max, queue size, rejection policy. Defend each number.</li>
+    <li><strong>Factory trap:</strong> Teammate uses <code>Executors.newFixedThreadPool(50)</code> for incoming webhooks. Draw the failure timeline under 10× traffic spike. Rewrite as explicit <code>ThreadPoolExecutor</code>.</li>
+    <li><strong>Shutdown story:</strong> App receives SIGTERM during deploy. Order: stop accepting HTTP, drain in-flight, shutdown custom pool, <code>awaitTermination</code>. What if a task ignores interrupt after <code>shutdownNow</code>?</li>
+    <li><strong>Future contract:</strong> Three <code>submit</code> calls; you need all results or fail the batch in 5s. Sketch <code>invokeAll</code> vs manual <code>get(timeout)</code> + cancel siblings on first failure.</li>
+    <li><strong>Tomcat + @Async:</strong> Controller returns 202 immediately; work runs async. Where can CallerRunsPolicy still block the client? How do you fix it?</li>
+    <li><strong>Sizing:</strong> 4 cores, each task 5ms CPU + 95ms HTTP. Rough pool size? What metric tells you you're too high? Too low?</li>
+  </ol>
+
+  <p class="meta">Questions? Ask your coach — executors + rejection under load is a favorite Senior Backend drill.</p>
+
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>
