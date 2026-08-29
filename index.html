@@ -18,6 +18,26 @@
         </div>
       </div>
 
+      <div class="lesson-search-wrap" data-lesson-search>
+        <label class="lesson-search-label" for="lessonSearchInput">Search lessons</label>
+        <div class="lesson-search-field">
+          <input
+            type="search"
+            id="lessonSearchInput"
+            class="lesson-search-input"
+            placeholder="Search lessons… e.g. HashMap, volatile, executor"
+            autocomplete="off"
+            spellcheck="false"
+            role="combobox"
+            aria-expanded="false"
+            aria-controls="lessonSearchResults"
+            aria-autocomplete="list"
+          />
+          <div class="lesson-search-results" id="lessonSearchResults" role="listbox" hidden></div>
+        </div>
+        <p class="lesson-search-hint">Type to search lesson content · <kbd>/</kbd> to focus</p>
+      </div>
+
       <div class="header-stats-row">
         <div class="progress-stats-box" id="sprintProgressBox">
           <div class="progress-header">
@@ -1077,6 +1097,7 @@
 
   <script src="assets/dsa-dashboard.js"></script>
   <script src="assets/dashboard.js"></script>
+  <script src="assets/lesson-search.js" defer></script>
   <script src="assets/theme.js" defer></script>
 </body>
 </html>

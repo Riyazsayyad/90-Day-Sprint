@@ -81,6 +81,131 @@ body.dsa-page {
   max-width: 28rem;
 }
 
+/* Lesson typeahead search */
+.lesson-search-wrap {
+  margin-bottom: 0.25rem;
+}
+
+.lesson-search-label {
+  display: block;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.45rem;
+}
+
+.lesson-search-field {
+  position: relative;
+}
+
+.lesson-search-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card-bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.98rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.lesson-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.lesson-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.lesson-search-hint {
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.lesson-search-hint kbd {
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface);
+}
+
+.lesson-search-results {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  max-height: min(24rem, 60vh);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card-bg);
+  box-shadow: 0 8px 24px var(--shadow-sm);
+}
+
+.lesson-search-empty {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.lesson-search-item {
+  display: block;
+  padding: 0.75rem 1rem;
+  text-decoration: none;
+  color: inherit;
+  border-top: 1px solid var(--border);
+}
+
+.lesson-search-item:first-child {
+  border-top: none;
+}
+
+.lesson-search-item:hover,
+.lesson-search-item.is-active {
+  background: var(--surface);
+}
+
+.lesson-search-item-title {
+  display: block;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.2rem;
+}
+
+.lesson-search-item-meta {
+  display: block;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.lesson-search-item-snippet {
+  display: block;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.lesson-search-item mark {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  padding: 0 0.1rem;
+  border-radius: 2px;
+}
+
 /* Header Section */
 header {
   margin-bottom: 3rem;
