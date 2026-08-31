@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Concurrent Collections &amp; Atomics — Reference</title>
+  <meta name="description" content="Quick reference: ConcurrentHashMap, CopyOnWriteArrayList, BlockingQueue, atomics, CAS, synchronized wrapper traps.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/concurrency-0006-concurrent-collections-atomics.html">&larr; Lesson 06</a> &middot;
+    <a href="../lessons/concurrency-0005-executors.html">Lesson 05</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Concurrent Collections &amp; Atomics Cheat Sheet</h1>
+  <p class="meta">CHM, CopyOnWrite, queues, atomics, CAS</p>
+
+  <h2>1. Synchronized Wrappers — Traps</h2>
+  <ul>
+    <li>Per-method sync ≠ atomic compounds</li>
+    <li>Iterate inside <code>synchronized(wrapper)</code></li>
+    <li>Coarse lock — poor read concurrency</li>
+    <li>Prefer CHM / j.u.c collections</li>
+  </ul>
+
+  <h2>2. ConcurrentHashMap (Java 8+)</h2>
+  <ul>
+    <li>Bins (not segments) + treeify at 8 nodes</li>
+    <li>Per-bin locking / CAS — parallel different bins</li>
+    <li><code>computeIfAbsent</code> / <code>merge</code> — atomic compounds</li>
+    <li><code>size()</code> approximate under concurrency</li>
+    <li>Iterators weakly consistent — no CME</li>
+    <li>No null keys or values</li>
+  </ul>
+
+  <h2>3. CopyOnWriteArrayList</h2>
+  <ul>
+    <li>Read lock-free; write = copy array + swap ref</li>
+    <li>Iterator = snapshot — no later writes visible</li>
+    <li>Win: rare writes, heavy iteration/listeners</li>
+    <li>Lose: frequent mutations — O(n) per write</li>
+  </ul>
+
+  <h2>4. BlockingQueue</h2>
+  <table class="reference-table">
+    <thead><tr><th>Type</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td><code>ArrayBlockingQueue</code></td><td>Bounded, fixed memory</td></tr>
+      <tr><td><code>LinkedBlockingQueue</code></td><td>Bounded or unbounded heap growth</td></tr>
+      <tr><td><code>SynchronousQueue</code></td><td>Handoff, zero capacity</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li><code>put</code> blocks when full; <code>take</code> when empty</li>
+    <li><code>offer</code> / <code>poll(timeout)</code> — non-blocking variants</li>
+  </ul>
+
+  <h2>5. Atomics</h2>
+  <ul>
+    <li><code>AtomicInteger/Long/Reference</code> — volatile + CAS</li>
+    <li><code>incrementAndGet</code>, <code>compareAndSet(expect, update)</code></li>
+    <li>CAS fail → retry loop (optimistic)</li>
+    <li><code>volatile</code> alone ≠ <code>i++</code> atomic</li>
+    <li>Multi-field invariant → lock or immutable snapshot</li>
+    <li>Hot counters → <code>LongAdder</code></li>
+  </ul>
+
+  <h2>6. Fail-Fast vs Weak (Lesson 16)</h2>
+  <table class="reference-table">
+    <thead><tr><th></th><th>HashMap</th><th>CHM</th><th>CopyOnWrite</th></tr></thead>
+    <tbody>
+      <tr><td>Concurrent iter</td><td>CME / unsafe</td><td>Weakly consistent</td><td>Snapshot</td></tr>
+      <tr><td>Sees new adds</td><td>Crash or race</td><td>Maybe</td><td>No</td></tr>
+    </tbody>
+  </table>
+
+  <h2>7. Enterprise Picks</h2>
+  <ul>
+    <li>Cache lazy load → <code>CHM.computeIfAbsent</code> (+ TTL lib if needed)</li>
+    <li>Metrics → <code>LongAdder</code> / <code>AtomicLong</code></li>
+    <li>Listeners → <code>CopyOnWriteArrayList</code></li>
+    <li>Pool handoff → bounded <code>ArrayBlockingQueue</code></li>
+    <li>Spring mutable singleton state → CHM or immutable refs</li>
+  </ul>
+
+  <h2>8. Interview One-Liners</h2>
+  <ul>
+    <li>Sync map check-then-act without outer sync = bug</li>
+    <li>CHM loader in <code>computeIfAbsent</code> — keep fast, no reentrancy</li>
+    <li>CopyOnWrite ≠ concurrent queue</li>
+    <li>Atomics fix one variable RMW — not arbitrary invariants</li>
+  </ul>
+
+  <p class="meta"><a href="../lessons/concurrency-0006-concurrent-collections-atomics.html">Full lesson</a> · <a href="../lessons/0016-failfast-failsafe.html">Fail-Fast</a> · <a href="../lessons/concurrency-0005-executors.html">Executors</a></p>
+</body>
+</html>

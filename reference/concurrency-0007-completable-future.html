@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CompletableFuture — Reference</title>
+  <meta name="description" content="Quick reference: CompletableFuture pipelines, thenCompose, error handling, allOf/anyOf, join, timeouts, custom executor.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/concurrency-0007-completable-future.html">&larr; Lesson 07</a> &middot;
+    <a href="../lessons/concurrency-0006-concurrent-collections-atomics.html">Lesson 06</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>CompletableFuture Cheat Sheet</h1>
+  <p class="meta">Pipelines, compose, errors, timeouts</p>
+
+  <h2>1. Why CF vs Future</h2>
+  <ul>
+    <li>Future — block on <code>get</code>, no chain/combine</li>
+    <li>CF — <code>CompletionStage</code> pipelines + manual complete</li>
+  </ul>
+
+  <h2>2. Create (pass Executor for I/O)</h2>
+  <ul>
+    <li><code>supplyAsync(Supplier, executor)</code> → <code>CF&lt;U&gt;</code></li>
+    <li><code>runAsync(Runnable, executor)</code> → <code>CF&lt;Void&gt;</code></li>
+    <li>One-arg = <code>commonPool()</code> — no blocking I/O</li>
+  </ul>
+
+  <h2>3. Chain</h2>
+  <table class="reference-table">
+    <thead><tr><th>Method</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td><code>thenApply</code></td><td>Map T → U (sync stage)</td></tr>
+      <tr><td><code>thenAccept</code></td><td>Consume T</td></tr>
+      <tr><td><code>thenRun</code></td><td>Run after, ignore value</td></tr>
+      <tr><td><code>thenCompose</code></td><td>FlatMap — T → CF&lt;U&gt;</td></tr>
+      <tr><td><code>thenCombine</code></td><td>Merge two CFs when both done</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li><code>*Async</code> variants — run on executor (default commonPool)</li>
+    <li>Async next step depends on async step → <code>thenCompose</code> not <code>thenApply</code></li>
+  </ul>
+
+  <h2>4. Errors</h2>
+  <ul>
+    <li><code>exceptionally</code> — recovery on failure only</li>
+    <li><code>handle(result, ex)</code> — always; one non-null</li>
+    <li><code>whenComplete</code> — side effect; doesn't transform</li>
+    <li>Failed stage skips normal <code>thenApply</code></li>
+  </ul>
+
+  <h2>5. Combine</h2>
+  <ul>
+    <li><code>allOf(...)</code> — all finish (check each for errors)</li>
+    <li><code>anyOf(...)</code> — first wins; cancel losers if needed</li>
+  </ul>
+
+  <h2>6. Block</h2>
+  <ul>
+    <li><code>get()</code> — checked <code>ExecutionException</code></li>
+    <li><code>join()</code> — unchecked <code>CompletionException</code></li>
+    <li>Real cause: <code>getCause()</code></li>
+  </ul>
+
+  <h2>7. Timeout (Java 9+)</h2>
+  <ul>
+    <li><code>orTimeout(d, unit)</code> — exceptional timeout</li>
+    <li><code>completeOnTimeout(fallback, d, unit)</code> — normal fallback</li>
+    <li><code>cancel(true)</code> — interrupt if running</li>
+  </ul>
+
+  <h2>8. Enterprise</h2>
+  <ul>
+    <li>Fan-out parallel deps at top — don't serialize <code>get</code></li>
+    <li>Bounded named <code>ioExecutor</code> for all <code>supplyAsync</code></li>
+    <li>Spring <code>@Async</code> returning CF — configure real pool</li>
+    <li>Per-call <code>handle</code> + SLA timeouts for BFF</li>
+    <li>Don't <code>get()</code> on Tomcat thread under load</li>
+  </ul>
+
+  <h2>9. Interview One-Liners</h2>
+  <ul>
+    <li><code>thenCompose</code> = flatMap; <code>thenApply</code> = map</li>
+    <li><code>allOf</code> succeeds even if child failed — check before join</li>
+    <li>Blocking in sync <code>thenApply</code> blocks completion thread</li>
+    <li>CF ≠ reactive — thread-per-stage orchestration glue</li>
+  </ul>
+
+  <p class="meta"><a href="../lessons/concurrency-0007-completable-future.html">Full lesson</a> · <a href="../lessons/concurrency-0005-executors.html">Executors</a> · <a href="../lessons/concurrency-0006-concurrent-collections-atomics.html">Collections</a></p>
+</body>
+</html>

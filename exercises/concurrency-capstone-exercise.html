@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Exercise — Concurrency Capstone</title>
+  <meta name="description" content="Module 03 capstone coding exercise: 16 interview-style Java concurrency scenarios with JUnit tests — races, locks, executors, CHM, CompletableFuture, virtual threads.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+  <style>
+    .copy-bar { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin: 1rem 0; }
+    .copy-bar button,
+    .copy-bar .copy-bar-link {
+      font-family: inherit;
+      font-size: 0.95rem;
+      padding: 0.6rem 0.85rem;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      cursor: pointer;
+      color: var(--text);
+      text-decoration: none;
+      border-bottom: 1px solid var(--border);
+    }
+    .copy-bar button:hover,
+    .copy-bar .copy-bar-link:hover {
+      border-color: var(--accent);
+      background: #fafaf5;
+      border-bottom-color: var(--accent);
+    }
+    #javaSource { max-height: 70vh; overflow: auto; font-size: 0.8rem; }
+    .scenario-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+    .scenario-table th, .scenario-table td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; }
+    .scenario-table th { background: var(--surface); font-weight: normal; }
+    .lesson-link { font-size: 0.85rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot; <a href="../lessons/concurrency-0008-virtual-threads.html">⬅️ Prev: Virtual Threads</a>
+  </nav>
+
+  <h1>Concurrency &amp; Threads Capstone Exercise</h1>
+  <p class="meta">Capstone exercise &bull; Module 03 &bull; 16 scenarios &bull; JUnit 5 &bull; Java 21+ recommended &bull; <a href="ConcurrencyCapstoneExercise.java">Stub</a> &bull; <a href="reference/ConcurrencyCapstoneExercise.solved.java">Solved reference</a></p>
+
+  <div class="callout">
+    <strong>How to use:</strong> Copy the single Java file into IntelliJ or <code>java-interview-lab</code>. Add JUnit Jupiter 5. Implement each <code>TODO</code> — tests encode the Senior Backend answer. Run all tests until green. Review tied lessons for any red test.
+  </div>
+
+  <h2>Setup</h2>
+  <ol>
+    <li>Create a new Java class (default package is fine).</li>
+    <li>Paste <code>ConcurrencyCapstoneExercise.java</code>.</li>
+    <li>Let IntelliJ add JUnit 5 (Alt+Enter on <code>@Test</code>).</li>
+    <li>Implement stubs one by one; run tests after each.</li>
+    <li>Exercises 15–16 need Java 21+ (virtual threads).</li>
+  </ol>
+
+  <h2>Scenario Index</h2>
+  <table class="scenario-table">
+    <thead>
+      <tr><th>#</th><th>Topic</th><th>Lesson</th><th>Expected (from tests)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>01</td><td>Lost update → <code>AtomicInteger</code></td><td><a href="../lessons/concurrency-0001-thread-fundamentals.html">S01</a> <a href="../lessons/concurrency-0006-concurrent-collections-atomics.html">S06</a></td><td><code>10_000</code></td></tr>
+      <tr><td>02</td><td><code>volatile</code> guarantees (conceptual)</td><td><a href="../lessons/concurrency-0003-volatile-java-memory-model.html">S03</a></td><td><code>"visibility not atomicity"</code></td></tr>
+      <tr><td>03</td><td>Check-then-act race on <code>HashMap</code></td><td><a href="../lessons/concurrency-0002-synchronization-monitors.html">S02</a></td><td>loader runs &gt; 1</td></tr>
+      <tr><td>04</td><td><code>CHM.computeIfAbsent</code> single load</td><td><a href="../lessons/concurrency-0006-concurrent-collections-atomics.html">S06</a></td><td><code>1</code> loader call</td></tr>
+      <tr><td>05</td><td><code>tryLock</code> skip under contention</td><td><a href="../lessons/concurrency-0004-explicit-locks.html">S04</a></td><td><code>-1</code> when busy</td></tr>
+      <tr><td>06</td><td><code>AbortPolicy</code> rejection</td><td><a href="../lessons/concurrency-0005-executors.html">S05</a></td><td><code>RejectedExecutionException</code></td></tr>
+      <tr><td>07</td><td><code>ArrayBlockingQueue</code> handoff</td><td><a href="../lessons/concurrency-0005-executors.html">S05</a> <a href="../lessons/concurrency-0006-concurrent-collections-atomics.html">S06</a></td><td>sum <code>55</code> (1..10)</td></tr>
+      <tr><td>08</td><td><code>thenCompose</code> flat pipeline</td><td><a href="../lessons/concurrency-0007-completable-future.html">S07</a></td><td><code>["o1","o2"]</code></td></tr>
+      <tr><td>09</td><td><code>exceptionally</code> fallback</td><td><a href="../lessons/concurrency-0007-completable-future.html">S07</a></td><td><code>0</code></td></tr>
+      <tr><td>10</td><td><code>allOf</code> fan-in sum</td><td><a href="../lessons/concurrency-0007-completable-future.html">S07</a></td><td><code>60</code></td></tr>
+      <tr><td>11</td><td><code>join</code> + <code>CompletionException</code></td><td><a href="../lessons/concurrency-0007-completable-future.html">S07</a></td><td><code>"downstream"</code></td></tr>
+      <tr><td>12</td><td><code>orTimeout</code> fails</td><td><a href="../lessons/concurrency-0007-completable-future.html">S07</a></td><td><code>TimeoutException</code> cause</td></tr>
+      <tr><td>13</td><td><code>shutdown</code> + <code>awaitTermination</code></td><td><a href="../lessons/concurrency-0005-executors.html">S05</a></td><td>finishes in 2s</td></tr>
+      <tr><td>14</td><td><code>run()</code> vs <code>start()</code> trap</td><td><a href="../lessons/concurrency-0001-thread-fundamentals.html">S01</a></td><td>runs on caller thread</td></tr>
+      <tr><td>15</td><td><code>Thread.ofVirtual().isVirtual()</code></td><td><a href="../lessons/concurrency-0008-virtual-threads.html">S08</a></td><td><code>true</code></td></tr>
+      <tr><td>16</td><td>Pinning construct ID</td><td><a href="../lessons/concurrency-0008-virtual-threads.html">S08</a> <a href="../lessons/concurrency-0004-explicit-locks.html">S04</a></td><td><code>"synchronized"</code></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Quick Review — In-Browser Drills</h2>
+  <p class="meta">No IDE needed. Answers in <code>&lt;details&gt;</code>.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Drill A: <code>newFixedThreadPool(8)</code> under spike — first failure?</p>
+        <ol type="A">
+          <li>Unbounded queue grows until OOM.</li>
+          <li>Pool rejects at eight threads.</li>
+          <li>Creates ninth thread immediately.</li>
+          <li>Tasks run on common pool.</li>
+        </ol>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>A</strong> — <a href="../lessons/concurrency-0005-executors.html">S05</a>: unbounded <code>LinkedBlockingQueue</code>.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Drill B: <code>volatile int</code> + <code>count++</code> from 100 threads?</p>
+        <ol type="A">
+          <li>Lost updates — not atomic RMW.</li>
+          <li>Fully atomic without any lock.</li>
+          <li>Visibility only — count stays 0.</li>
+          <li>CME on every increment call.</li>
+        </ol>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>A</strong> — <a href="../lessons/concurrency-0003-volatile-java-memory-model.html">S03</a> + <a href="../lessons/concurrency-0006-concurrent-collections-atomics.html">S06</a>.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Drill C: VT + hot <code>synchronized</code> block on JDBC?</p>
+        <ol type="A">
+          <li>Pinning — carrier held blocked.</li>
+          <li>Virtual thread cannot enter sync.</li>
+          <li>Immediate IllegalMonitorState.</li>
+          <li>Auto upgrade to platform thread.</li>
+        </ol>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>A</strong> — <a href="../lessons/concurrency-0008-virtual-threads.html">S08</a>: use <code>ReentrantLock</code> or shrink scope.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Drill D: <code>thenApply</code> when next step returns CF?</p>
+        <ol type="A">
+          <li>Use thenCompose — flattens nested CF.</li>
+          <li>Use thenApply — flattens nested CF.</li>
+          <li>Use thenRun — flattens nested CF.</li>
+          <li>Use thenAccept — flattens nested CF.</li>
+        </ol>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>A</strong> — <a href="../lessons/concurrency-0007-completable-future.html">S07</a>: flatMap vs map.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <h2>Production Framing Checklist</h2>
+  <p>After all tests green, explain aloud (mock interview):</p>
+  <ol>
+    <li>Why Ex 03 fails but Ex 04 passes — compound operation vs atomic map API.</li>
+    <li>When Ex 05 <code>tryLock</code> beats blocking <code>lock()</code> on a request path.</li>
+    <li>What Ex 06 means for your HTTP 503 story under saturation.</li>
+    <li>Why Ex 08 needs <code>thenCompose</code> — what breaks with <code>thenApply</code>.</li>
+    <li>Spring virtual threads on + DB pool 20 — what still bottlenecks (<a href="../lessons/concurrency-0008-virtual-threads.html">S08</a>).</li>
+  </ol>
+
+  <h2>Copy-Paste Source</h2>
+  <div class="copy-bar">
+    <button type="button" id="copyBtn">Copy entire file</button>
+    <a href="ConcurrencyCapstoneExercise.java" download class="copy-bar-link">Download stub</a>
+    <a href="reference/ConcurrencyCapstoneExercise.solved.java" download class="copy-bar-link">Download solved</a>
+  </div>
+  <pre id="javaSource"><code>Loading ConcurrencyCapstoneExercise.java…</code></pre>
+
+  <script>
+    const sourceEl = document.getElementById('javaSource');
+    const copyBtn = document.getElementById('copyBtn');
+    let fileText = '';
+
+    fetch('ConcurrencyCapstoneExercise.java')
+      .then(r => r.text())
+      .then(text => {
+        fileText = text;
+        sourceEl.innerHTML = '<code>' + text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</code>';
+      })
+      .catch(() => {
+        sourceEl.innerHTML = '<code>Open exercises/ConcurrencyCapstoneExercise.java in your editor and copy manually.</code>';
+      });
+
+    copyBtn.addEventListener('click', () => {
+      if (!fileText) return;
+      navigator.clipboard.writeText(fileText).then(() => {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy entire file'; }, 2000);
+      });
+    });
+  </script>
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>

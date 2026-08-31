@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 8 — Virtual Threads</title>
+  <meta name="description" content="Java virtual threads from a Senior Backend perspective: platform vs virtual, carriers, pinning traps, newVirtualThreadPerTaskExecutor, I/O vs CPU, structured concurrency preview, Spring Boot virtual-thread mode, ThreadLocal and thread dumps. Java 21+.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="concurrency-0007-completable-future.html">&larr; Lesson 7</a> &middot;
+    Lesson 8 of 8 &middot;
+    <a href="../reference/concurrency-0008-virtual-threads.html">Cheat sheet</a> &middot;
+    <a href="../exercises/concurrency-capstone-exercise.html">➡️ Capstone Exercise</a>
+  </nav>
+
+  <h1>Deep Dive: Virtual Threads</h1>
+  <p class="meta">~35 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; builds on <a href="concurrency-0001-thread-fundamentals.html">L1 Platform Threads</a>, <a href="concurrency-0005-executors.html">L5 Executors</a>, <a href="concurrency-0007-completable-future.html">L7 CompletableFuture</a> &middot; <strong>Java 21+</strong></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Lessons 5–7 taught pools and async pipelines to avoid blocking platform threads. Virtual threads flip the model: <em>blocking is OK again</em> for I/O — millions of lightweight threads, few OS carriers. Interviewers probe pinning (<code>synchronized</code>, native), when pools still win, and "just enable Spring virtual threads" traps.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://openjdk.org/jeps/444">JEP 444 — Virtual Threads</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Thread.html#ofVirtual()">Thread.ofVirtual()</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/Executors.html#newVirtualThreadPerTaskExecutor()">newVirtualThreadPerTaskExecutor</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/core/virtual-threads.html">Oracle — Virtual Threads</a> ·
+    <a href="https://openjdk.org/jeps/453">JEP 453 — Structured Concurrency (Preview)</a>
+  </p>
+
+  <h2>1. Platform vs Virtual Threads</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th></th><th>Platform thread</th><th>Virtual thread</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>What</strong></td>
+        <td>1:1 wrapper around OS thread</td>
+        <td>JVM-managed lightweight thread</td>
+      </tr>
+      <tr>
+        <td><strong>Cost</strong></td>
+        <td>~1 MB stack, kernel scheduling</td>
+        <td>Small JVM stack frame; cheap create/destroy</td>
+      </tr>
+      <tr>
+        <td><strong>Scale</strong></td>
+        <td>Thousands = pain</td>
+        <td>Millions feasible (I/O wait, not CPU spin)</td>
+      </tr>
+      <tr>
+        <td><strong>Blocking I/O</strong></td>
+        <td>Expensive — holds OS thread</td>
+        <td>Cheap — unmount, carrier free for others</td>
+      </tr>
+      <tr>
+        <td><strong>API</strong></td>
+        <td><code>Thread</code>, pools (L5)</td>
+        <td>Same <code>Thread</code> API — <code>Thread.isVirtual()</code></td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Lesson 1 mental model still holds: shared heap, per-thread stack. Virtual threads are <code>Thread</code> objects — not a new concurrency primitive like <code>CompletableFuture</code> (L7). Code using <code>Thread</code>, <code>Runnable</code>, blocking JDBC/HTTP largely works unchanged.</p>
+
+  <h2>2. Carriers — Why Blocking Got Cheap</h2>
+  <p>Virtual threads run on a small pool of <strong>carrier</strong> platform threads (default: <code>ForkJoinPool</code> with parallelism ≈ CPU cores). When a virtual thread hits a <strong>blocking</strong> operation the JVM knows about (socket read, <code>LockSupport.park</code>, etc.), it <strong>unmounts</strong> from the carrier — carrier picks another virtual thread.</p>
+  <pre>
+  Carrier (platform)     Virtual threads
+  ┌──────────────┐       VT-1 ──► JDBC read ──► unmount (carrier free)
+  │   core #3    │  ──►  VT-2 ──► running
+  └──────────────┘       VT-3 ──► HTTP wait ──► unmount
+                         ... millions waiting, few carriers working
+  </pre>
+  <p><strong>Why Lesson 5 pools existed:</strong> platform thread + blocking I/O = thread tied up. Virtual threads decouple "task in flight" from "OS thread occupied." You can write straightforward blocking code at massive concurrency — the JVM multiplexes carriers.</p>
+  <p>Out of scope: scheduler implementation, carrier pool AQS rewrite.</p>
+
+  <h2>3. Creating Virtual Threads (Java 21+)</h2>
+  <pre><code class="language-java">// One-off
+Thread vt = Thread.ofVirtual().name("worker-", 0).start(runnable);
+
+// Per-task executor — idiomatic for request-per-task servers
+ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+executor.submit(() -&gt; handleRequest(req));  // new VT per task
+
+// Builder
+ThreadFactory factory = Thread.ofVirtual().name("api-", 0).factory();</code></pre>
+  <ul>
+    <li><code>newVirtualThreadPerTaskExecutor()</code> — no queue, no pool size knob; each task = new virtual thread. Perfect for "one request, one thread" Tomcat-style code without 200 platform workers.</li>
+    <li><strong>Not</strong> a replacement for bounded CPU worker pools — see Section 6.</li>
+    <li><code>CompletableFuture.supplyAsync(task, virtualExecutor)</code> — valid; still prefer explicit executor over <code>commonPool</code> for I/O (L7).</li>
+  </ul>
+
+  <h2>4. Mounting, Unmounting &amp; Pinning Traps</h2>
+  <p><strong>Unmount:</strong> virtual thread releases carrier during blocking I/O or <code>park</code>. <strong>Mount:</strong> carrier resumes virtual thread when I/O completes.</p>
+  <p><strong>Pinning:</strong> virtual thread cannot unmount — carrier held for entire critical section. Throughput drops toward platform-thread behavior for pinned work.</p>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Cause</th><th>Why pinned</th><th>Interview fix</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>synchronized</code> block/method</td>
+        <td>Carrier pinned for monitor enter/held</td>
+        <td>Prefer <code>ReentrantLock</code> (L4) — does not pin</td>
+      </tr>
+      <tr>
+        <td>Native code / JNI</td>
+        <td>JVM can't unmount in native</td>
+        <td>Minimize native on hot path; audit drivers</td>
+      </tr>
+      <tr>
+        <td>Some legacy libraries</td>
+        <td>Internal <code>synchronized</code> or native</td>
+        <td>Profile; isolate; bounded platform pool for that call</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>JDK monitoring: <code>jdk.virtualThreadScheduler.pinning</code> events (JFR) or <code>-Djdk.tracePinnedThreads=full</code> logs pin stack traces. Senior move: run load test, check for pin warnings before flipping prod.</p>
+  <blockquote>Senior line: virtual threads + heavy <code>synchronized</code> in your code or a dependency = silent carrier starvation.</blockquote>
+
+  <h2>5. When Virtual Threads Win vs When Pools Still Matter</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Workload</th><th>Pick</th><th>Why</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>HTTP/RPC handler blocking on DB, cache, downstream APIs</td>
+        <td><strong>Virtual threads</strong></td>
+        <td>Millions of blocked waits; carriers stay busy</td>
+      </tr>
+      <tr>
+        <td>CPU-bound compute (crypto, compression, big JSON parse)</td>
+        <td><strong>Bounded platform pool</strong> (~ cores)</td>
+        <td>More threads ≠ faster; adds scheduling overhead</td>
+      </tr>
+      <tr>
+        <td>Mixed service</td>
+        <td>VT for request path; small fixed pool for CPU stages</td>
+        <td>Don't run 10k parallel SHA-256 on VT</td>
+      </tr>
+      <tr>
+        <td>Fire-and-forget with backpressure</td>
+        <td>Bounded queue + platform or semaphore-limited VT</td>
+        <td><code>newVirtualThreadPerTaskExecutor</code> has no queue cap — unbounded task acceptance can OOM heap</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Lesson 5 sizing still applies to CPU work. Virtual threads solve <em>thread count for blocking</em>, not <em>CPU parallelism</em>.</p>
+
+  <h2>6. Structured Concurrency — Interview Preview</h2>
+  <p><strong>Problem:</strong> fan-out tasks (L7 <code>allOf</code>) without scope — child outlives parent, lost failures, hard cancellation.</p>
+  <p><strong>Idea:</strong> tasks share a <strong>structured scope</strong> — if parent fails or deadline hits, all children cancel; if one child fails, scope fails together. Like nested <code>try-with-resources</code> for concurrency.</p>
+  <pre><code class="language-java">// Preview API shape (Java 21+ preview — check your JDK)
+try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+  Subtask&lt;User&gt; user = scope.fork(() -&gt; loadUser(id));
+  Subtask&lt;Orders&gt; orders = scope.fork(() -&gt; loadOrders(id));
+  scope.join();           // wait for all
+  scope.throwIfFailed();  // propagate first failure
+  return build(user.get(), orders.get());
+} // scope closes — unfinished children cancelled</code></pre>
+  <ul>
+    <li>Interview: explain <em>why</em> — failure propagation, cancellation tree, no orphan threads.</li>
+    <li><code>CompletableFuture.allOf</code> doesn't cancel siblings on one failure unless you wire it.</li>
+    <li>Full API variants (<code>ShutdownOnSuccess</code>, deadlines) — encyclopedia out of scope.</li>
+  </ul>
+
+  <h2>7. Compatibility — ThreadLocal, Interrupt, Thread Dumps</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Feature</th><th>Virtual thread notes</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>ThreadLocal</code> / <code>InheritableThreadLocal</code></td>
+        <td>Works — but millions of VTs × fat ThreadLocals = heap disaster. Prefer scoped values (<code>ScopedValue</code>, Java 21+) for request context in new code.</td>
+      </tr>
+      <tr>
+        <td>Interruption (L1)</td>
+        <td>Same contract — <code>interrupt()</code>, <code>InterruptedException</code>, cooperative cancel still required.</td>
+      </tr>
+      <tr>
+        <td>Thread dumps</td>
+        <td><code>jcmd Thread.print</code> / IDE — virtual threads listed separately; shows parked/mounted state. Essential for prod debugging.</td>
+      </tr>
+      <tr>
+        <td><code>Thread.isVirtual()</code></td>
+        <td>Distinguish in logs/metrics.</td>
+      </tr>
+      <tr>
+        <td>Identity</td>
+        <td>Don't pool virtual threads — create per task; pooling VTs defeats the purpose.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>8. Enterprise — Tomcat &amp; Spring Boot</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Layer</th><th>Virtual thread mode</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Spring Boot 3.2+</strong></td>
+        <td><code>spring.threads.virtual.enabled=true</code> — Tomcat/Jetty handle requests on virtual threads. Blocking controller code scales without reactive rewrite.</td>
+      </tr>
+      <tr>
+        <td><strong>Tomcat</strong></td>
+        <td>Request thread = virtual; blocking servlet API OK. Watch pinning in filters, JDBC drivers, legacy <code>synchronized</code> singletons.</td>
+      </tr>
+      <tr>
+        <td><strong>Custom executors</strong></td>
+        <td>Replace <code>newCachedThreadPool</code> for I/O with <code>newVirtualThreadPerTaskExecutor</code> — but keep bounded pools for CPU jobs and for libraries that pin.</td>
+      </tr>
+      <tr>
+        <td><strong><code>@Async</code></strong></td>
+        <td>Point <code>TaskExecutor</code> at virtual executor — not <code>SimpleAsyncTaskExecutor</code> (platform per task).</td>
+      </tr>
+      <tr>
+        <td><strong>Don't assume free lunch</strong></td>
+        <td>Connection pools (DB, HTTP client) still bounded — 10k VTs hammering DB with pool of 20 = queue/timeouts. VT fixes thread count, not downstream capacity.</td>
+      </tr>
+    </tbody>
+  </table>
+  <blockquote>Senior line: enable virtual threads + audit pinning, ThreadLocal, pool limits, and synchronized blocks — not just flip YAML.</blockquote>
+
+  <h2>9. How This Closes Module 03</h2>
+  <ul>
+    <li><strong>L1</strong> — thread model, interrupt, lifecycle</li>
+    <li><strong>L2–L4</strong> — safe shared mutable state</li>
+    <li><strong>L5</strong> — bounded pools, rejection, shutdown</li>
+    <li><strong>L6</strong> — concurrent collections, atomics</li>
+    <li><strong>L7</strong> — async composition without blocking callers</li>
+    <li><strong>L8</strong> — massive blocking concurrency with simple code — when VT fits, when legacy pools still rule</li>
+  </ul>
+  <p>Capstone mock (when you're ready) mixes all of the above under production framing.</p>
+
+  <h2>10. Classic Bugs</h2>
+  <ul>
+    <li><strong>Pinning under load</strong> — <code>synchronized</code> cache or driver → carriers exhausted, latency spikes.</li>
+    <li><strong>Unbounded <code>newVirtualThreadPerTaskExecutor</code> + no backpressure</strong> — millions of tasks accepted → OOM (L5 lesson still applies to task admission).</li>
+    <li><strong>CPU work on every request via VT</strong> — no speedup; worse cache behavior.</li>
+    <li><strong>ThreadLocal context on every VT</strong> — memory bloat; migrate to <code>ScopedValue</code> where possible.</li>
+    <li><strong>Assuming reactive needed</strong> — VT + blocking JDBC is valid; Reactor not required for concurrency scale.</li>
+    <li><strong>Ignoring connection pool limits</strong> — thread count ≠ DB capacity.</li>
+  </ul>
+
+  <p><strong>Out of scope:</strong> Loom scheduler internals, full Structured Concurrency API catalog, Module 04 GC.</p>
+
+  <hr>
+
+  <h2>11. Revision Notes</h2>
+  <ul>
+    <li>VT = cheap <code>Thread</code>; carriers = few platform threads.</li>
+    <li>Blocking I/O unmounts; <code>synchronized</code> / native pins.</li>
+    <li><code>newVirtualThreadPerTaskExecutor()</code> — per task, no pool cap.</li>
+    <li>I/O-bound → VT; CPU-bound → bounded platform pool.</li>
+    <li>Structured concurrency — scoped fan-out, fail/cancel together.</li>
+    <li>ThreadLocal at scale hurts; thread dumps show VTs.</li>
+    <li>Spring <code>spring.threads.virtual.enabled=true</code> — audit deps first.</li>
+  </ul>
+
+  <hr>
+
+  <h2>12. 6 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Main reason virtual threads help I/O services?</p>
+        <ol type="A">
+          <li>Unmount on block — few carriers.</li>
+          <li>Replace synchronized with volatile.</li>
+          <li>Remove need for connection pools.</li>
+          <li>Run faster than CPU on one core.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Unmount on block — few carriers.)</strong></p>
+          <p>Blocking I/O no longer holds an OS thread. Carriers multiplex many virtual threads. CPU-bound work doesn't magically speed up.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: synchronized block inside hot virtual thread path. Risk?</p>
+        <ol type="A">
+          <li>Pinning — carrier held blocked.</li>
+          <li>Virtual thread cannot enter sync.</li>
+          <li>Immediate IllegalMonitorState.</li>
+          <li>Auto upgrade to platform thread.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Pinning — carrier held blocked.)</strong></p>
+          <p>Monitor enter pins the carrier for the critical section. Prefer <code>ReentrantLock</code> or shrink synchronized scope.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: CPU-heavy image resize farm — best default?</p>
+        <ol type="A">
+          <li>Bounded platform pool ~ cores.</li>
+          <li>newVirtualThreadPerTaskExecutor.</li>
+          <li>Unbounded cached platform pool.</li>
+          <li>parallelStream on commonPool only.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Bounded platform pool ~ cores.)</strong></p>
+          <p>CPU-bound work needs cores, not millions of threads. VT adds overhead without throughput gain.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: newVirtualThreadPerTaskExecutor under spike. OOM risk?</p>
+        <ol type="A">
+          <li>Yes — no queue cap on tasks.</li>
+          <li>No — JVM caps at core count.</li>
+          <li>No — virtual threads use no heap.</li>
+          <li>Yes — but only on Java 17 builds.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Yes — no queue cap on tasks.)</strong></p>
+          <p>Each submitted task can spawn a VT. Admission control (semaphore, queue, rate limit) still required — L5 backpressure lesson.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: join() on failed StructuredTaskScope child. Parent scope?</p>
+        <ol type="A">
+          <li>Fails together — shutdown policy.</li>
+          <li>Ignores child failure always.</li>
+          <li>Retries child on new carrier.</li>
+          <li>Converts child to platform thread.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Fails together — shutdown policy.)</strong></p>
+          <p><code>ShutdownOnFailure</code> propagates first failure; scope closes and cancels siblings — structured concurrency's point vs raw <code>allOf</code>.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: Spring virtual threads enabled. DB pool still 20. Effect?</p>
+        <ol type="A">
+          <li>VTs compete — pool still bottlenecks.</li>
+          <li>Pool auto-scales with VT count.</li>
+          <li>JDBC becomes non-blocking always.</li>
+          <li>Tomcat rejects all HTTP requests.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (VTs compete — pool still bottlenecks.)</strong></p>
+          <p>Virtual threads fix thread overhead, not downstream limits. 10k concurrent requests still queue on 20 connections.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>13. Reasoning Exercises</h2>
+  <ol>
+    <li><strong>Migration audit:</strong> Spring Boot app, 200 platform Tomcat threads, blocking JDBC. List 4 checks before <code>spring.threads.virtual.enabled=true</code>.</li>
+    <li><strong>Pin hunt:</strong> Latency spikes after VT migration. How use <code>jdk.tracePinnedThreads</code> or JFR? Name two code patterns you'd fix first.</li>
+    <li><strong>Pool vs VT:</strong> Service does 5ms CPU validation then 200ms HTTP call per request. Virtual thread per request or fixed pool of 50? Defend.</li>
+    <li><strong>Structured vs CF:</strong> Load user + orders + credit in parallel; any failure → 503, cancel others. Sketch <code>StructuredTaskScope</code> vs <code>allOf</code> + manual cancel.</li>
+    <li><strong>ThreadLocal trap:</strong> Request ID in <code>ThreadLocal</code>, 100k concurrent VTs. What breaks? What's the Java 21+ alternative?</li>
+    <li><strong>Capstone preview:</strong> Name one topic from each of L1–L7 you'd combine in a Senior concurrency mock with VT as the deployment angle.</li>
+  </ol>
+
+  <p class="meta">Questions? Ask your coach — Module 03 complete after notes. Capstone mock when you're ready.</p>
+
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>

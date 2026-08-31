@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 6 — Concurrent Collections &amp; Atomics</title>
+  <meta name="description" content="Java concurrent collections and atomics from a Senior Backend perspective: ConcurrentHashMap, CopyOnWriteArrayList, BlockingQueue family, AtomicInteger CAS, synchronized wrapper traps, weakly consistent iteration, enterprise caches and metrics.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="concurrency-0005-executors.html">&larr; Lesson 5</a> &middot;
+    Lesson 6 of 8 &middot;
+    <a href="../reference/concurrency-0006-concurrent-collections-atomics.html">Cheat sheet</a> &middot;
+    <a href="concurrency-0007-completable-future.html">Next: CompletableFuture &rarr;</a>
+  </nav>
+
+  <h1>Deep Dive: Concurrent Collections &amp; Atomics</h1>
+  <p class="meta">~38 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; builds on <a href="concurrency-0001-thread-fundamentals.html">L1</a>–<a href="concurrency-0005-executors.html">L5</a> &middot; <a href="0016-failfast-failsafe.html">Fail-Fast lesson</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> You know locks (L4) and pools (L5). Production shared state usually lives in <code>java.util.concurrent</code> data structures — not <code>Collections.synchronizedMap</code> on a <code>HashMap</code>. Interviewers probe CHM <code>computeIfAbsent</code>, weakly consistent iterators vs CME, when CopyOnWrite wins, and atomics vs <code>synchronized</code> for hot counters.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/collections.html">Oracle — Concurrent Collections</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/ConcurrentHashMap.html">ConcurrentHashMap</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CopyOnWriteArrayList.html">CopyOnWriteArrayList</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/BlockingQueue.html">BlockingQueue</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/AtomicInteger.html">AtomicInteger</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/package-summary.html">java.util.concurrent.atomic</a>
+  </p>
+
+  <h2>1. Why Synchronized Wrappers Are Often Wrong</h2>
+  <p>Module 01: <code>Collections.synchronizedMap(new HashMap&lt;&gt;())</code> wraps every method in <code>synchronized (mutex)</code>. Sounds safe. Production problems:</p>
+  <ul>
+    <li><strong>Coarse lock</strong> — one mutex for the whole map. High read contention serializes everyone (Lesson 4's RW lock exists for a reason).</li>
+    <li><strong>Compound ops not atomic</strong> — javadoc warns: <em>you</em> must manually synchronize on the wrapper for check-then-act:
+      <pre><code class="language-java">// BUG — two threads can both see absent key
+if (!map.containsKey(k))
+  map.put(k, v);
+
+// Required with synchronized wrapper:
+synchronized (map) {
+  if (!map.containsKey(k))
+    map.put(k, v);
+}</code></pre>
+    </li>
+    <li><strong>Iteration trap</strong> — must synchronize during the entire loop. Forget once → data races or CME on some paths.</li>
+    <li><strong>Null keys/values</strong> — synchronized wrappers delegate to underlying collection rules; CHM disallows nulls by design (ambiguity under concurrency).</li>
+  </ul>
+  <blockquote>Senior line: synchronized wrapper = "I synchronized each method." Interview line: "That's not enough for iteration or check-then-act — use CHM or hold one lock for the whole invariant."</blockquote>
+
+  <h2>2. ConcurrentHashMap — Interview Internals (Java 8+)</h2>
+  <p><strong>History bite:</strong> Java 7 used <strong>segments</strong> — fixed array of sub-maps, each with its own lock. Java 8+ replaced segments with a single <strong>bin array</strong> (like HashMap) plus per-bin synchronization.</p>
+  <ul>
+    <li><strong>Bin</strong> — array slot holding a linked list of <code>Node</code>s (key, hash, value, next).</li>
+    <li><strong>Treeify</strong> — when a bin grows past 8 nodes (and table ≥ 64), list becomes a red-black tree for O(log n) lookups. Untreeify below 6.</li>
+    <li><strong>Lock granularity</strong> — writers typically lock/synchronize on the <em>first node</em> of a bin (or CAS on empty bin). Different bins proceed in parallel.</li>
+    <li><strong>Reads</strong> — usually lock-free volatile reads along bucket chains; no global reader lock.</li>
+  </ul>
+  <p>Out of scope: full resize/rebalance proofs, AQS, lock-free skip lists.</p>
+
+  <h3>Key APIs (production)</h3>
+  <pre><code class="language-java">// Atomic "get or create" — one thread runs mappingFunction per key
+cache.computeIfAbsent(userId, id -&gt; loadFromDb(id));
+
+// Atomic update
+counters.merge(key, 1L, Long::sum);
+
+// Bulk — may be more efficient than loop
+map.forEach((k, v) -&gt; ...);
+map.reduceValues(1L, Long::sum);</code></pre>
+  <ul>
+    <li><code>computeIfAbsent</code> — fixes the check-then-act race from Lesson 2 without external lock. Mapping function must be fast and must not recursively modify the same map on the same thread (deadlock risk).</li>
+    <li><code>putIfAbsent</code> / <code>replace</code> — single-entry atomic ops.</li>
+  </ul>
+
+  <h3>size() and iteration semantics</h3>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Operation</th><th>Under concurrency</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>size()</code> / <code>isEmpty()</code></td>
+        <td><strong>Approximate</strong> — snapshot-ish count; fine for metrics, wrong for strict control-flow gates</td>
+      </tr>
+      <tr>
+        <td><code>Iterator</code> / <code>forEach</code> / <code>entrySet()</code></td>
+        <td><strong>Weakly consistent</strong> — never throws CME; may or may not see entries added after iteration started; won't reflect removals already passed</td>
+      </tr>
+      <tr>
+        <td><code>containsKey</code> / <code>get</code></td>
+        <td>Point reads with happens-before from concurrent writes (volatile/CAS paths)</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Tie to <a href="0016-failfast-failsafe.html">Lesson 16</a>: CHM iterators are weakly consistent — not a snapshot copy like CopyOnWrite, not fail-fast like <code>HashMap</code>. They reflect <em>some</em> concurrent updates.</p>
+
+  <h2>3. CopyOnWriteArrayList</h2>
+  <p>Backing array is <code>volatile</code>. <strong>Read</strong> — no lock, direct array index. <strong>Write</strong> (<code>add</code>, <code>set</code>, <code>remove</code>) — copy entire array, mutate copy, publish new reference.</p>
+  <ul>
+    <li><strong>Wins:</strong> read-heavy, rare writes — listener lists, config subscribers, iteration-heavy snapshots where stale reads are OK.</li>
+    <li><strong>Costs:</strong> O(n) copy per write; iterator holds snapshot from creation — won't see later adds; high write rate = GC churn + memory.</li>
+    <li><strong>Iterator:</strong> snapshot at birth — no CME ever; won't see concurrent writes after iterator created.</li>
+  </ul>
+  <pre><code class="language-java">// Spring-style listener list pattern
+private final List&lt;EventListener&gt; listeners = new CopyOnWriteArrayList&lt;&gt;();
+
+void fire(Event e) {
+  for (EventListener l : listeners) // safe without lock
+    l.onEvent(e);
+}</code></pre>
+  <p>Wrong tool: frequently mutating work queue — use <code>BlockingQueue</code> (L5).</p>
+
+  <h2>4. BlockingQueue Family — Producer-Consumer</h2>
+  <p>Lesson 5 introduced queues as executor work buffers. Here: the <strong>coordination API</strong> — block instead of spin or busy-wait.</p>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Implementation</th><th>Capacity</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>ArrayBlockingQueue</code></td>
+        <td>Bounded (fixed array)</td>
+        <td>One lock (or dual-lock variant) — predictable memory; fair optional constructor</td>
+      </tr>
+      <tr>
+        <td><code>LinkedBlockingQueue</code></td>
+        <td>Bounded or unbounded</td>
+        <td>Linked nodes — higher overhead; unbounded = heap growth risk (L5 trap)</td>
+      </tr>
+      <tr>
+        <td><code>SynchronousQueue</code></td>
+        <td>Zero</td>
+        <td>Handoff — producer blocks until consumer takes; <code>newCachedThreadPool</code></td>
+      </tr>
+      <tr>
+        <td><code>PriorityBlockingQueue</code></td>
+        <td>Unbounded heap</td>
+        <td>Ordering by priority — know comparator stability</td>
+      </tr>
+      <tr>
+        <td><code>DelayQueue</code></td>
+        <td>Unbounded</td>
+        <td>Elements available after delay — scheduling patterns</td>
+      </tr>
+    </tbody>
+  </table>
+  <pre><code class="language-java">BlockingQueue&lt;Task&gt; q = new ArrayBlockingQueue&lt;&gt;(100);
+
+// producer — blocks when full (backpressure)
+q.put(task);
+
+// consumer — blocks when empty
+Task t = q.take();
+
+// timed variants: offer(e, timeout), poll(timeout)</code></pre>
+  <p>Lesson 4's manual <code>Condition</code> buffer is what these classes implement for you. Production: prefer the queue unless you own a special invariant.</p>
+
+  <h2>5. Atomics — Visibility Without a Full Lock</h2>
+  <p>Lesson 3: <code>volatile</code> gives visibility, not read-modify-write atomicity. <code>i++</code> on volatile is still a race. <code>java.util.concurrent.atomic</code> wraps a <code>volatile</code> field with CAS operations.</p>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Class</th><th>Use</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>AtomicInteger</code> / <code>AtomicLong</code></td><td>Counters, sequence IDs, stats</td></tr>
+      <tr><td><code>AtomicReference&lt;V&gt;</code></td><td>Atomic swap of object reference (immutable snapshot pattern)</td></tr>
+      <tr><td><code>AtomicIntegerArray</code> etc.</td><td>Striped atomic slots without boxing</td></tr>
+      <tr><td><code>LongAdder</code> (bonus)</td><td>High-contention counting — striping reduces CAS failures</td></tr>
+    </tbody>
+  </table>
+  <pre><code class="language-java">AtomicInteger requests = new AtomicInteger();
+
+requests.incrementAndGet();           // atomic ++
+requests.addAndGet(5);
+
+boolean ok = requests.compareAndSet(expect, update); // CAS
+
+int current = requests.get();         // volatile read</code></pre>
+
+  <h3>CAS overview (interview level)</h3>
+  <p><strong>Compare-And-Set:</strong> atomically "if current == expect, set to update; else fail." CPU instruction (e.g. x86 <code>CMPXCHG</code>). On failure, retry loop — <strong>optimistic</strong> concurrency.</p>
+  <pre><code class="language-java">// conceptual CAS loop (AtomicInteger does this internally)
+void increment() {
+  for (;;) {
+    int current = value;           // volatile read
+    int next = current + 1;
+    if (compareAndSet(current, next))
+      return;                      // success — publish happens-before
+    // else retry — another thread won
+  }
+}</code></pre>
+  <ul>
+    <li><strong>ABA problem</strong> (interview mention): value goes A→B→A; CAS sees A and thinks nothing changed. <code>AtomicStampedReference</code> exists — deep dive out of scope.</li>
+    <li><strong>Not a substitute for invariants spanning multiple fields</strong> — use locks or immutable snapshots.</li>
+    <li><strong>Hot counter under extreme contention</strong> — consider <code>LongAdder</code> over hammering one <code>AtomicLong</code>.</li>
+  </ul>
+
+  <h2>6. Tie-Back: Fail-Fast vs Weakly Consistent</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th></th><th><code>HashMap</code> + sync wrapper</th><th><code>ConcurrentHashMap</code></th><th><code>CopyOnWriteArrayList</code></th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Concurrent iteration</td><td>CME or race if unsync'd</td><td>Weakly consistent, no CME</td><td>Snapshot, no CME</td></tr>
+      <tr><td>Sees concurrent adds</td><td>Unsafe</td><td>Maybe (weakly)</td><td>No (snapshot)</td></tr>
+      <tr><td>Check-then-act</td><td>Manual sync block</td><td><code>computeIfAbsent</code></td><td>N/A for map pattern</td></tr>
+    </tbody>
+  </table>
+  <p>Lesson 16: fail-fast is best-effort — even <code>modCount</code> can miss cross-thread writes. Concurrent collections choose a defined weaker contract instead of pretending.</p>
+
+  <h2>7. Enterprise Framing</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Scenario</th><th>Pick</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>In-memory cache (per-key load once)</td>
+        <td><code>ConcurrentHashMap.computeIfAbsent</code> + bounded size policy / Caffeine for TTL</td>
+      </tr>
+      <tr>
+        <td>Request/metrics counters</td>
+        <td><code>LongAdder</code> or <code>AtomicLong</code> — not <code>synchronized</code> on every hit</td>
+      </tr>
+      <tr>
+        <td>Spring singleton with mutable map field</td>
+        <td><code>ConcurrentHashMap</code> or immutable copy-on-write snapshots — not raw <code>HashMap</code></td>
+      </tr>
+      <tr>
+        <td>Event listener registry</td>
+        <td><code>CopyOnWriteArrayList</code> if rare register/unregister, frequent dispatch</td>
+      </tr>
+      <tr>
+        <td>Work handoff between pool threads</td>
+        <td><code>ArrayBlockingQueue</code> — bounded backpressure (L5)</td>
+      </tr>
+      <tr>
+        <td>CHM vs synchronized <code>HashMap</code></td>
+        <td>CHM when concurrent readers + writers, atomic compound ops, or iterator without global lock. Sync map only if truly low contention and you wrap compounds correctly.</td>
+      </tr>
+    </tbody>
+  </table>
+  <blockquote>Senior line: pick the structure that makes the invariant atomic — not "thread-safe" label on a wrapper.</blockquote>
+
+  <h2>8. Classic Bugs</h2>
+  <ul>
+    <li><strong>check-then-act on synchronizedMap</strong> without synchronizing on wrapper — duplicate loads, lost updates.</li>
+    <li><strong>CHM <code>computeIfAbsent</code> slow/blocking loader</strong> — holds bin lock; blocks other ops on that bin; recursive same-map call deadlocks.</li>
+    <li><strong>Trusting <code>CHM.size() == 0</code></strong> for strict logic under live writers — approximate.</li>
+    <li><strong>CopyOnWrite for hot writes</strong> — quadratic copying, memory blow-up.</li>
+    <li><strong><code>i++</code> on volatile or plain int</strong> — not atomic; use <code>AtomicInteger</code> or synchronize.</li>
+    <li><strong>Atomics on multiple related fields</strong> — CAS each field separately ≠ atomic invariant across fields.</li>
+    <li><strong>Iterating synchronizedMap without <code>synchronized(map)</code></strong> — javadoc violation, races.</li>
+  </ul>
+
+  <p><strong>Later sections (not here):</strong> <code>CompletableFuture</code> (S07), virtual threads (S08), deep AQS, lock-free skip lists, <code>AtomicStampedReference</code> deep dive.</p>
+
+  <hr>
+
+  <h2>9. Revision Notes</h2>
+  <ul>
+    <li>Sync wrapper = per-method lock; compounds + iteration need external sync.</li>
+    <li>CHM Java 8+: bins + treeify; per-bin locking; parallel writes different bins.</li>
+    <li><code>computeIfAbsent</code> / <code>merge</code> — atomic compound ops.</li>
+    <li>Weakly consistent iteration — no CME; may see some concurrent updates.</li>
+    <li>CopyOnWrite — snapshot reads; expensive writes; stale iterator.</li>
+    <li>BlockingQueue — <code>put</code>/<code>take</code> coordinate producers/consumers.</li>
+    <li>Atomics — CAS retry; visibility + atomic RMW; not multi-field invariants.</li>
+  </ul>
+
+  <hr>
+
+  <h2>10. 6 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: synchronizedMap — containsKey then put if absent. Safe?</p>
+        <ol type="A">
+          <li>No — compound needs outer sync.</li>
+          <li>Yes — each method is synchronized.</li>
+          <li>Yes — if map is final field.</li>
+          <li>Yes — on single-thread only.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (No — compound needs outer sync.)</strong></p>
+          <p>Two synchronized calls are not one atomic operation. Another thread can insert between them. Use one <code>synchronized(map)</code> block or <code>ConcurrentHashMap.computeIfAbsent</code>.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: CHM iterator during concurrent puts. Typical behavior?</p>
+        <ol type="A">
+          <li>Weakly consistent; no CME thrown.</li>
+          <li>Fail-fast CME on first change.</li>
+          <li>Deadlock until writers finish.</li>
+          <li>Snapshot of entire map frozen.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Weakly consistent; no CME thrown.)</strong></p>
+          <p>CHM iterators never throw CME. They may reflect some updates after creation — unlike CopyOnWrite snapshot, unlike HashMap fail-fast.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: CopyOnWriteArrayList — frequent add/remove. Main risk?</p>
+        <ol type="A">
+          <li>O(n) copy per write cost.</li>
+          <li>Iterator throws CME always.</li>
+          <li>Reads block on global mutex.</li>
+          <li>Null keys are disallowed only.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (O(n) copy per write cost.)</strong></p>
+          <p>Every mutating op copies the backing array. Write-heavy workloads burn CPU and memory — wrong structure.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: volatile int count; count++ from many threads. Result?</p>
+        <ol type="A">
+          <li>Lost updates — not atomic RMW.</li>
+          <li>Fully atomic without any lock.</li>
+          <li>Visibility only — count stays 0.</li>
+          <li>CME on every increment call.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Lost updates — not atomic RMW.)</strong></p>
+          <p><code>volatile</code> publishes writes but <code>++</code> is read-modify-write. Use <code>AtomicInteger</code> or synchronize.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: ArrayBlockingQueue full — put() on producer. Effect?</p>
+        <ol type="A">
+          <li>Producer blocks until space.</li>
+          <li>Queue throws CME immediately.</li>
+          <li>Oldest element is dropped.</li>
+          <li>Item goes to common pool.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Producer blocks until space.)</strong></p>
+          <p><code>put</code> blocks — natural backpressure. Contrast <code>offer</code> (false if full) or unbounded queue (never blocks on capacity).</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: computeIfAbsent mappingFunction does slow DB call. Risk?</p>
+        <ol type="A">
+          <li>Blocks other ops on that bin.</li>
+          <li>Iterator throws CME on load.</li>
+          <li>Map rejects null keys only.</li>
+          <li>CAS fails and skips the load.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Blocks other ops on that bin.)</strong></p>
+          <p>Loader runs under bin lock for that key's bucket. Slow I/O stalls concurrent access to keys in the same bin. Load outside then <code>putIfAbsent</code>, or use a dedicated cache library.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>11. Reasoning Exercises</h2>
+  <ol>
+    <li><strong>Pick the structure:</strong> (a) per-user session cache with lazy DB load, (b) 50M/sec metric increment, (c) webhook listener list (10 listeners, 1 add/day, 100k fires/sec), (d) order buffer between ingest and worker pool. CHM, CopyOnWrite, Atomic/LongAdder, or BlockingQueue?</li>
+    <li><strong>Fix the cache bug:</strong> <code>synchronizedMap</code> + <code>if (!cache.containsKey(k)) cache.put(k, load(k))</code>. Two failure modes under load. Rewrite with CHM; explain what <code>computeIfAbsent</code> guarantees.</li>
+    <li><strong>Iterator semantics:</strong> Thread A iterates CHM. Thread B adds keys. Thread C removes keys. What can A see? Contrast with CopyOnWrite list iteration started before B adds 100 elements.</li>
+    <li><strong>CAS retry:</strong> Three threads <code>incrementAndGet</code> on one <code>AtomicInteger</code> from 0. Final value? Could it be 1 or 2? Why not?</li>
+    <li><strong>Producer-consumer sizing:</strong> 4 consumers, mean service 200ms, Poisson arrivals 100/sec. Bound <code>ArrayBlockingQueue</code> at 50 — what happens under spike when <code>put</code> blocks? Tie to L5 CallerRuns vs blocking producer thread.</li>
+    <li><strong>Spring bean:</strong> Singleton service holds <code>HashMap&lt;String, Config&gt;</code> mutated on admin API and read on every request. Production-safe redesign in one paragraph.</li>
+  </ol>
+
+  <p class="meta">Questions? Ask your coach — CHM + atomics show up in almost every Senior Backend loop.</p>
+
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>

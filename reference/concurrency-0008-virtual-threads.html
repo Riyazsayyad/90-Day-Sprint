@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Virtual Threads — Reference</title>
+  <meta name="description" content="Quick reference: platform vs virtual threads, carriers, pinning, newVirtualThreadPerTaskExecutor, I/O vs CPU, structured concurrency, Spring Boot.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/concurrency-0008-virtual-threads.html">&larr; Lesson 08</a> &middot;
+    <a href="../lessons/concurrency-0007-completable-future.html">Lesson 07</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Virtual Threads Cheat Sheet</h1>
+  <p class="meta">Java 21+ · carriers · pinning · when to use</p>
+
+  <h2>1. Platform vs Virtual</h2>
+  <ul>
+    <li>Platform — 1:1 OS thread, expensive</li>
+    <li>Virtual — JVM lightweight <code>Thread</code>, cheap</li>
+    <li>Blocking I/O on VT unmounts from carrier</li>
+    <li><code>Thread.isVirtual()</code></li>
+  </ul>
+
+  <h2>2. Carriers</h2>
+  <ul>
+    <li>Few platform threads multiplex many VTs</li>
+    <li>Default scheduler ≈ <code>ForkJoinPool</code> (cores)</li>
+    <li>Unmount on blocking I/O / park</li>
+  </ul>
+
+  <h2>3. Create (Java 21+)</h2>
+  <pre><code>Thread.ofVirtual().start(runnable);
+Executors.newVirtualThreadPerTaskExecutor();
+Thread.ofVirtual().name("x-", 0).factory();</code></pre>
+  <ul>
+    <li>Per-task executor — no pool size / queue cap</li>
+    <li>Don't pool virtual threads</li>
+  </ul>
+
+  <h2>4. Pinning Traps</h2>
+  <table class="reference-table">
+    <thead><tr><th>Pins carrier</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td><code>synchronized</code></td><td><code>ReentrantLock</code> or shrink scope</td></tr>
+      <tr><td>Native / JNI</td><td>Minimize; isolate</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li>Debug: <code>-Djdk.tracePinnedThreads=full</code></li>
+    <li>JFR: <code>jdk.virtualThreadScheduler.pinning</code></li>
+  </ul>
+
+  <h2>5. When to Use</h2>
+  <table class="reference-table">
+    <thead><tr><th>Workload</th><th>Pick</th></tr></thead>
+    <tbody>
+      <tr><td>I/O-bound (HTTP, JDBC, RPC)</td><td>Virtual threads</td></tr>
+      <tr><td>CPU-bound</td><td>Bounded platform pool ~ cores</td></tr>
+      <tr><td>Need backpressure</td><td>Semaphore / queue — VT executor alone isn't enough</td></tr>
+    </tbody>
+  </table>
+
+  <h2>6. Structured Concurrency (preview)</h2>
+  <ul>
+    <li><code>StructuredTaskScope</code> — parent/child lifecycle</li>
+    <li>Fail or deadline → cancel siblings</li>
+    <li>vs <code>allOf</code> — no orphan tasks</li>
+  </ul>
+
+  <h2>7. Compatibility</h2>
+  <ul>
+    <li><code>ThreadLocal</code> — works; millions × fat TL = OOM</li>
+    <li>Prefer <code>ScopedValue</code> for request context</li>
+    <li>Interrupt — same as L1</li>
+    <li>Thread dumps list virtual threads</li>
+  </ul>
+
+  <h2>8. Enterprise</h2>
+  <ul>
+    <li>Spring Boot 3.2+: <code>spring.threads.virtual.enabled=true</code></li>
+    <li>Audit pinning, ThreadLocal, <code>synchronized</code></li>
+    <li>DB/HTTP pool limits still apply</li>
+    <li>CPU jobs → separate bounded platform pool</li>
+  </ul>
+
+  <h2>9. Interview One-Liners</h2>
+  <ul>
+    <li>VT ≠ faster CPU — cheaper blocking</li>
+    <li><code>synchronized</code> pins; <code>ReentrantLock</code> doesn't</li>
+    <li>Per-task VT executor has no queue cap</li>
+    <li>Flip Spring YAML + audit deps — not free lunch</li>
+  </ul>
+
+  <p class="meta"><a href="../lessons/concurrency-0008-virtual-threads.html">Full lesson</a> · <a href="../lessons/concurrency-0001-thread-fundamentals.html">L1</a> · <a href="../lessons/concurrency-0005-executors.html">L5</a> · <a href="../lessons/concurrency-0007-completable-future.html">L7</a></p>
+</body>
+</html>

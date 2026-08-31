@@ -34,6 +34,7 @@ Coding exercises are separate from lessons. Follow these rules so pages match th
 1. **`index.html`** — drawer entry with `Ex` number, meta `Coding` not `min read`; counts `X Lessons &bull; Y Exercise`
 2. **`lesson-tray.js`** — `{ kind: 'exercise', num: 'Ex', file: '...-exercise.html', ... }`; tray uses `../exercises/` from lessons
 3. **Nav chain** — last lesson `➡️ Next: … Exercise`; exercise page `⬅️ Prev: …` + Home
+4. **Search index** — `python scripts/build-lesson-search-index.py` (after tray entry exists)
 
 ## Checklist
 
@@ -41,5 +42,6 @@ Coding exercises are separate from lessons. Follow these rules so pages match th
 - [ ] No duplicate exercise badge if meta already says exercise
 - [ ] Indexed in dashboard + lesson-tray with `kind: 'exercise'`
 - [ ] Prev/next nav wired from last lesson
+- [ ] `lesson-search-index.json` rebuilt via build script
 
 Full spec: `.cursor/AGENTS.md` → Exercise Pages.

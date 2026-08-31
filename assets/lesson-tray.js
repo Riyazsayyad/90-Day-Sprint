@@ -50,7 +50,11 @@
     { num: '02', file: 'concurrency-0002-synchronization-monitors.html', title: 'Synchronization & Monitors', meta: '28 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' },
     { num: '03', file: 'concurrency-0003-volatile-java-memory-model.html', title: 'volatile & Java Memory Model', meta: '30 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' },
     { num: '04', file: 'concurrency-0004-explicit-locks.html', title: 'Explicit Locks', meta: '35 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' },
-    { num: '05', file: 'concurrency-0005-executors.html', title: 'Executors & Thread Pools', meta: '40 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' }
+    { num: '05', file: 'concurrency-0005-executors.html', title: 'Executors & Thread Pools', meta: '40 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' },
+    { num: '06', file: 'concurrency-0006-concurrent-collections-atomics.html', title: 'Concurrent Collections & Atomics', meta: '38 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' },
+    { num: '07', file: 'concurrency-0007-completable-future.html', title: 'CompletableFuture', meta: '40 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' },
+    { num: '08', file: 'concurrency-0008-virtual-threads.html', title: 'Virtual Threads', meta: '35 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' },
+    { num: 'Ex', file: 'concurrency-capstone-exercise.html', title: 'Capstone Exercise', meta: '16 scenarios &bull; Coding', module: 'Concurrency & Threads', moduleNum: '03', kind: 'exercise' }
   ];
 
 

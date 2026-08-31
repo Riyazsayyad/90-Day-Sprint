@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Lesson Curriculum Indexing
 
-When a lesson is **added, modified, or reordered**, update **all three** locations before finishing.
+When a lesson is **added, modified, or reordered**, update **all four** locations before finishing.
 
 ## 1. Dashboard (`index.html`)
 
@@ -30,12 +30,23 @@ Match the module's existing naming pattern (`streams-0005-...`, `oop-0014-...`, 
 - Every nav bar must include: `<a href="../index.html">🏠 Home</a>`
 - Update adjacent lessons when inserting in the middle
 
+## 4. Search index (`assets/lesson-search-index.json`)
+
+After `lesson-tray.js` and the HTML file exist, rebuild the home-page typeahead index:
+
+```bash
+python scripts/build-lesson-search-index.py
+```
+
+Sources: `lesson-tray.js` metadata + full text from each lesson/exercise HTML. Commit the updated JSON with the lesson.
+
 ## Checklist
 
 - [ ] `index.html` drawer and counts updated
 - [ ] `lesson-tray.js` entry added or corrected
 - [ ] New lesson has Home + prev/next links
 - [ ] Neighbor lessons' prev/next links updated
+- [ ] `python scripts/build-lesson-search-index.py` run; `lesson-search-index.json` updated
 - [ ] Matching `reference/` sheet created when the lesson has one
 - [ ] If adding an **exercise** (not a lesson), follow `.cursor/rules/exercise-pages.mdc` instead
 

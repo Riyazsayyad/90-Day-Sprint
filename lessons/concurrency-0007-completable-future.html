@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 7 — CompletableFuture</title>
+  <meta name="description" content="Java CompletableFuture from a Senior Backend perspective: async pipelines, thenApply/thenCompose, error handling, allOf/anyOf, get vs join, timeouts, custom executors, Spring parallel service calls.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="concurrency-0006-concurrent-collections-atomics.html">&larr; Lesson 6</a> &middot;
+    Lesson 7 of 8 &middot;
+    <a href="../reference/concurrency-0007-completable-future.html">Cheat sheet</a> &middot;
+    <a href="concurrency-0008-virtual-threads.html">Next: Virtual Threads &rarr;</a>
+  </nav>
+
+  <h1>Deep Dive: CompletableFuture</h1>
+  <p class="meta">~40 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; builds on <a href="concurrency-0005-executors.html">L5 Executors/Future</a>, <a href="concurrency-0006-concurrent-collections-atomics.html">L6 Collections</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Lesson 5 gave you <code>Future</code> — submit, block on <code>get()</code>, done. Production microservices need <em>compose</em> parallel downstream calls, handle failures in-line, and enforce timeouts without callback hell. <code>CompletableFuture</code> is the JDK's answer. Interviewers probe <code>thenCompose</code> vs <code>thenApply</code>, <code>join</code> + <code>CompletionException</code>, and blocking I/O on <code>commonPool</code>.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/javase/tutorial/essential/concurrency/futres.html">Oracle — Futures</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletableFuture.html">CompletableFuture javadoc</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/CompletionStage.html">CompletionStage</a> ·
+    <a href="https://openjdk.org/jeps/266">JEP 266 — More Concurrency Updates</a>
+  </p>
+
+  <h2>1. Future Pain → Why CompletableFuture Exists</h2>
+  <p>Lesson 5 <code>ExecutorService.submit</code> returns <code>Future&lt;T&gt;</code>:</p>
+  <ul>
+    <li><strong>Blocking only</strong> — <code>get()</code> parks the caller until done. Chaining means nested <code>get()</code> calls or manual polling.</li>
+    <li><strong>No composition</strong> — "when A finishes, call B" needs your own callbacks or extra threads.</li>
+    <li><strong>Exception handling awkward</strong> — failure surfaces as <code>ExecutionException</code> on <code>get()</code>; no pipeline hook.</li>
+    <li><strong>No combine</strong> — merging two independent futures requires a third thread or blocking both.</li>
+  </ul>
+  <pre><code class="language-java">// Future hell — blocks twice, serial even if B could start after A
+Future&lt;User&gt; userFut = pool.submit(() -&gt; userClient.get(id));
+Future&lt;Orders&gt; ordersFut = pool.submit(() -&gt; orderClient.list(userFut.get().id())); // blocks!
+Orders o = ordersFut.get(); // blocks again</code></pre>
+  <p><code>CompletableFuture&lt;T&gt;</code> implements <code>Future&lt;T&gt;</code> <em>and</em> <code>CompletionStage&lt;T&gt;</code> — a promise you can chain, combine, and complete manually. Java 8+.</p>
+
+  <h2>2. Creating Async Work — <code>supplyAsync</code> / <code>runAsync</code></h2>
+  <pre><code class="language-java">ExecutorService ioPool = ...; // bounded, named — Lesson 5
+
+CompletableFuture&lt;String&gt; data = CompletableFuture
+    .supplyAsync(() -&gt; httpClient.fetch(url), ioPool);
+
+CompletableFuture&lt;Void&gt; sideEffect = CompletableFuture
+    .runAsync(() -&gt; auditLog.record(event), ioPool);</code></pre>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Factory</th><th>Returns</th><th>Task type</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>supplyAsync(Supplier)</code></td><td><code>CompletableFuture&lt;U&gt;</code></td><td>Produces value</td></tr>
+      <tr><td><code>runAsync(Runnable)</code></td><td><code>CompletableFuture&lt;Void&gt;</code></td><td>Fire-and-forget side effect</td></tr>
+    </tbody>
+  </table>
+  <p><strong>Critical production rule:</strong> one-arg overloads use <code>ForkJoinPool.commonPool()</code> (Lesson 5). Never put blocking I/O there — starves parallel streams and every other default-async CF site.</p>
+  <blockquote>Senior line: always pass a dedicated <code>Executor</code> for I/O-bound async. Name it. Bound it. Monitor it.</blockquote>
+
+  <h2>3. Chaining — Transform &amp; Flatten</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Method</th><th>Input</th><th>Output CF type</th><th>Use</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>thenApply(fn)</code></td><td><code>T → U</code></td><td><code>CompletableFuture&lt;U&gt;</code></td><td>Map result (sync stage on completion thread)</td></tr>
+      <tr><td><code>thenAccept(consumer)</code></td><td><code>T → void</code></td><td><code>CompletableFuture&lt;Void&gt;</code></td><td>Consume result, no new value</td></tr>
+      <tr><td><code>thenRun(action)</code></td><td>ignores T</td><td><code>CompletableFuture&lt;Void&gt;</code></td><td>Run after complete, no access to value</td></tr>
+      <tr><td><code>thenCompose(fn)</code></td><td><code>T → CompletableFuture&lt;U&gt;</code></td><td><code>CompletableFuture&lt;U&gt;</code></td><td>Flatten nested async (next call depends on first)</td></tr>
+      <tr><td><code>thenCombine(other, fn)</code></td><td>both T, U</td><td><code>CompletableFuture&lt;V&gt;</code></td><td>Merge two independent futures when both done</td></tr>
+    </tbody>
+  </table>
+  <pre><code class="language-java">CompletableFuture&lt;OrderSummary&gt; pipeline =
+    CompletableFuture
+      .supplyAsync(() -&gt; userClient.get(userId), ioPool)
+      .thenCompose(user -&gt; orderClient.listAsync(user.id()))  // NOT thenApply
+      .thenApply(orders -&gt; summarize(orders));
+
+// Parallel fan-in — both start immediately
+CompletableFuture&lt;User&gt; userF = CompletableFuture.supplyAsync(() -&gt; loadUser(id), ioPool);
+CompletableFuture&lt;Credit&gt; creditF = CompletableFuture.supplyAsync(() -&gt; loadCredit(id), ioPool);
+
+CompletableFuture&lt;Dashboard&gt; dash = userF.thenCombine(creditF, Dashboard::new);</code></pre>
+  <p><strong><code>thenApply</code> vs <code>thenCompose</code> (interview gold):</strong></p>
+  <ul>
+    <li><code>thenApply(user -&gt; orderClient.listAsync(user.id()))</code> → <code>CompletableFuture&lt;CompletableFuture&lt;Orders&gt;&gt;</code> — nested hell.</li>
+    <li><code>thenCompose(user -&gt; orderClient.listAsync(user.id()))</code> → <code>CompletableFuture&lt;Orders&gt;</code> — flat pipeline.</li>
+  </ul>
+  <p><strong>Async variants:</strong> <code>thenApplyAsync</code>, <code>thenComposeAsync</code>, etc. run the stage on an executor (default: commonPool). Sync <code>thenApply</code> runs on the thread that completed the previous stage — fast map OK; blocking I/O is not.</p>
+
+  <h2>4. Error Paths — <code>exceptionally</code> / <code>handle</code> / <code>whenComplete</code></h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Method</th><th>When it runs</th><th>Transforms result?</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>exceptionally(fn)</code></td>
+        <td>Only on failure</td>
+        <td>Yes — recovery value (or rethrow)</td>
+      </tr>
+      <tr>
+        <td><code>handle(fn)</code></td>
+        <td>Always — gets <code>(result, throwable)</code></td>
+        <td>Yes — one of them is non-null</td>
+      </tr>
+      <tr>
+        <td><code>whenComplete(action)</code></td>
+        <td>Always — side effect</td>
+        <td>No — returns same outcome downstream</td>
+      </tr>
+    </tbody>
+  </table>
+  <pre><code class="language-java">CompletableFuture&lt;Price&gt; priced =
+  CompletableFuture
+    .supplyAsync(() -&gt; pricingService.quote(sku), ioPool)
+    .exceptionally(ex -&gt; Price.fallback())           // only on failure
+    .handle((price, ex) -&gt; ex != null ? Price.zero() : price) // always
+    .whenComplete((p, ex) -&gt; metrics.record(ex));    // logging/metrics</code></pre>
+  <ul>
+    <li><code>exceptionally</code> — fallback / default; if recovery throws, downstream fails.</li>
+    <li><code>handle</code> — unified success+failure handler; good for "return Either-like result."</li>
+    <li><code>whenComplete</code> — like <code>finally</code> for observability; exceptions still propagate unless earlier stage handled them.</li>
+  </ul>
+  <p>Failed stage skips normal <code>thenApply</code> callbacks — they jump to <code>exceptionally</code> / <code>handle</code> or fail the chain.</p>
+
+  <h2>5. Fan-Out / First-Wins — <code>allOf</code> / <code>anyOf</code></h2>
+  <pre><code class="language-java">CompletableFuture&lt;User&gt; u = ...;
+CompletableFuture&lt;Orders&gt; o = ...;
+CompletableFuture&lt;Prefs&gt; p = ...;
+
+CompletableFuture&lt;Void&gt; all = CompletableFuture.allOf(u, o, p);
+all.thenRun(() -&gt; {
+  // all three complete (maybe exceptionally) — check each .isCompletedExceptionally()
+  buildPage(u.join(), o.join(), p.join());
+});
+
+CompletableFuture&lt;Object&gt; first = CompletableFuture.anyOf(replica1, replica2, replica3);
+// first to complete wins — others keep running unless you cancel</code></pre>
+  <ul>
+    <li><code>allOf</code> — waits for <em>all</em>; result is <code>Void</code>; inspect individuals for values/errors.</li>
+    <li><code>anyOf</code> — first completion wins; type erasure to <code>Object</code>; others may still run — cancel if wasteful.</li>
+  </ul>
+
+  <h2>6. <code>get</code> vs <code>join</code> — CompletionException</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th></th><th><code>get()</code></th><th><code>join()</code></th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Checked exceptions</td><td><code>InterruptedException</code>, <code>ExecutionException</code></td><td>None (unchecked)</td></tr>
+      <tr><td>Failure wrapper</td><td><code>ExecutionException</code> with <code>getCause()</code></td><td><code>CompletionException</code> with <code>getCause()</code></td></tr>
+      <tr><td>Typical use</td><td>Legacy / boundary where checked OK</td><td>Stream-style pipelines, lambdas</td></tr>
+    </tbody>
+  </table>
+  <pre><code class="language-java">try {
+  User u = future.join();
+} catch (CompletionException e) {
+  Throwable root = e.getCause(); // real RestClientException etc.
+}</code></pre>
+  <p>Inside <code>thenApply</code>, an uncaught exception completes the CF exceptionally — downstream <code>join</code> unwraps via <code>CompletionException</code>.</p>
+
+  <h2>7. Cancellation &amp; Timeouts (Java 9+)</h2>
+  <pre><code class="language-java">future.cancel(true);  // mayInterruptIfRunning — task must cooperate (Lesson 1)
+
+// Java 9+ — fail if not done in time
+future.orTimeout(2, TimeUnit.SECONDS);
+
+// Java 9+ — supply fallback value on timeout (does not throw TimeoutException)
+future.completeOnTimeout(Price.fallback(), 2, TimeUnit.SECONDS);</code></pre>
+  <ul>
+    <li><code>orTimeout</code> — completes exceptionally with <code>TimeoutException</code> if not done in time.</li>
+    <li><code>completeOnTimeout</code> — completes <em>normally</em> with fallback — good for cache/stale-while-revalidate patterns.</li>
+    <li>Timeouts apply to the CF's completion deadline — chain with <code>thenCompose</code> carefully; each stage can have its own timeout.</li>
+  </ul>
+
+  <h2>8. Pipeline vs Nested Future Hell</h2>
+  <pre><code class="language-java">// BAD — nested, blocks, hard to read
+Orders o = pool.submit(() -&gt; {
+  User u = userClient.get(id);           // blocking
+  return orderClient.list(u.id());       // blocking
+}).get();
+
+// GOOD — declarative pipeline, non-blocking composition
+CompletableFuture&lt;Orders&gt; o = CompletableFuture
+  .supplyAsync(() -&gt; userClient.get(id), ioPool)
+  .thenCompose(u -&gt; orderClient.listAsync(u.id()));
+
+// BETTER for parallel deps — don't serialize independent calls
+var userF = supplyAsync(() -&gt; userClient.get(id), ioPool);
+var creditF = supplyAsync(() -&gt; creditClient.get(id), ioPool);
+return userF.thenCombine(creditF, this::merge);</code></pre>
+  <p>Senior pattern: fan-out parallel I/O at the top, fan-in with <code>thenCombine</code> / <code>allOf</code>, single error handler at the end. Blocking belongs on the pool thread, not Tomcat worker (Lesson 5).</p>
+
+  <h2>9. Enterprise Framing</h2>
+  <table class="reference-table">
+    <thead>
+      <tr><th>Scenario</th><th>Pattern</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Parallel downstream calls</strong></td>
+        <td>Start all CFs immediately; <code>allOf</code> + <code>join</code> or <code>thenCombine</code>. Don't call <code>get()</code> on first before starting second.</td>
+      </tr>
+      <tr>
+        <td><strong>Spring <code>@Async</code> returning CF</strong></td>
+        <td>Controller can return <code>CompletableFuture&lt;Response&gt;</code> — frees servlet thread while work runs on async executor. Must configure a real pool bean — not default per-task thread.</td>
+      </tr>
+      <tr>
+        <td><strong>Timeout + fallback</strong></td>
+        <td><code>completeOnTimeout(fallback, ...)</code> or <code>orTimeout</code> + <code>exceptionally</code>. Match SLA: degrade vs fail.</td>
+      </tr>
+      <tr>
+        <td><strong>Aggregating microservice BFF</strong></td>
+        <td>Bounded <code>ioExecutor</code>; per-dependency CF; <code>handle</code> per call for partial failure; CHM for request-scoped cache (L6).</td>
+      </tr>
+      <tr>
+        <td><strong>Not WebFlux</strong></td>
+        <td>CF composes async within threads — fine for blocking clients wrapped in <code>supplyAsync</code>. Reactive streams (Reactor) are a different model — out of scope.</td>
+      </tr>
+    </tbody>
+  </table>
+  <blockquote>Senior line: CompletableFuture is orchestration glue — not a magic fix for blocking I/O without a bounded executor and timeout story.</blockquote>
+
+  <h2>10. Classic Bugs</h2>
+  <ul>
+    <li><strong>Blocking I/O on commonPool</strong> — default <code>supplyAsync</code> starves JVM-wide parallelism.</li>
+    <li><strong><code>thenApply</code> instead of <code>thenCompose</code></strong> — nested <code>CompletableFuture&lt;CompletableFuture&lt;...&gt;&gt;</code>.</li>
+    <li><strong>Blocking <code>get()</code> inside <code>thenApply</code></strong> — stalls completion thread; deadlock risk with fixed pool.</li>
+    <li><strong>Serializing independent calls</strong> — starting B only after A's <code>get()</code> wastes latency.</li>
+    <li><strong>Ignoring <code>exceptionally</code></strong> — silent failure until terminal <code>join</code>.</li>
+    <li><strong><code>allOf</code> without checking exceptional completion</strong> — <code>join</code> throws even if <code>allOf</code> itself "succeeded."</li>
+    <li><strong><code>anyOf</code> without cancelling losers</strong> — wasted downstream load.</li>
+    <li><strong>Heavy work in sync <code>thenApply</code> on commonPool completion thread</strong> — use <code>thenApplyAsync(..., pool)</code>.</li>
+  </ul>
+
+  <p><strong>Later sections (not here):</strong> virtual threads (S08), Reactor/WebFlux deep dive, ForkJoinPool work-stealing internals.</p>
+
+  <hr>
+
+  <h2>11. Revision Notes</h2>
+  <ul>
+    <li>Future = block + no compose. CF = chain + combine.</li>
+    <li><code>supplyAsync</code>/<code>runAsync</code> — always pass executor for I/O.</li>
+    <li><code>thenCompose</code> flattens; <code>thenApply</code> maps.</li>
+    <li><code>thenCombine</code> / <code>allOf</code> = parallel deps; <code>anyOf</code> = first wins.</li>
+    <li><code>join</code> → <code>CompletionException</code>; unwrap <code>getCause()</code>.</li>
+    <li><code>orTimeout</code> fails; <code>completeOnTimeout</code> degrades.</li>
+    <li>Don't block commonPool. Don't block Tomcat thread on <code>get()</code>.</li>
+  </ul>
+
+  <hr>
+
+  <h2>12. 6 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: thenApply vs thenCompose when next step is async?</p>
+        <ol type="A">
+          <li>thenCompose — flattens nested CF.</li>
+          <li>thenApply — flattens nested CF.</li>
+          <li>thenRun — flattens nested CF.</li>
+          <li>thenAccept — flattens nested CF.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (thenCompose — flattens nested CF.)</strong></p>
+          <p><code>thenApply</code> wrapping a CF gives <code>CF&lt;CF&lt;T&gt;&gt;</code>. <code>thenCompose</code> is monadic flatMap — the interview distinction.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: supplyAsync(() -&gt; jdbc.query()) one-arg overload. Risk?</p>
+        <ol type="A">
+          <li>Blocks ForkJoin common pool.</li>
+          <li>Runs only on main thread.</li>
+          <li>Throws RejectedExecution always.</li>
+          <li>Creates unbounded platform threads.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Blocks ForkJoin common pool.)</strong></p>
+          <p>Default executor is <code>commonPool()</code>. JDBC blocks — starves parallel streams and other default-async CF work.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: future.join() when stage failed. Thrown type?</p>
+        <ol type="A">
+          <li>CompletionException wrapping cause.</li>
+          <li>ExecutionException wrapping cause.</li>
+          <li>InterruptedException wrapping cause.</li>
+          <li>RejectedExecutionException cause.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (CompletionException wrapping cause.)</strong></p>
+          <p><code>join</code> is unchecked. Real failure is <code>e.getCause()</code>. <code>get()</code> uses checked <code>ExecutionException</code>.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: exceptionally vs handle on success path?</p>
+        <ol type="A">
+          <li>handle runs; exceptionally skips.</li>
+          <li>exceptionally runs; handle skips.</li>
+          <li>Both always transform result.</li>
+          <li>Neither runs on success path.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (handle runs; exceptionally skips.)</strong></p>
+          <p><code>exceptionally</code> only on failure. <code>handle</code> always — gets <code>(result, ex)</code> with one null.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: allOf(f1, f2, f3) all complete. f2 failed. allOf result?</p>
+        <ol type="A">
+          <li>Completes normally; f2 join throws.</li>
+          <li>allOf itself completes exceptionally.</li>
+          <li>allOf cancels f1 and f3 always.</li>
+          <li>allOf blocks until f2 retries.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Completes normally; f2 join throws.)</strong></p>
+          <p><code>allOf</code> completes when all stages <em>finish</em> (including exceptionally). Check <code>isCompletedExceptionally()</code> per future before <code>join</code>.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: completeOnTimeout(fallback, 2, SECONDS) fires. Outcome?</p>
+        <ol type="A">
+          <li>Completes normally with fallback.</li>
+          <li>Completes exceptionally with timeout.</li>
+          <li>Cancels without any completion.</li>
+          <li>Blocks caller for two seconds.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Completes normally with fallback.)</strong></p>
+          <p><code>completeOnTimeout</code> is graceful degradation. <code>orTimeout</code> completes exceptionally with <code>TimeoutException</code>.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>13. Reasoning Exercises</h2>
+  <ol>
+    <li><strong>Rewrite Future hell:</strong> Three sequential blocking HTTP calls today via <code>submit().get()</code>. Sketch CF pipeline with one <code>thenCompose</code> chain + bounded <code>ioExecutor</code>.</li>
+    <li><strong>Parallel BFF:</strong> Dashboard needs User, Orders, Recommendations (independent). Start all three without waiting. Combine with <code>allOf</code>. One service down — design partial page with <code>handle</code> per call.</li>
+    <li><strong>Timeout policy:</strong> Pricing SLA 500ms; catalog SLA 2s. Where attach <code>orTimeout</code> vs <code>completeOnTimeout</code>? What does the client see?</li>
+    <li><strong>Thread budget:</strong> Tomcat 200 threads, <code>ioExecutor</code> core 50 max 100. Controller does <code>cf.get()</code> on servlet thread. Under load what breaks first?</li>
+    <li><strong>thenApply trap:</strong> <code>thenApply(u -&gt; repo.findAsync(u.id()))</code> — return type? Fix. What breaks at <code>join</code> if unfixed?</li>
+    <li><strong>anyOf replicas:</strong> Three read replicas, <code>anyOf</code> first response. How cancel the other two? What if slow replica returns stale data after fast one?</li>
+  </ol>
+
+  <p class="meta">Questions? Ask your coach — CF composition shows up in every microservices interview.</p>
+
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>

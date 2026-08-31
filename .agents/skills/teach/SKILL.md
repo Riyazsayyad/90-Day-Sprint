@@ -138,3 +138,22 @@ Glossaries, in particular, are an essential reference. Once one is created, it s
 ## `NOTES.md`
 
 The user will sometimes express preferences of how they want to be taught, or things you should keep in mind. This is the place to record those preferences, so you can refer back to them when designing lessons or working with the user.
+
+## Lesson curriculum indexing (required after every new lesson or exercise)
+
+When a lesson or exercise is **added, modified, or reordered**, update **all four** locations before finishing:
+
+1. **Dashboard** (`index.html`) — module cards, drawer lists, lesson/exercise counts.
+2. **Lessons tray** (`assets/lesson-tray.js`) — `lessons` array entry (`kind: 'exercise'` for exercises).
+3. **Navigation** — chain `<nav class="lesson-nav">` prev/next in `lessons/*.html` (and exercise prev link).
+4. **Search index** — rebuild so home-page typeahead finds the new content:
+   ```bash
+   python scripts/build-lesson-search-index.py
+   ```
+   This reads `lesson-tray.js` + HTML bodies and writes `assets/lesson-search-index.json`. Run after tray entry exists and the HTML file is on disk.
+
+Also create matching `reference/*.html` cheat sheet when the lesson has one, and a `learning-records/*.md` entry.
+
+Exercises: follow `.cursor/rules/exercise-pages.mdc` (not numbered lessons).
+
+Full spec: `.cursor/rules/lesson-indexing.mdc` and `.cursor/AGENTS.md` → Lesson Curriculum Indexing.
