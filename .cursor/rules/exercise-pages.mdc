@@ -20,7 +20,8 @@ Coding exercises are separate from lessons. Follow these rules so pages match th
 - **Reuse lesson design tokens** — never invent a dark/alternate palette:
   - `var(--text)`, `var(--muted)`, `var(--accent)`, `var(--bg)`, `var(--border)`, `var(--surface)`
 - **Buttons** match `.quiz-options button` in `lesson.css`:
-  - white background, `1px solid var(--border)`, accent border on hover, `#fafaf5` hover bg
+  - `var(--btn-bg)` / `var(--text)` / `1px solid var(--border)`; hover `var(--btn-hover)` + accent border
+  - Never hardcode `#fff` / `#fafaf5` — breaks dark theme
 - **Tables**: `border: 1px solid var(--border)`; header `background: var(--surface)`
 - **Forbidden**: ad-hoc dark colors (`#0f172a`, `#334155`, `#1e293b`, blue badge chips, etc.)
 
