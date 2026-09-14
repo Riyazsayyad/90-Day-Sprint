@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Class Loading & Metaspace — Reference</title>
+  <meta name="description" content="Quick reference: class loading phases, clinit, classloader hierarchy, delegation, Metaspace vs PermGen, classloader leaks.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/jvm-0006-class-loading-metaspace-classloader-leaks.html">&larr; Lesson 06</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Class Loading & Metaspace Cheat Sheet</h1>
+  <p class="meta">Phases, loaders, leaks</p>
+
+  <h2>1. Loading Phases</h2>
+  <ol>
+    <li><strong>Loading</strong> — bytes → Metaspace metadata + <code>Class</code> mirror</li>
+    <li><strong>Linking</strong> — verify, prepare (static defaults), resolve</li>
+    <li><strong>Initialization</strong> — <code>&lt;clinit&gt;</code> static blocks + static field init</li>
+  </ol>
+
+  <h2>2. clinit Triggers</h2>
+  <ul>
+    <li><code>new Foo()</code>, static field/method use</li>
+    <li><code>Class.forName("Foo")</code> — initializes</li>
+    <li><strong>Not:</strong> <code>new Foo[10]</code></li>
+    <li>Parent clinit before child</li>
+  </ul>
+
+  <h2>3. Classloader Hierarchy</h2>
+  <pre>
+Bootstrap (null) → Platform → Application → Custom
+  </pre>
+  <p><strong>Delegation:</strong> parent loads first (default)</p>
+  <p><strong>Breaks:</strong> SPI (<code>ServiceLoader</code>), Spring fat JAR, OSGi/JPMS awareness</p>
+
+  <h2>4. forName vs loadClass</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid var(--border); background:var(--surface);">
+      <th align="left" style="padding:0.5rem;">API</th>
+      <th align="left" style="padding:0.5rem;">Init?</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>Class.forName(name)</code></td>
+      <td style="padding:0.5rem;">Yes</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>loadClass(name)</code></td>
+      <td style="padding:0.5rem;">No</td>
+    </tr>
+  </table>
+
+  <h2>5. Metaspace vs PermGen</h2>
+  <ul>
+    <li>Java 7−: PermGen in heap — <code>MaxPermSize</code></li>
+    <li>Java 8+: Metaspace native — <code>MaxMetaspaceSize</code></li>
+    <li>Same leak patterns — different OOM message</li>
+  </ul>
+
+  <h2>6. Classloader Leaks</h2>
+  <ul>
+    <li>Redeploy without JVM restart</li>
+    <li><code>ThreadLocal</code> without <code>remove()</code> on pool threads</li>
+    <li>JDBC <code>DriverManager</code> registration</li>
+    <li>Long-lived threads / shutdown hooks with app classes</li>
+    <li>APM / Hibernate generated classes</li>
+  </ul>
+
+  <h2>7. Loader GC Condition</h2>
+  <p>No strong refs to loader + all its <code>Class</code> objects + instances unreachable → Metaspace reclaimed.</p>
+
+  <h2>8. Enterprise</h2>
+  <ul>
+    <li>K8s: new pod = fresh loaders</li>
+    <li>Dev hot-reload ≠ prod Metaspace profile</li>
+    <li>Agents add classes — monitor Metaspace</li>
+  </ul>
+
+  <h2>9. Cross-links</h2>
+  <ul>
+    <li><a href="../lessons/oop-0014-static.html">static & clinit</a></li>
+    <li><a href="../lessons/jvm-0001-jvm-runtime-architecture.html">Metaspace OOM</a></li>
+    <li><a href="../lessons/jvm-0005-jvm-flags-gc-logging-tuning.html">MaxMetaspaceSize</a></li>
+  </ul>
+</body>
+</html>

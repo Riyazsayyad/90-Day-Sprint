@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JVM Runtime Architecture — Reference</title>
+  <meta name="description" content="Quick reference: JDK vs JRE vs JVM, memory areas map, what lives where, TLAB, safepoints, OOM triage.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/jvm-0001-jvm-runtime-architecture.html">&larr; Lesson 01</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>JVM Runtime Architecture Cheat Sheet</h1>
+  <p class="meta">Memory areas, prod mapping, OOM triage</p>
+
+  <h2>1. JDK / JRE / JVM</h2>
+  <ul>
+    <li><strong>JVM</strong> — the running process (interpreter, JIT, GC, threads)</li>
+    <li><strong>JRE</strong> — JVM + runtime libraries (historical; now modular runtime)</li>
+    <li><strong>JDK</strong> — JRE + dev tools (<code>javac</code>, <code>jcmd</code>, <code>jmap</code>)</li>
+    <li>Container sees <strong>one JVM process</strong> per typical Java service</li>
+  </ul>
+
+  <h2>2. Process → JVM → Threads</h2>
+  <ul>
+    <li>1 OS process = 1 JVM (usual)</li>
+    <li>Many threads share <strong>heap + Metaspace</strong></li>
+    <li>Each thread has private <strong>stack</strong></li>
+    <li>Races = unsynchronized heap writes</li>
+  </ul>
+
+  <h2>3. Memory Areas</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid var(--border); background:var(--surface);">
+      <th align="left" style="padding:0.5rem;">Area</th>
+      <th align="left" style="padding:0.5rem;">Scope</th>
+      <th align="left" style="padding:0.5rem;">Stores</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>Heap</strong></td>
+      <td style="padding:0.5rem;">Shared</td>
+      <td style="padding:0.5rem;">Objects, arrays · <code>-Xmx</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>Stack</strong></td>
+      <td style="padding:0.5rem;">Per thread</td>
+      <td style="padding:0.5rem;">Frames, locals, ref slots · <code>-Xss</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>Metaspace</strong></td>
+      <td style="padding:0.5rem;">Shared</td>
+      <td style="padding:0.5rem;">Class metadata, statics · <code>MaxMetaspaceSize</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>Code Cache</strong></td>
+      <td style="padding:0.5rem;">Shared</td>
+      <td style="padding:0.5rem;">JIT native code</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>Direct / Native</strong></td>
+      <td style="padding:0.5rem;">Process</td>
+      <td style="padding:0.5rem;">NIO buffers, Netty · <code>MaxDirectMemorySize</code></td>
+    </tr>
+  </table>
+
+  <h2>4. What Lives Where</h2>
+  <ul>
+    <li>Local primitive → <strong>stack</strong></li>
+    <li>Local reference → <strong>stack slot</strong> → object on <strong>heap</strong></li>
+    <li>Instance field (any type) → inside <strong>heap object</strong></li>
+    <li><code>static</code> field → <strong>Metaspace</strong> (ref targets heap object)</li>
+    <li>Class bytecode / vtable → <strong>Metaspace</strong></li>
+    <li>Array → always <strong>heap</strong> (reference may be on stack)</li>
+  </ul>
+
+  <h2>5. TLAB (preview)</h2>
+  <ul>
+    <li>Per-thread Eden slice — bump-pointer allocation</li>
+    <li>Avoids global lock on most <code>new</code></li>
+    <li>Detail in S02</li>
+  </ul>
+
+  <h2>6. Safepoints & STW</h2>
+  <ul>
+    <li><strong>Safepoint</strong> — bytecode location where thread can stop safely</li>
+    <li>Needed for GC roots, JIT, <strong>thread dumps</strong></li>
+    <li><strong>STW</strong> — all mutators paused at safepoints</li>
+    <li>Dump stacks = coherent safepoint snapshot</li>
+  </ul>
+
+  <h2>7. OOM Triage</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid var(--border); background:var(--surface);">
+      <th align="left" style="padding:0.5rem;">Message</th>
+      <th align="left" style="padding:0.5rem;">Pool</th>
+      <th align="left" style="padding:0.5rem;">Fix direction</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>Java heap space</code></td>
+      <td style="padding:0.5rem;">Heap</td>
+      <td style="padding:0.5rem;">Leak / retention / paginate / -Xmx</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>Metaspace</code></td>
+      <td style="padding:0.5rem;">Class metadata</td>
+      <td style="padding:0.5rem;">Classloader leak / codegen</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>Direct buffer memory</code></td>
+      <td style="padding:0.5rem;">Off-heap direct</td>
+      <td style="padding:0.5rem;">Netty/NIO release / pool limits</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>unable to create native thread</code></td>
+      <td style="padding:0.5rem;">OS threads</td>
+      <td style="padding:0.5rem;">Bounded pools / VT / ulimit</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>Stack overflow</code></td>
+      <td style="padding:0.5rem;">Thread stack</td>
+      <td style="padding:0.5rem;">Fix recursion / depth</td>
+    </tr>
+  </table>
+
+  <h2>8. Container Headroom Rule</h2>
+  <p><code>-Xmx</code> ≠ cgroup limit. Leave 25–40% for Metaspace, stacks, Code Cache, direct memory, native GC overhead.</p>
+
+  <h2>9. Cross-links</h2>
+  <ul>
+    <li><a href="../lessons/oop-0003-stack-vs-heap.html">Stack vs Heap</a></li>
+    <li><a href="../lessons/oop-0002-class-vs-object.html">Class in Metaspace</a></li>
+    <li><a href="../lessons/concurrency-0001-thread-fundamentals.html">Threads Share Heap</a></li>
+  </ul>
+</body>
+</html>

@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 5 — JVM Flags, GC Logging & Tuning</title>
+  <meta name="description" content="JVM flags and GC tuning from a Senior Backend perspective: Xms/Xmx, MaxRAMPercentage, Metaspace limits, unified GC logging, G1 knobs, OOM triage, Docker 12-factor JVM practices.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="jvm-0004-garbage-collectors-selection.html">&larr; Lesson 4</a> &middot;
+    Lesson 5 of 8 &middot;
+    <a href="jvm-0006-class-loading-metaspace-classloader-leaks.html">Lesson 6 &rarr;</a> &middot;
+    <a href="../reference/jvm-0005-jvm-flags-gc-logging-tuning.html">Cheat sheet</a>
+  </nav>
+
+  <h1>JVM Flags, GC Logging & Tuning</h1>
+  <p class="meta">~35 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; builds on <a href="jvm-0004-garbage-collectors-selection.html">S04 Collector Choice</a>, <a href="jvm-0001-jvm-runtime-architecture.html">S01 OOM Map</a>, <a href="oop-0003-stack-vs-heap.html">Stack vs Heap</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Can you read a unified GC log line and extract pause time, cause, and heap before/after? Can you explain why prod sets <code>-Xms</code> = <code>-Xmx</code> and why a 32 GB bare-metal heap config kills a 2 GB pod? Flags are levers — interviewers want judgment: measure first, tune second, fix retention before either.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html">Oracle — <code>java</code> command (SE 21)</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html#using-the-jvm-tool-interface">Unified JVM Logging</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/gctooling/garbage-first-garbage-collector.html#garbage_first_garbage_collector_tuning">Oracle — G1 Tuning</a>
+  </p>
+
+  <h2>1. Heap Sizing — <code>-Xms</code> / <code>-Xmx</code></h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Flag</th>
+        <th>Meaning</th>
+        <th>Prod note</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>-Xms</code></td>
+        <td>Initial heap size</td>
+        <td>JVM may grow heap from here up to <code>-Xmx</code></td>
+      </tr>
+      <tr>
+        <td><code>-Xmx</code></td>
+        <td>Maximum heap size</td>
+        <td>Hard cap for object heap — not total process memory</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Why equal <code>-Xms</code> = <code>-Xmx</code> in production</h3>
+  <ul>
+    <li>Avoids repeated heap <strong>resize</strong> cycles as load ramps — resize can trigger extra GC and OS allocation churn.</li>
+    <li>Predictable memory footprint for capacity planning and K8s resource requests.</li>
+    <li>Eliminates "heap still growing" surprises during traffic spike.</li>
+  </ul>
+  <p>Dev laptops may use smaller <code>-Xms</code> to save RAM. Prod APIs: set both to the same validated value.</p>
+
+  <h3>Container: <code>-XX:MaxRAMPercentage</code></h3>
+  <p>JDK 10+ reads cgroup memory limit and can derive heap ergonomically:</p>
+  <pre><code>-XX:MaxRAMPercentage=75.0
+-XX:InitialRAMPercentage=75.0</code></pre>
+  <ul>
+    <li>Percentage of <strong>container-detected RAM</strong> — not host RAM.</li>
+    <li>Still leaves room for Metaspace, stacks, direct memory, native GC structures (<a href="jvm-0001-jvm-runtime-architecture.html">S01</a>).</li>
+    <li><strong>Don't set 100%.</strong> 50–75% common for Spring + Netty; validate with metrics.</li>
+    <li>Explicit <code>-Xmx</code> overrides percentage-based defaults when both set — know precedence on your JDK.</li>
+  </ul>
+
+  <blockquote>12-factor trap: copying <code>-Xmx32g</code> from bare-metal into a 2 GiB K8s pod → instant OOMKill. Size for <em>the container</em>.</blockquote>
+
+  <h2>2. Metaspace — <code>-XX:MaxMetaspaceSize</code></h2>
+  <p>Class metadata lives off-heap in Metaspace — <strong>not</strong> counted in <code>-Xmx</code>.</p>
+  <ul>
+    <li>By default Metaspace grows until OS limit — unbounded growth can OOMKill the process.</li>
+    <li><code>-XX:MaxMetaspaceSize=256m</code> — hard cap; fail fast with <code>OutOfMemoryError: Metaspace</code> instead of silent cgroup kill.</li>
+    <li><strong>When it blows up:</strong> Spring fat classpath, Hibernate enhancement, bytecode agents (APM, Mockito inline), dynamic proxies, Groovy/scripting, hot redeploy without restart.</li>
+    <li>Fix: classloader leak investigation (S06), not bigger <code>-Xmx</code>.</li>
+  </ul>
+
+  <h2>3. GC Logging — Unified JVM Logging (<code>-Xlog</code>)</h2>
+  <p>Java 9+ replaced legacy <code>-XX:+PrintGCDetails</code> with unified logging. Enable from day one:</p>
+  <pre><code>-Xlog:gc*,gc+heap=debug,gc+age=trace,safepoint:file=/var/log/gc.log:utctime,level,pid,tags:filecount=5,filesize=20M</code></pre>
+
+  <h3>3.1 What to extract from a log line</h3>
+  <p>Example G1 Young GC (simplified — format varies slightly by JDK):</p>
+  <pre><code>[2026-09-15T10:23:01.456+0000][info][gc] GC(142) Pause Young (Normal) (G1 Evacuation Pause)
+  142M-&gt;48M(512M) 12.345ms</code></pre>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Field</th>
+        <th>Meaning</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>GC(142)</code></td>
+        <td>GC cycle number — correlate across log</td>
+      </tr>
+      <tr>
+        <td><code>Pause Young (Normal)</code> / <code>Mixed</code></td>
+        <td><strong>Cause / type</strong> — Young vs Mixed vs Full</td>
+      </tr>
+      <tr>
+        <td><code>142M-&gt;48M(512M)</code></td>
+        <td><strong>Heap before → after (capacity)</strong> — live set dropped 142→48 MB of 512 MB cap</td>
+      </tr>
+      <tr>
+        <td><code>12.345ms</code></td>
+        <td><strong>Pause time</strong> — STW duration for this event</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>3.2 Reading for incidents</h3>
+  <ul>
+    <li><strong>Pause time trending up</strong> + <strong>heap after GC rising</strong> → retention / Old gen filling (<a href="jvm-0003-garbage-collection-fundamentals.html">S03</a>).</li>
+    <li><strong>Frequent Full GC</strong> with tiny reclaim → leak or heap undersized for live set.</li>
+    <li><strong>Humongous allocations</strong> — look for <code>humongous</code> tags in detailed G1 logs.</li>
+    <li>Correlate GC timestamp with APM trace p99 — prove GC caused latency spike.</li>
+  </ul>
+
+  <h2>4. Key G1 Knobs — What They Do (Not Gospel Recipes)</h2>
+  <p>You chose G1 in <a href="jvm-0004-garbage-collectors-selection.html">S04</a>. Interviewers ask what these mean — not "always set X":</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Flag / concept</th>
+        <th>What it does</th>
+        <th>Tuning caution</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>-XX:MaxGCPauseMillis</code></td>
+        <td>Soft pause <strong>goal</strong> G1 adapts toward (default 200)</td>
+        <td>Lower = more frequent GC, may hurt throughput; not a hard cap</td>
+      </tr>
+      <tr>
+        <td><code>-XX:G1HeapRegionSize</code></td>
+        <td>Size of each G1 region (1–32 MB, power of 2)</td>
+        <td>Larger regions → fewer regions but bigger humongous threshold</td>
+      </tr>
+      <tr>
+        <td><strong>IHOP</strong> (<code>InitiatingHeapOccupancyPercent</code>)</td>
+        <td>Old gen occupancy % that starts concurrent marking cycle</td>
+        <td>Too low → marking overhead; too high → Mixed GC rushed under pressure</td>
+      </tr>
+      <tr>
+        <td><code>-XX:G1MixedGCCountTarget</code></td>
+        <td>Spread Old region reclaim across N Mixed GCs</td>
+        <td>Smoother pauses vs longer reclaim tail</td>
+      </tr>
+      <tr>
+        <td><code>-XX:ParallelGCThreads</code> / <code>ConcGCThreads</code></td>
+        <td>STW worker count / concurrent marker threads</td>
+        <td>Match CPU limits in K8s — don't assume all host cores</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <blockquote>Senior rule: change one knob at a time under <strong>representative load</strong>. Document before/after pause p99 and throughput.</blockquote>
+
+  <h2>5. When Tuning Helps vs Hurts</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Tuning helps</th>
+        <th>Tuning hurts / wastes time</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Proven GC pauses breach SLO after code is clean</td>
+        <td>Retention leak still present — flags mask symptoms</td>
+      </tr>
+      <tr>
+        <td>Heap consistently at cap with healthy reclaim pattern</td>
+        <td>Copy-paste flags from different heap size / workload</td>
+      </tr>
+      <tr>
+        <td>Load test reproduces prod allocation rate</td>
+        <td>Tuning on idle dev laptop</td>
+      </tr>
+      <tr>
+        <td>Collector swap (G1 → ZGC) with metrics baseline</td>
+        <td>20 flags changed at once — impossible to attribute</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>Correct sequence:</strong> enable GC logs → load test → fix retention/allocation → set heap/container ratio → adjust pause goal or collector → individual G1 knobs last.</p>
+
+  <h2>6. OOM Types — Map to Fix</h2>
+  <p>Expand <a href="jvm-0001-jvm-runtime-architecture.html">S01</a> triage table for on-call:</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Error</th>
+        <th>Pool</th>
+        <th>First fix direction</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>Java heap space</code></td>
+        <td><code>-Xmx</code> heap</td>
+        <td>Heap dump, find dominator tree, paginate, bound caches; raise <code>-Xmx</code> only if live set is legitimate</td>
+      </tr>
+      <tr>
+        <td><code>Metaspace</code></td>
+        <td>Class metadata</td>
+        <td>Classloader leak, agents, dynamic codegen; <code>MaxMetaspaceSize</code> as guardrail</td>
+      </tr>
+      <tr>
+        <td><code>unable to create native thread</code></td>
+        <td>OS thread budget</td>
+        <td>Bounded pools, VT for I/O, lower <code>-Xss</code>, raise ulimit</td>
+      </tr>
+      <tr>
+        <td><code>Direct buffer memory</code></td>
+        <td>Off-heap NIO</td>
+        <td>Netty pool sizing, <code>MaxDirectMemorySize</code>, fix missing release</td>
+      </tr>
+      <tr>
+        <td><code>GC overhead limit exceeded</code></td>
+        <td>GC spending &gt;98% time with &lt;2% reclaim</td>
+        <td>Heap too small for live set or severe leak — not "tune IHOP"</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>7. <code>OutOfMemoryError</code> vs <code>StackOverflowError</code></h2>
+  <p>From <a href="oop-0003-stack-vs-heap.html">Stack vs Heap</a>:</p>
+  <ul>
+    <li><strong><code>OutOfMemoryError</code></strong> — a <em>memory pool</em> exhausted (heap, Metaspace, direct, native threads). JVM may continue if only one thread failed allocation — often process unhealthy soon after.</li>
+    <li><strong><code>StackOverflowError</code></strong> — thread's <strong>stack</strong> exceeded depth limit (infinite recursion, deep XML/JSON). Not heap. Fix algorithm / use iterative parser. Flag: <code>-Xss</code> increases stack per thread — multiplies across thread count.</li>
+  </ul>
+  <pre><code>void recurse() { recurse(); }  // StackOverflowError — stack frames, not heap
+
+List&lt;byte[]&gt; leak = new ArrayList&lt;&gt;();
+while (true) leak.add(new byte[10_000_000]);  // OutOfMemoryError: Java heap space</code></pre>
+
+  <h2>8. Enterprise — 12-Factor JVM in Docker</h2>
+  <ul>
+    <li><strong>Config in environment</strong> — <code>JAVA_OPTS</code> / <code>JDK_JAVA_OPTIONS</code> in K8s manifest, not baked into JAR.</li>
+    <li><strong>Stateless processes</strong> — heap doesn't assume local disk; logs to stdout/file with rotation sidecar.</li>
+    <li><strong>Port binding</strong> — one JVM per container; resources match <code>resources.limits.memory</code>.</li>
+    <li><strong>Disposability</strong> — fast startup; don't need 10 min heap warm-up if <code>-Xms</code>=<code>-Xmx</code>.</li>
+    <li><strong>Dev/prod parity</strong> — same major JDK, same collector family, similar heap <em>ratio</em> (not same absolute GB).</li>
+  </ul>
+
+  <h3>Starter template (2 GiB pod, Spring API)</h3>
+  <pre><code>ENV JAVA_OPTS="\
+  -XX:InitialRAMPercentage=50.0 \
+  -XX:MaxRAMPercentage=50.0 \
+  -XX:MaxMetaspaceSize=256m \
+  -XX:+HeapDumpOnOutOfMemoryError \
+  -XX:HeapDumpPath=/tmp/heapdump.hprof \
+  -Xlog:gc*:file=/tmp/gc.log:utctime,level,tags:filecount=3,filesize=10M"</code></pre>
+  <p>Adjust percentages after observing RSS in staging. Add <code>-XX:+UseZGC</code> only after G1 data proves need (<a href="jvm-0004-garbage-collectors-selection.html">S04</a>).</p>
+
+  <p><strong>Out of scope:</strong> custom GC implementation, JFR full course (S08), Spring Actuator metrics catalog (M05).</p>
+
+  <hr>
+
+  <h2>9. Revision Notes</h2>
+  <ul>
+    <li>Prod: <code>-Xms</code> = <code>-Xmx</code> for stable footprint.</li>
+    <li>Containers: <code>MaxRAMPercentage</code> — never 100%; validate off-heap headroom.</li>
+    <li><code>MaxMetaspaceSize</code> — guardrail for class metadata; fix loader leaks.</li>
+    <li>GC logs: pause time, cause, before→after heap.</li>
+    <li>G1 knobs: pause goal, region size, IHOP — understand before changing.</li>
+    <li>Tune under load; fix retention first.</li>
+    <li>OOM message tells which pool; StackOverflow = stack not heap.</li>
+  </ul>
+
+  <hr>
+
+  <h2>10. Reasoning Exercises</h2>
+  <ol>
+    <li>
+      <p><strong>GC log: <code>Pause Full (Allocation Failure) 890M-&gt;885M(1024M) 4200ms</code>. Interpretation?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p>Full GC reclaimed only 5 MB in 4.2 s — live set ~885 MB near 1 GB cap. Likely leak or legitimately huge live set. Heap dump before raising <code>-Xmx</code>.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong><code>-Xmx</code> raised 4→8 GB. Metaspace OOM continues. Next?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p>Wrong pool. Investigate class loading / agents / classloader retention. Set <code>MaxMetaspaceSize</code> to fail fast while debugging.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>Dev sets <code>MaxGCPauseMillis=50</code> on batch job. Throughput drops 30%. Why?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p>Aggressive pause goal → more frequent, smaller collections → more GC CPU overhead. Batch may prefer Parallel GC or default 200 ms goal.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>2 GiB pod, <code>MaxRAMPercentage=90</code>, OOMKilled no Java OOM. Cause?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p>Heap ~1.8 GiB leaves almost nothing for Metaspace, threads, direct, native. cgroup kills process. Lower to ~50–60%.</p>
+      </details>
+    </li>
+  </ol>
+
+  <hr>
+
+  <h2>11. 6 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Why set -Xms equal -Xmx in prod?</p>
+        <ol type="A">
+          <li>Avoid heap resize churn at ramp.</li>
+          <li>Disable garbage collection fully.</li>
+          <li>Force Metaspace into heap area.</li>
+          <li>Required for compressed oops only.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Avoid heap resize churn at ramp.)</strong></p>
+          <p>Fixed heap size gives predictable memory and avoids growth-triggered GC during load increase.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: MaxRAMPercentage applies to what?</p>
+        <ol type="A">
+          <li>Container-detected memory limit.</li>
+          <li>Host physical RAM always only.</li>
+          <li>Metaspace size cap exclusively.</li>
+          <li>Per-thread stack size bytes.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Container-detected memory limit.)</strong></p>
+          <p>JDK reads cgroup limit to derive ergonomic heap sizing in containers.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: GC log 200M-&gt;80M(512M) 15ms means?</p>
+        <ol type="A">
+          <li>Heap shrank live set in pause.</li>
+          <li>Metaspace was fully cleared.</li>
+          <li>Stack overflow was recovered.</li>
+          <li>Thread count dropped by half.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Heap shrank live set in pause.)</strong></p>
+          <p>Before→after heap usage of 512M capacity; 15ms STW pause for that GC event.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: IHOP on G1 controls what?</p>
+        <ol type="A">
+          <li>When concurrent marking starts.</li>
+          <li>Thread stack depth maximum.</li>
+          <li>TLAB size per thread bytes.</li>
+          <li>Direct buffer pool cap limit.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (When concurrent marking starts.)</strong></p>
+          <p>Initiating Heap Occupancy Percent triggers concurrent mark based on Old gen fill level.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: StackOverflowError indicates failure in?</p>
+        <ol type="A">
+          <li>Thread call stack depth.</li>
+          <li>Java heap object allocation.</li>
+          <li>Metaspace class metadata.</li>
+          <li>Direct byte buffer off-heap.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Thread call stack depth.)</strong></p>
+          <p>Stack overflow is per-thread stack — recursion or deep parsing. Not heap OOM.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: First step before aggressive GC flag tuning?</p>
+        <ol type="A">
+          <li>Load test with GC logs enabled.</li>
+          <li>Set Xmx to host RAM size.</li>
+          <li>Disable all safepoint polls.</li>
+          <li>Switch to Serial GC always.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Load test with GC logs enabled.)</strong></p>
+          <p>Measure pause distribution and retention under representative load before changing knobs.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>12. Bridge to Next Lesson</h2>
+  <ul>
+    <li><strong>S06</strong> — class loaders & Metaspace leaks behind Metaspace OOM</li>
+    <li><strong>S08</strong> — heap dumps, MAT, JFR when logs prove retention</li>
+    <li><strong>S04</strong> — collector swap only after logs + load test baseline</li>
+  </ul>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="jvm-0004-garbage-collectors-selection.html">&larr; Lesson 4</a> &middot;
+    <a href="jvm-0006-class-loading-metaspace-classloader-leaks.html">Lesson 6 &rarr;</a> &middot;
+    <a href="../reference/jvm-0005-jvm-flags-gc-logging-tuning.html">Cheat sheet</a>
+  </nav>
+</body>
+</html>

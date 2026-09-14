@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 4 — Garbage Collectors & Selection</title>
+  <meta name="description" content="Java garbage collector comparison from a Senior Backend perspective: Serial, Parallel, CMS legacy, G1 regions and mixed GC, ZGC and Shenandoah, selection matrix, JDK 21 defaults, and K8s Spring Boot GC practices.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="jvm-0003-garbage-collection-fundamentals.html">&larr; Lesson 3</a> &middot;
+    Lesson 4 of 8 &middot;
+    <a href="jvm-0005-jvm-flags-gc-logging-tuning.html">Lesson 5 &rarr;</a> &middot;
+    <a href="../reference/jvm-0004-garbage-collectors-selection.html">Cheat sheet</a>
+  </nav>
+
+  <h1>Garbage Collectors & Selection</h1>
+  <p class="meta">~35 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; builds on <a href="jvm-0003-garbage-collection-fundamentals.html">S03 GC Fundamentals</a>, <a href="jvm-0001-jvm-runtime-architecture.html">S01 Memory Map</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Can you name the default collector on JDK 21, explain when G1 Mixed GC fires, and why you'd pick ZGC over Parallel for a latency-sensitive API — without reciting 40 flags? Can you defend "defaults + measure first" on a new Spring Boot service in Kubernetes? Collectors are a product choice tied to SLO, heap size, and JDK version — not a religion.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/en/java/javase/21/gctooling/available_collectors.html">Oracle — Available Collectors (SE 21)</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/gctooling/garbage-first-garbage-collector.html">Oracle — G1 GC</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/gctooling/z-garbage-collector.html">Oracle — ZGC</a>
+  </p>
+
+  <h2>1. Collector Families — Overview</h2>
+  <p><a href="jvm-0003-garbage-collection-fundamentals.html">S03</a> taught mark/copy/STW vocabulary. Each collector implements those phases differently.</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Collector</th>
+        <th>Goal</th>
+        <th>Typical use</th>
+        <th>JDK 21 status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Serial</strong></td>
+        <td>Single-threaded, small footprint</td>
+        <td>Embedded, tiny heaps, client-style apps</td>
+        <td>Available (<code>-XX:+UseSerialGC</code>)</td>
+      </tr>
+      <tr>
+        <td><strong>Parallel</strong> (Throughput)</td>
+        <td>Maximize GC throughput — parallel STW workers</td>
+        <td>Batch jobs, ETL, offline compute — long pauses OK</td>
+        <td>Available (<code>-XX:+UseParallelGC</code>)</td>
+      </tr>
+      <tr>
+        <td><strong>CMS</strong></td>
+        <td>Concurrent Old gen (legacy low-latency attempt)</td>
+        <td><strong>Deprecated — know it existed</strong>, replaced by G1/ZGC</td>
+        <td>Removed in modern JDKs</td>
+      </tr>
+      <tr>
+        <td><strong>G1</strong> (Garbage-First)</td>
+        <td>Region-based, predictable pause target</td>
+        <td><strong>Default</strong> on server JDK 9+ for most heaps</td>
+        <td>Default collector</td>
+      </tr>
+      <tr>
+        <td><strong>ZGC</strong></td>
+        <td>Sub-ms to low-ms pauses, scalable heap</td>
+        <td>Latency-sensitive APIs, large heaps, JDK 15+ prod-ready</td>
+        <td>Available (<code>-XX:+UseZGC</code>); generational ZGC evolving</td>
+      </tr>
+      <tr>
+        <td><strong>Shenandoah</strong></td>
+        <td>Concurrent compaction, low pause</td>
+        <td>Similar niche to ZGC; OpenJDK / some vendors</td>
+        <td>Available on supported builds (<code>-XX:+UseShenandoahGC</code>)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <blockquote>Interview one-liner: "CMS is legacy — if someone says they tune CMS in 2025, ask which JDK they're actually on."</blockquote>
+
+  <h2>2. G1 — Default Workhorse</h2>
+  <p>G1 splits the heap into equal-sized <strong>regions</strong> (~1–32 MB, ergonomic). No fixed contiguous Young/Old layout — regions are labeled Eden, Survivor, or Old dynamically.</p>
+
+  <h3>2.1 Key mechanics</h3>
+  <ul>
+    <li><strong>Young GC:</strong> collect all Eden + Survivor regions — copying live objects to new regions. STW, usually short.</li>
+    <li><strong>Concurrent marking:</strong> background phase tracks live data across Old regions between Young GCs.</li>
+    <li><strong>Mixed GC:</strong> collects <em>some</em> Old regions (highest garbage first — "Garbage-First") along with Young. STW but bounded by pause target.</li>
+    <li><strong>Humongous objects:</strong> larger than half a region → allocated in dedicated contiguous humongous regions in Old. Expensive; avoid huge single allocations when possible (<a href="jvm-0002-heap-regions-tlab-object-layout.html">S02</a>).</li>
+  </ul>
+
+  <pre>
+G1 region map (simplified):
+
+  [E][E][E][S][O][O][H][O][E][O]...
+   Eden  Sur  Old Humongous
+
+Young GC  → evacuate Eden+Survivor
+Mixed GC  → Young + subset of Old regions (garbage-first)
+  </pre>
+
+  <h3>2.2 Pause target</h3>
+  <p><code>-XX:MaxGCPauseMillis=200</code> (default 200 ms) — <strong>goal, not guarantee.</strong> G1 adapts region collection set to try to stay near target. Tighter target → more frequent smaller collections → may reduce throughput.</p>
+
+  <p><strong>When Mixed GC hurts p99:</strong> Old regions with moderate live data → evacuation pauses spike. Fix retention / humongous objects before chasing flags (S05).</p>
+
+  <h2>3. ZGC & Shenandoah — Low-Latency Collectors</h2>
+  <p>Both target <strong>pause times independent of heap size</strong> (within reason) — critical when heap is 16–64 GB+ and G1 Mixed GC pauses breach SLO.</p>
+
+  <h3>3.1 ZGC (interview level)</h3>
+  <ul>
+    <li><strong>Colored pointers</strong> — metadata bits in reference encode GC state; concurrent threads use load barriers to see correct object version.</li>
+    <li><strong>Concurrent relocation</strong> — moves objects while app runs; short STW phases for root scanning / phase flip, not full heap copy.</li>
+    <li>Pauses often <strong>sub-millisecond to a few ms</strong> on typical configs.</li>
+    <li><strong>JDK 21+:</strong> generational ZGC (improving young-object collection) — check release notes for your exact JDK; awareness matters in interviews.</li>
+  </ul>
+
+  <h3>3.2 Shenandoah (interview level)</h3>
+  <ul>
+    <li><strong>Concurrent compaction</strong> — Brooks forwarding pointers let app threads read objects while they move.</li>
+    <li>Similar positioning: low pause, concurrent Old collection.</li>
+    <li>Availability depends on JDK distribution (common in OpenJDK builds; verify vendor image).</li>
+  </ul>
+
+  <blockquote>Senior trap: "ZGC uses no STW at all" — false. STW exists but is tiny; don't claim zero pauses.</blockquote>
+
+  <h2>4. Parallel GC — Throughput First</h2>
+  <ul>
+    <li>Young: parallel copying STW. Old: parallel mark-sweep-compact STW.</li>
+    <li><strong>Maximizes application throughput</strong> (% time not in GC) on multi-core batch workers.</li>
+    <li>Pauses scale with heap + live set — <strong>seconds possible</strong> on large Old gen.</li>
+    <li>Pick when: offline jobs, report generation, no interactive SLA, plenty of cores, pauses scheduled off-peak.</li>
+  </ul>
+
+  <h2>5. Selection Matrix</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Factor</th>
+        <th>Favor</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Latency SLO (p99 &lt; 100 ms)</strong></td>
+        <td>G1 default; ZGC/Shenandoah if Mixed GC spikes</td>
+        <td>Measure pause distribution first</td>
+      </tr>
+      <tr>
+        <td><strong>Throughput / batch</strong></td>
+        <td>Parallel GC</td>
+        <td>Accept STW pauses; maximize jobs/hour</td>
+      </tr>
+      <tr>
+        <td><strong>Heap &lt; 4 GB, simple service</strong></td>
+        <td>G1 defaults usually fine</td>
+        <td>Don't over-engineer collector choice</td>
+      </tr>
+      <tr>
+        <td><strong>Heap 32 GB+ API</strong></td>
+        <td>Evaluate ZGC</td>
+        <td>G1 Mixed GC pause can grow with heap</td>
+      </tr>
+      <tr>
+        <td><strong>Container limit 512 MiB–2 GiB</strong></td>
+        <td>G1 + sensible <code>-Xmx</code> headroom</td>
+        <td>ZGC has overhead at tiny heaps — verify benchmarks</td>
+      </tr>
+      <tr>
+        <td><strong>JDK version</strong></td>
+        <td>JDK 17 LTS / 21 LTS</td>
+        <td>CMS gone; ZGC production-ready 15+; know your vendor build</td>
+      </tr>
+      <tr>
+        <td><strong>Humongous allocation pattern</strong></td>
+        <td>Fix allocation; then G1 or ZGC</td>
+        <td>Large byte arrays bypass Eden benefits</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>6. When NOT to Tune</h2>
+  <p>Senior discipline beats flag shopping:</p>
+  <ol>
+    <li><strong>New service, no prod data</strong> — use JDK defaults (G1 on 21). Ship.</li>
+    <li><strong>No GC logs or metrics</strong> — tuning blind is guessing.</li>
+    <li><strong>Retention bug present</strong> — collector won't fix static <code>Map</code> leak (<a href="jvm-0003-garbage-collection-fundamentals.html">S03</a>).</li>
+    <li><strong>Pause problem not proven</strong> — profile p99; maybe it's DB not GC.</li>
+    <li><strong>Copy-paste flags from blog</strong> — heap size, allocation rate, and JDK version differ.</li>
+  </ol>
+  <blockquote>Correct order: <strong>measure → fix code/retention → set heap/container ratio → then collector/flags if SLO still breached.</strong></blockquote>
+
+  <h2>7. JDK 21+ Defaults & Migration Notes</h2>
+  <ul>
+    <li><strong>Default collector:</strong> G1 (<code>-XX:+UseG1GC</code> implicit on server-class machines).</li>
+    <li><strong>CMS:</strong> removed — migrate stories to G1 or ZGC.</li>
+    <li><strong>Parallel:</strong> opt-in for throughput workloads; was default pre-Java 9.</li>
+    <li><strong>ZGC:</strong> <code>-XX:+UseZGC</code> — strong for large low-latency heaps; generational mode improving young-gen efficiency (check JDK 21 release notes).</li>
+    <li><strong>Container awareness:</strong> JDK 10+ respects cgroup memory/CPU for default heap ergonomics — still validate <code>-Xmx</code> vs limit manually.</li>
+    <li><strong>Migration from Java 8:</strong> expect different GC log format (Unified JVM Logging — S05); G1 not Parallel; review pause profiles after upgrade.</li>
+  </ul>
+
+  <h2>8. Enterprise — Spring Boot on Kubernetes</h2>
+
+  <h3>8.1 Heap vs container memory</h3>
+  <pre><code># Example — 1 GiB pod limit
+JAVA_OPTS="-Xms512m -Xmx512m"   # heap only
+# Leave ~256–400 MiB for Metaspace, threads, direct, native, Code Cache</code></pre>
+  <p>Rule: <code>-Xmx</code> ≈ <strong>50–75%</strong> of cgroup limit for typical Spring + Netty services — validate with <code>docker stats</code> / cgroup metrics, not theory alone.</p>
+
+  <h3>8.2 GC logging in prod (awareness — parsing in S05)</h3>
+  <p>Enable structured GC logs from day one on new services:</p>
+  <pre><code>-Xlog:gc*,gc+age=trace,safepoint:file=/var/log/gc.log:utctime,level,pid,tags:filecount=5,filesize=20M</code></pre>
+  <ul>
+    <li>Correlate GC pause timestamps with APM p99 spikes.</li>
+    <li>Alert on <strong>Full GC</strong> frequency, not every Young GC.</li>
+    <li>Ship logs to centralized observability (ELK, Datadog, etc.) — flags only in S05.</li>
+  </ul>
+
+  <h3>8.3 Spring Boot specifics</h3>
+  <ul>
+    <li>Actuator + Micrometer: JVM memory gauges, GC pause metrics (if binder configured).</li>
+    <li>Virtual threads (Java 21): allocation pattern shifts — still G1 default; monitor Young GC rate.</li>
+    <li>Don't set exotic GC flags in <code>application.properties</code> — JVM opts belong in container env / entrypoint.</li>
+  </ul>
+
+  <p><strong>Out of scope:</strong> exhaustive flag catalog (S05), line-by-line log parsing (S05), classloader leaks (S06), async-profiler (S08).</p>
+
+  <hr>
+
+  <h2>9. Revision Notes</h2>
+  <ul>
+    <li>Serial — tiny; Parallel — throughput; CMS — legacy dead.</li>
+    <li>G1 — region-based default; Young + Mixed GC; humongous regions; pause <em>goal</em>.</li>
+    <li>ZGC / Shenandoah — concurrent low pause; colored pointers / forwarding (concept level).</li>
+    <li>Pick collector from SLO + heap + JDK — measure before tuning.</li>
+    <li>K8s: <code>-Xmx</code> &lt; container limit; GC logs from day one.</li>
+    <li>JDK 21 default = G1; ZGC opt-in for latency at scale.</li>
+  </ul>
+
+  <hr>
+
+  <h2>10. Reasoning Exercises</h2>
+  <ol>
+    <li>
+      <p><strong>Batch nightly job, 8 GB heap, 4 s GC pause acceptable at 2 AM. Collector?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>Parallel GC</strong> — maximize throughput; pauses off-peak acceptable. G1/ZGC overhead not justified unless pause causes job overrun.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>API p99 120 ms SLO, 24 GB heap, G1 Mixed GC pauses 300 ms. Next step?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p>Measure allocation + retention first. If code clean, trial <strong>ZGC</strong> on JDK 21. Don't only tighten <code>MaxGCPauseMillis</code> — it's a goal not a cap.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>512 MiB K8s pod, <code>-Xmx480m</code>. OOMKilled. GC issue?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>Probably not GC algorithm</strong> — off-heap exceeded cgroup (<a href="jvm-0001-jvm-runtime-architecture.html">S01</a>). Lower <code>-Xmx</code> to ~60% of limit; check direct memory / thread stacks.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>Candidate says "we use CMS for low latency." Red flag?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p>Yes if on JDK 17+. CMS removed. Story may be stale or mislabeled — likely G1 or ZGC in practice. Probe JDK version and actual flags.</p>
+      </details>
+    </li>
+  </ol>
+
+  <hr>
+
+  <h2>11. 6 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Default GC on JDK 21 server JVM?</p>
+        <ol type="A">
+          <li>G1 Garbage-First collector.</li>
+          <li>Parallel throughput collector.</li>
+          <li>Concurrent Mark Sweep only.</li>
+          <li>Serial single-thread collector.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (G1 Garbage-First collector.)</strong></p>
+          <p>G1 is default since Java 9 on server-class machines. Parallel and ZGC are opt-in.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: G1 Mixed GC collects which regions?</p>
+        <ol type="A">
+          <li>Young plus some Old regions.</li>
+          <li>Only Eden on every cycle.</li>
+          <li>Metaspace class metadata bytes.</li>
+          <li>Entire heap every single time.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Young plus some Old regions.)</strong></p>
+          <p>Mixed GC reclaims garbage-heavy Old regions alongside Young evacuation — bounded by pause target.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: MaxGCPauseMillis on G1 guarantees what?</p>
+        <ol type="A">
+          <li>Soft pause target not hard cap.</li>
+          <li>Zero stop-the-world ever again.</li>
+          <li>Heap cannot grow past value.</li>
+          <li>Young gen size fixed in bytes.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Soft pause target not hard cap.)</strong></p>
+          <p>G1 uses the value to guide collection set sizing. Spikes still possible under pressure.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: ZGC primary interview-level mechanism?</p>
+        <ol type="A">
+          <li>Colored pointers concurrent relocate.</li>
+          <li>Only serial mark-sweep Old gen.</li>
+          <li>Disables all safepoint pauses.</li>
+          <li>Stores objects in Metaspace only.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Colored pointers concurrent relocate.)</strong></p>
+          <p>ZGC uses pointer metadata and load barriers for concurrent relocation with short STW phase changes.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: Best first step before changing collector?</p>
+        <ol type="A">
+          <li>Measure GC pauses and retention.</li>
+          <li>Copy random flags from blog post.</li>
+          <li>Disable GC with experimental flag.</li>
+          <li>Set Xmx equal container limit.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Measure GC pauses and retention.)</strong></p>
+          <p>Defaults are fine until data proves otherwise. Fix leaks and allocation before collector swaps.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: Humongous object in G1 means?</p>
+        <ol type="A">
+          <li>Larger than half a G1 region.</li>
+          <li>Any object in Eden TLAB slice.</li>
+          <li>Static field in Metaspace block.</li>
+          <li>Thread stack frame over one MB.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Larger than half a G1 region.)</strong></p>
+          <p>Humongous objects get dedicated Old regions — costly path; avoid if possible.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>12. Bridge to Next Lesson</h2>
+  <ul>
+    <li><strong>S05</strong> — flag cookbook + GC log reading for the collector you chose</li>
+    <li><strong>S03 retention bugs</strong> — fix before ZGC will save you</li>
+    <li><strong>S08</strong> — when logs show long pauses + growing Old, heap dump proves why</li>
+  </ul>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="jvm-0003-garbage-collection-fundamentals.html">&larr; Lesson 3</a> &middot;
+    <a href="jvm-0005-jvm-flags-gc-logging-tuning.html">Lesson 5 &rarr;</a> &middot;
+    <a href="../reference/jvm-0004-garbage-collectors-selection.html">Cheat sheet</a>
+  </nav>
+</body>
+</html>

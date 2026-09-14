@@ -2,9 +2,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Animate global progress bar
   const progressFill = document.getElementById('progressFill');
   if (progressFill) {
-    // 4 of 11 modules = 36.4%
+    // 5 of 11 modules = 45.5%
     setTimeout(() => {
-      progressFill.style.width = '36.4%';
+      progressFill.style.width = '45.5%';
     }, 200);
   }
 
@@ -28,6 +28,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const concurrencyCard = document.getElementById('concurrencyCard');
   const concurrencyDrawer = document.getElementById('concurrencyDrawer');
   const closeConcurrencyBtn = document.getElementById('closeConcurrencyDrawerBtn');
+
+  // Drawer Elements for JVM (Module 4)
+  const jvmCard = document.getElementById('jvmCard');
+  const jvmDrawer = document.getElementById('jvmDrawer');
+  const closeJvmBtn = document.getElementById('closeJvmDrawerBtn');
 
   // Open / Close Drawer Functions for Collections
   const openDrawer = () => {
@@ -80,11 +85,24 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.style.overflow = '';
   };
 
+  const openJvmDrawer = () => {
+    if (jvmDrawer) jvmDrawer.classList.add('open');
+    if (backdrop) backdrop.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  };
+
+  const closeJvmDrawer = () => {
+    if (jvmDrawer) jvmDrawer.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('open');
+    document.body.style.overflow = '';
+  };
+
   const closeAllDrawers = () => {
     closeDrawer();
     closeOopDrawer();
     closeStreamsDrawer();
     closeConcurrencyDrawer();
+    closeJvmDrawer();
   };
 
   // Click active cards to open
@@ -116,11 +134,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  if (jvmCard) {
+    jvmCard.addEventListener('click', (e) => {
+      if (e.target.closest('a')) return;
+      openJvmDrawer();
+    });
+  }
+
   // Close triggers
   if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
   if (closeOopBtn) closeOopBtn.addEventListener('click', closeOopDrawer);
   if (closeStreamsBtn) closeStreamsBtn.addEventListener('click', closeStreamsDrawer);
   if (closeConcurrencyBtn) closeConcurrencyBtn.addEventListener('click', closeConcurrencyDrawer);
+  if (closeJvmBtn) closeJvmBtn.addEventListener('click', closeJvmDrawer);
   if (backdrop) backdrop.addEventListener('click', closeAllDrawers);
 
   // Esc key listener to close drawer

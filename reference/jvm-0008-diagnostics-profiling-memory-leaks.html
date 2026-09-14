@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Diagnostics & Memory Leaks — Reference</title>
+  <meta name="description" content="Quick reference: jcmd, jstack, jmap, MAT dominator tree, leak patterns, JFR, incident workflow.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/jvm-0008-diagnostics-profiling-memory-leaks.html">&larr; Lesson 08</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Diagnostics & Memory Leaks Cheat Sheet</h1>
+  <p class="meta">Toolbox, incidents, leaks</p>
+
+  <h2>1. Toolbox</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid var(--border); background:var(--surface);">
+      <th align="left" style="padding:0.5rem;">Tool</th>
+      <th align="left" style="padding:0.5rem;">Answers</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>jps -l</code></td>
+      <td style="padding:0.5rem;">Java PIDs</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>jcmd</code></td>
+      <td style="padding:0.5rem;">Dump, GC histo, JFR, VM info</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>jstat -gc</code></td>
+      <td style="padding:0.5rem;">Live GC stats</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>jstack</code> / <code>Thread.print</code></td>
+      <td style="padding:0.5rem;">Thread dump</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>jmap -histo</code> / heap dump</td>
+      <td style="padding:0.5rem;">Instance counts / full heap</td>
+    </tr>
+  </table>
+
+  <h2>2. Thread Dump States</h2>
+  <ul>
+    <li><strong>BLOCKED</strong> — waiting for monitor (sync)</li>
+    <li><strong>WAITING / TIMED_WAITING</strong> — park, wait, sleep</li>
+    <li><strong>RUNNABLE</strong> — running or native I/O</li>
+  </ul>
+
+  <h2>3. Heap Dump</h2>
+  <pre>jcmd &lt;pid&gt; GC.heap_dump /tmp/heap.hprof
+-XX:+HeapDumpOnOutOfMemoryError</pre>
+  <p><strong>MAT dominator tree</strong> — top retainers = leak suspects</p>
+
+  <h2>4. Leak Patterns</h2>
+  <ul>
+    <li>Static unbounded collections</li>
+    <li>Unclosed resources</li>
+    <li>Listener registries</li>
+    <li>ThreadLocal no remove</li>
+    <li>Classloader leak (Metaspace)</li>
+  </ul>
+
+  <h2>5. Native / Direct</h2>
+  <ul>
+    <li><code>Direct buffer memory</code> OOM — not <code>-Xmx</code></li>
+    <li>Netty — release buffers</li>
+    <li><code>jcmd VM.native_memory summary</code></li>
+  </ul>
+
+  <h2>6. Profiling</h2>
+  <ul>
+    <li><strong>CPU flame graph</strong> — wide = hot CPU</li>
+    <li><strong>Allocation profile</strong> — who allocates → GC pressure</li>
+    <li><strong>JFR</strong> — prod-safe events, analyze in JMC</li>
+  </ul>
+
+  <h2>7. Incident Flow</h2>
+  <ol>
+    <li>Correlate APM timestamp</li>
+    <li>GC logs — pauses? Full GC?</li>
+    <li>Thread dump — I/O vs BLOCKED?</li>
+    <li>Histogram / heap dump if retention</li>
+    <li>One fix; keep logs</li>
+  </ol>
+
+  <h2>8. Signal → Tool</h2>
+  <ul>
+    <li>Deadlock / stuck threads → thread dump</li>
+    <li>Growing heap → histogram → dump → MAT</li>
+    <li>High CPU, quiet GC → CPU profile / JFR</li>
+    <li>Metaspace OOM → classloader (S06)</li>
+    <li>Pool rejected → thread dump + pool metrics</li>
+  </ul>
+</body>
+</html>

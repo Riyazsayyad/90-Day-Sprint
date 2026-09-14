@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 2 — Heap Regions, TLAB & Object Layout</title>
+  <meta name="description" content="Generational heap layout, Eden/Survivor/Old promotion, TLAB allocation, object header layout, compressed oops, array layout, and enterprise Young vs Old GC framing from a Senior Backend perspective.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="jvm-0001-jvm-runtime-architecture.html">&larr; Lesson 1</a> &middot;
+    Lesson 2 of 8 &middot;
+    <a href="jvm-0003-garbage-collection-fundamentals.html">Lesson 3 &rarr;</a> &middot;
+    <a href="../reference/jvm-0002-heap-regions-tlab-object-layout.html">Cheat sheet</a>
+  </nav>
+
+  <h1>Heap Regions, TLAB & Object Layout</h1>
+  <p class="meta">~35 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; builds on <a href="jvm-0001-jvm-runtime-architecture.html">S01 Runtime Architecture</a>, <a href="oop-0002-class-vs-object.html">Klass Word</a>, <a href="oop-0005-object-lifecycle.html">Allocation Lifecycle</a>, <a href="oop-0010-object-class.html">Mark Word</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Can you explain why a REST handler allocating 10,000 short-lived DTOs per second is usually fine, but a 2 GB static cache is a different GC problem? Can you sketch an object's bytes on the heap — header, fields, padding — and say when compressed oops apply? This lesson connects generational theory to the physical layout you already met in OOP.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/en/java/javase/21/gctooling/ergonomics.html">Oracle — GC Ergonomics</a> ·
+    <a href="https://wiki.openjdk.org/display/HotSpot/CompressedOops">OpenJDK — Compressed Oops</a> ·
+    <a href="https://shipilev.net/jvm/objects-inside-out/">Aleksey Shipilëv — Objects Inside-Out</a>
+  </p>
+
+  <h2>1. Generational Heap Layout</h2>
+  <p>HotSpot splits the Java heap into <strong>generations</strong> based on an empirical observation: <em>most objects die young.</em> Collecting only the young region is fast; scanning the entire heap every time would not scale.</p>
+
+  <pre>
+┌─────────────────────────────── Java Heap (-Xmx) ───────────────────────────────┐
+│  Young Generation                          │  Old Generation (Tenured)       │
+│  ┌──────── Eden ────────┐ ┌─S0─┐ ┌─S1─┐    │  long-lived objects, promoted   │
+│  │  new allocations     │ │    │ │    │    │  caches, singletons, pools     │
+│  └──────────────────────┘ └────┘ └────┘    │                                 │
+└────────────────────────────────────────────────────────────────────────────────┘
+  </pre>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Region</th>
+        <th>Role</th>
+        <th>Typical ratio (ergonomic defaults)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Eden</strong></td>
+        <td>All new objects start here (via TLAB — below)</td>
+        <td>Largest slice of Young</td>
+      </tr>
+      <tr>
+        <td><strong>Survivor S0 / S1</strong></td>
+        <td>Hold objects that survived at least one Young GC; only one active at a time during copy</td>
+        <td>Small (often ~10% of Young each)</td>
+      </tr>
+      <tr>
+        <td><strong>Old (Tenured)</strong></td>
+        <td>Objects that survived enough Young collections or were pre-tenured</td>
+        <td>Grows until <code>-Xmx</code> cap</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>Young GC</strong> (Minor collection): scans Eden + active Survivor, copies live objects. STW but typically short. Detail in S03.</p>
+  <p><strong>Old GC</strong> (Major / Mixed): scans Old generation. Slower, less frequent. Long-lived data dominates pause risk here.</p>
+
+  <h2>2. Object Journey — Eden → Survivor → Old</h2>
+  <ol>
+    <li><strong>Allocation:</strong> <code>new OrderDto()</code> lands in Eden (usually inside caller thread's TLAB).</li>
+    <li><strong>Request ends:</strong> local references gone → object unreachable → dies in Eden. Next Young GC reclaims it — never copied.</li>
+    <li><strong>Survives one Young GC:</strong> copied from Eden (or from the inactive Survivor) into the <em>other</em> Survivor space. GC age in Mark Word incremented.</li>
+    <li><strong>Survives repeatedly:</strong> bounced between S0 and S1. Each survival bumps age.</li>
+    <li><strong>Promotion:</strong> when age reaches <code>-XX:MaxTenuringThreshold</code> (default 15, collector may lower dynamically) <em>or</em> Survivor is full, object moves to Old.</li>
+    <li><strong>Pre-tenuring:</strong> very large objects may skip Young entirely and go straight to Old (<code>-XX:PretenureSizeThreshold</code> — often ~50% of Young on some collectors).</li>
+  </ol>
+
+  <pre>
+Request lifecycle (typical REST handler):
+
+  new DTO, new List, parse JSON  ──► Eden
+  handler returns, refs dropped   ──► eligible
+  Young GC                        ──► reclaimed (never promoted)
+
+Singleton cache loaded at startup ──► Eden first
+  survives many Young GCs         ──► S0 ↔ S1
+  age threshold hit               ──► Old (stays until unreachable)
+  </pre>
+
+  <p>This is the bridge from <a href="oop-0005-object-lifecycle.html">Object Lifecycle</a>: allocation is step 2; generational movement is what happens <em>before</em> step 5 (reclamation).</p>
+
+  <h2>3. TLAB — Fast, Lock-Free <code>new</code></h2>
+  <p>In <a href="jvm-0001-jvm-runtime-architecture.html">S01</a> you saw TLAB preview. Here is the mechanism:</p>
+  <ul>
+    <li>Each application thread gets a private <strong>Thread-Local Allocation Buffer</strong> — a contiguous chunk carved from Eden.</li>
+    <li>Allocation inside TLAB = increment an offset pointer (<strong>bump-the-pointer</strong>). No lock. Nanoseconds.</li>
+    <li>TLAB exhausted → thread requests a new TLAB from Eden (brief synchronization) or falls back to shared slow path.</li>
+    <li>Objects larger than TLAB remaining space (or huge objects) may allocate outside TLAB / pre-tenure.</li>
+  </ul>
+
+  <blockquote>Senior sound bite: "Multi-threaded services stay fast because most <code>new</code> never contends on a global heap lock — each thread bumps its own TLAB in Eden."</blockquote>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Concept</th>
+        <th>Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Why thread-safe without lock</strong></td>
+        <td>Only one thread writes into its TLAB slice; other threads have separate slices.</td>
+      </tr>
+      <tr>
+        <td><strong>TLAB waste</strong></td>
+        <td>Last object in a TLAB may leave unusable slack; refilled on next allocation burst.</td>
+      </tr>
+      <tr>
+        <td><strong>Tuning flags</strong></td>
+        <td><code>-XX:+UseTLAB</code> (default on), <code>-XX:TLABSize</code>, <code>-XX:ResizeTLAB</code> — rarely touched in prod; know they exist.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4. Object Layout Deep Dive</h2>
+  <p>You met headers in <a href="oop-0002-class-vs-object.html">Class vs Object</a> and <a href="oop-0010-object-class.html">java.lang.Object</a>. On-heap layout (HotSpot, 64-bit, compressed oops on — typical prod):</p>
+
+  <pre>
+┌──────────────── Object in Heap ────────────────┐
+│ Mark Word          (8 bytes)                   │
+│ Klass pointer      (4 bytes compressed)        │
+│ instance fields    (primitives + ref slots)    │
+│ padding            (align to 8-byte boundary)  │
+└────────────────────────────────────────────────┘
+  </pre>
+
+  <h3>4.1 Mark Word (8 bytes on 64-bit)</h3>
+  <p>One word, <strong>multiplexed</strong> — meaning changes with object state:</p>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>State</th>
+        <th>Mark Word holds (simplified)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Normal / unlocked</strong></td>
+        <td>GC age (4 bits), identity hashcode (lazy-computed, shifted), unused bits</td>
+      </tr>
+      <tr>
+        <td><strong>Biased lock</strong></td>
+        <td>Thread ID of biased owner — fast path for uncontended <code>synchronized</code></td>
+      </tr>
+      <tr>
+        <td><strong>Thin lock</strong></td>
+        <td>Lock record pointer — lightweight contention</td>
+      </tr>
+      <tr>
+        <td><strong>Fat lock</strong></td>
+        <td>Pointer to monitor structure — heavy contention</td>
+      </tr>
+      <tr>
+        <td><strong>GC mark</strong></td>
+        <td>During collection, used for forwarding / mark bits</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>GC age</strong> — survival count used for promotion decisions. <strong>Identity hashcode</strong> — computed once on first <code>hashCode()</code> without override, then cached in Mark Word if space allows.</p>
+
+  <h3>4.2 Klass pointer</h3>
+  <p>Points to class metadata in Metaspace (vtable, field layout, type info). Enables <code>getClass()</code>, <code>instanceof</code>, virtual dispatch. With <strong>compressed class pointers</strong>, 4 bytes instead of 8.</p>
+
+  <h3>4.3 Instance fields & padding</h3>
+  <p>Fields laid out per class definition (reordering possible for packing). JVM pads object size to <strong>8-byte alignment</strong> on 64-bit — affects "empty object = 16 bytes" interview answer.</p>
+
+  <h3>4.4 Empty object size (interview)</h3>
+  <div class="callout">
+    <strong>Typical 64-bit HotSpot with compressed oops + compressed class pointers:</strong> Mark (8) + Klass (4) + padding (4) = <strong>16 bytes</strong> for a plain empty instance.<br>
+    Without compression: often <strong>16 bytes</strong> header alone or more with alignment rules — always say "depends on JVM flags and JDK version."
+  </div>
+
+  <h2>5. Compressed Oops & Compressed Class Pointers</h2>
+  <p>64-bit pointers are 8 bytes. Most heaps are &lt; 32 GB — HotSpot can store <strong>32-bit compressed references</strong> that encode offsets into the heap base.</p>
+
+  <ul>
+    <li><code>-XX:+UseCompressedOops</code> (default when heap ≤ ~32 GB) — 4-byte object references in headers and arrays.</li>
+    <li><code>-XX:+UseCompressedClassPointers</code> — 4-byte Klass pointers (requires compressed oops on most configs).</li>
+    <li><strong>Heap base</strong> — JVM maps a contiguous region; compressed ref + base = real address.</li>
+    <li><strong>&gt; 32 GB heap</strong> — compressed oops often disabled → larger headers, more memory per object, different tuning tradeoffs.</li>
+  </ul>
+
+  <blockquote>Interview: "Compressed oops let 64-bit JVM use 32-bit refs for heap pointers, cutting object header and array overhead — but typically only while heap stays under the ~32 GB compressed-oops range."</blockquote>
+
+  <h2>6. Array Layout vs Plain Objects</h2>
+  <p>Arrays are objects too — special layout:</p>
+  <pre>
+┌──────────────── Array Object ──────────────────┐
+│ Mark Word                                      │
+│ Klass pointer  (points to array class metadata)│
+│ array length   (4 bytes)                       │
+│ elements[0..n] (primitives or ref slots)       │
+│ padding                                        │
+└────────────────────────────────────────────────┘
+  </pre>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Header overhead</th>
+        <th>Per-element cost</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>int[]</code></td>
+        <td>~12–16 bytes + alignment</td>
+        <td>4 bytes per int (no per-element object)</td>
+      </tr>
+      <tr>
+        <td><code>Integer[]</code></td>
+        <td>~12–16 bytes + alignment</td>
+        <td>4-byte ref each → separate Integer object on heap (boxing cost)</td>
+      </tr>
+      <tr>
+        <td><code>Object[]</code></td>
+        <td>~12–16 bytes + alignment</td>
+        <td>4-byte compressed ref per slot; elements are separate objects</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>Senior trap:</strong> <code>new byte[1_000_000]</code> ≈ 1 MB + header — one array object. <code>List&lt;Byte&gt;</code> with boxing = millions of tiny objects → Young GC pressure.</p>
+
+  <h2>7. False Sharing Preview</h2>
+  <p>When two threads update <strong>different fields</strong> that land in the same CPU cache line (64 bytes typical), cores invalidate each other's caches — throughput collapse.</p>
+  <ul>
+    <li>Not a GC issue — hardware + layout issue.</li>
+    <li><code>@Contended</code> (JVM internal / sun.misc) pads hot counters; <code>LongAdder</code> stripes across cells.</li>
+    <li>Arrays of mutable longs used as per-thread counters packed tightly → classic false sharing.</li>
+  </ul>
+  <p>Full perf module (M07) later. Know the term for interviews when discussing concurrent counters next to object headers.</p>
+
+  <h2>8. Enterprise Framing — Young vs Old Pressure</h2>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Pattern</th>
+        <th>Generation impact</th>
+        <th>Prod symptom</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Per-request DTOs, JSON nodes, stream intermediates</td>
+        <td>Eden churn — die young</td>
+        <td>Frequent short Young GC pauses (usually OK); high allocation rate</td>
+      </tr>
+      <tr>
+        <td>Spring singleton beans, connection pools, session caches</td>
+        <td>Promote to Old</td>
+        <td>Stable Old occupancy; Full GC risk if unbounded</td>
+      </tr>
+      <tr>
+        <td>Static <code>ConcurrentHashMap</code> cache without eviction</td>
+        <td>Entries + keys in Old</td>
+        <td>Old gen grows until Full GC or OOM — not a "Young GC tuning" fix</td>
+      </tr>
+      <tr>
+        <td><code>parallelStream()</code> on large collections</td>
+        <td>Spike of short-lived pipeline objects</td>
+        <td>Eden spike; watch allocation rate + commonPool (M02/M03)</td>
+      </tr>
+      <tr>
+        <td>Loading entire DB result into <code>List&lt;Entity&gt;</code></td>
+        <td>Large object graphs in Old if retained</td>
+        <td>Heap pressure, long GC pauses — paginate/stream from DB</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <blockquote>On-call framing: "High Young GC frequency with low pause times often means healthy short-lived allocation — fix retention in Old, not Eden size, unless allocation rate is genuinely excessive."</blockquote>
+
+  <h2>9. Classic Mistakes</h2>
+  <ul>
+    <li><strong>"More Eden = always better."</strong> Steals from Old; can increase promotion rate or Full GC risk.</li>
+    <li><strong>Assuming boxing is free</strong> — each <code>Integer</code> is a full object (16+ bytes) vs 4 bytes in <code>int[]</code>.</li>
+    <li><strong>Ignoring array header</strong> — small arrays cost disproportionate overhead.</li>
+    <li><strong>Disabling compressed oops on 8 GB heap</strong> — wastes memory for no benefit.</li>
+    <li><strong>Tuning GC before fixing unbounded Old-gen cache</strong> — collector can't fix a leak.</li>
+  </ul>
+
+  <p><strong>Out of scope:</strong> full GC algorithms (S03), collector selection (S04), Metaspace/class loading (S06), escape analysis / scalar replacement detail (S07).</p>
+
+  <hr>
+
+  <h2>10. Revision Notes</h2>
+  <ul>
+    <li>Young = Eden + S0 + S1; Old = tenured long-lived objects.</li>
+    <li>Most objects die in Eden; survivors copy between Survivors then promote.</li>
+    <li>TLAB = per-thread Eden slice; bump-pointer, lock-free for most <code>new</code>.</li>
+    <li>Object = Mark Word + Klass + fields + padding; Mark holds GC age, hash, lock state.</li>
+    <li>Compressed oops = 4-byte refs when heap ≤ ~32 GB (typical).</li>
+    <li>Arrays add length field; primitive arrays dense, object arrays hold refs.</li>
+    <li>Request DTOs → Young churn; caches/singletons → Old pressure.</li>
+  </ul>
+
+  <hr>
+
+  <h2>11. Reasoning Exercises</h2>
+  <ol>
+    <li>
+      <p><strong>Service allocates 50 MB/s of short-lived JSON parsing objects. Old gen stable. Problem?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>Often no structural problem.</strong> High Young GC rate expected. Tune only if pause times violate SLO. Reduce allocation (parser reuse, streaming) if CPU spent in GC is too high.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong><code>-Xmx40g</code> on 64-bit. Compressed oops still on?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>Likely disabled</strong> — above ~32 GB threshold. Object headers and refs grow; factor into capacity planning.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>Two-field class: <code>long id</code> and <code>boolean flag</code>. Why might object be 24+ bytes not 17?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p>16-byte header + 8-byte <code>long</code> + 1-byte <code>boolean</code> + <strong>padding to 8-byte alignment</strong> → 24 or 32 bytes depending on field order and JVM packing.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>Thread A and B each increment adjacent <code>volatile long</code> counters in one shared object. Low contention but slow. Cause?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>False sharing</strong> — same cache line invalidated across cores. Not a lock issue. Stripe counters (<code>LongAdder</code>) or pad fields (M07).</p>
+      </details>
+    </li>
+  </ol>
+
+  <hr>
+
+  <h2>12. 6 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Default first allocation region for new object?</p>
+        <ol type="A">
+          <li>Eden via thread TLAB.</li>
+          <li>Old generation directly always.</li>
+          <li>Metaspace next to class data.</li>
+          <li>Survivor S0 before Eden always.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Eden via thread TLAB.)</strong></p>
+          <p>New instances start in Eden unless pre-tenured as humongous/large. TLAB provides fast thread-local bump allocation.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Object survives third Young GC. Likely location?</p>
+        <ol type="A">
+          <li>Active Survivor or promoting.</li>
+          <li>Still only in Eden always.</li>
+          <li>Code Cache as native copy.</li>
+          <li>Stack frame of creator thread.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Active Survivor or promoting.)</strong></p>
+          <p>Live objects are copied from Eden/Survivor on each Young GC. After several survivals, promotion to Old is likely.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: TLAB main performance benefit?</p>
+        <ol type="A">
+          <li>Avoid Eden lock on most news.</li>
+          <li>Store static fields per thread.</li>
+          <li>Skip garbage collection forever.</li>
+          <li>Compress objects at alloc time.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Avoid Eden lock on most news.)</strong></p>
+          <p>Per-thread bump allocation in a private Eden slice removes global synchronization on the hot path.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: Mark Word stores which at unlock idle state?</p>
+        <ol type="A">
+          <li>GC age and hash metadata.</li>
+          <li>Full vtable method list copy.</li>
+          <li>All instance field values.</li>
+          <li>Bytecode of constructor body.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (GC age and hash metadata.)</strong></p>
+          <p>Normal state uses Mark Word for age, identity hash, and later lock encoding under contention.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: -XX:+UseCompressedOops typical limit driver?</p>
+        <ol type="A">
+          <li>Heap size near thirty-two GB.</li>
+          <li>Thread count exceeds core count.</li>
+          <li>Metaspace exceeds one gigabyte.</li>
+          <li>Direct memory exceeds Xmx value.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Heap size near thirty-two GB.)</strong></p>
+          <p>Compressed oops encode 32-bit offsets into heap base; above ~32 GB heap they are usually disabled.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: int[1_000_000] vs million Integer objects?</p>
+        <ol type="A">
+          <li>Array one object — far less overhead.</li>
+          <li>Both use identical heap bytes.</li>
+          <li>Array stores in Metaspace only.</li>
+          <li>Boxed form has no extra headers.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Array one object — far less overhead.)</strong></p>
+          <p>Primitive array: one header + 4M bytes payload. Boxed: ~1M objects each with 16+ byte headers.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>13. Bridge to Next Lesson</h2>
+  <ul>
+    <li><strong>S03</strong> — how Young/Old GC actually runs (copy, mark, STW phases)</li>
+    <li><strong>S04</strong> — G1 vs ZGC vs Parallel — which matches your generational map</li>
+    <li><strong>Cross-link</strong> — Mark Word lock states tie to <a href="concurrency-0002-synchronization-monitors.html">Synchronization & Monitors</a></li>
+  </ul>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="jvm-0001-jvm-runtime-architecture.html">&larr; Lesson 1</a> &middot;
+    <a href="jvm-0003-garbage-collection-fundamentals.html">Lesson 3 &rarr;</a> &middot;
+    <a href="../reference/jvm-0002-heap-regions-tlab-object-layout.html">Cheat sheet</a>
+  </nav>
+</body>
+</html>

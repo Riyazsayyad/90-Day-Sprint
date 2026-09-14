@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Exercise — JVM Capstone</title>
+  <meta name="description" content="Module 04 capstone: 16 JVM troubleshooting scenarios — OOM triage, GC logs, thread dumps, classloader leaks, flags, collectors, JIT — plus optional JUnit diagnostic stub.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+  <style>
+    .copy-bar { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin: 1rem 0; }
+    .copy-bar button,
+    .copy-bar .copy-bar-link {
+      font-family: inherit;
+      font-size: 0.95rem;
+      padding: 0.6rem 0.85rem;
+      background: var(--btn-bg);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      cursor: pointer;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .copy-bar button:hover,
+    .copy-bar .copy-bar-link:hover {
+      border-color: var(--accent);
+      background: var(--btn-hover);
+    }
+    #javaSource { max-height: 70vh; overflow: auto; font-size: 0.8rem; }
+    .scenario-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+    .scenario-table th, .scenario-table td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; }
+    .scenario-table th { background: var(--surface); font-weight: normal; }
+    .log-snippet { font-size: 0.85rem; background: var(--surface); border: 1px solid var(--border); padding: 0.75rem; margin: 0.5rem 0; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot; <a href="../lessons/jvm-0008-diagnostics-profiling-memory-leaks.html">⬅️ Prev: Diagnostics &amp; Memory Leaks</a>
+  </nav>
+
+  <h1>JVM &amp; Memory Management Capstone Exercise</h1>
+  <p class="meta">Capstone exercise &bull; Module 04 &bull; 16 scenarios &bull; In-browser + optional JUnit &bull; <a href="JvmCapstoneExercise.java">Stub</a></p>
+
+  <div class="callout">
+    <strong>How to use:</strong> Work through all 16 in-browser scenarios first (no IDE). Optional: copy <code>JvmCapstoneExercise.java</code> into IntelliJ, add JUnit 5, implement <code>TODO</code>s until green — stubs mirror diagnostic drills. Tie every miss back to <code>jvm-0001</code>–<code>0008</code>.
+  </div>
+
+  <h2>Scenario Index</h2>
+  <table class="scenario-table">
+    <thead>
+      <tr><th>#</th><th>Topic</th><th>Lesson</th><th>Type</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>01</td><td>Metaspace vs heap OOM message</td><td><a href="../lessons/jvm-0001-jvm-runtime-architecture.html">S01</a> <a href="../lessons/jvm-0005-jvm-flags-gc-logging-tuning.html">S05</a></td><td>MCQ</td></tr>
+      <tr><td>02</td><td>GC log: Full GC tiny reclaim</td><td><a href="../lessons/jvm-0005-jvm-flags-gc-logging-tuning.html">S05</a> <a href="../lessons/jvm-0008-diagnostics-profiling-memory-leaks.html">S08</a></td><td>Reasoning</td></tr>
+      <tr><td>03</td><td>Promotion / Old gen pressure</td><td><a href="../lessons/jvm-0002-heap-regions-tlab-object-layout.html">S02</a> <a href="../lessons/jvm-0003-garbage-collection-fundamentals.html">S03</a></td><td>MCQ</td></tr>
+      <tr><td>04</td><td>Classloader leak symptom</td><td><a href="../lessons/jvm-0006-class-loading-metaspace-classloader-leaks.html">S06</a></td><td>Reasoning</td></tr>
+      <tr><td>05</td><td>Thread dump: pool BLOCKED</td><td><a href="../lessons/jvm-0008-diagnostics-profiling-memory-leaks.html">S08</a> <a href="../lessons/concurrency-0005-executors.html">M03 L05</a></td><td>MCQ</td></tr>
+      <tr><td>06</td><td>Direct buffer OOM fix</td><td><a href="../lessons/jvm-0001-jvm-runtime-architecture.html">S01</a> <a href="../lessons/jvm-0008-diagnostics-profiling-memory-leaks.html">S08</a></td><td>MCQ</td></tr>
+      <tr><td>07</td><td><code>-Xmx</code> = container limit</td><td><a href="../lessons/jvm-0001-jvm-runtime-architecture.html">S01</a> <a href="../lessons/jvm-0005-jvm-flags-gc-logging-tuning.html">S05</a></td><td>Reasoning</td></tr>
+      <tr><td>08</td><td>G1 vs ZGC pick</td><td><a href="../lessons/jvm-0004-garbage-collectors-selection.html">S04</a></td><td>MCQ</td></tr>
+      <tr><td>09</td><td>TLAB purpose</td><td><a href="../lessons/jvm-0002-heap-regions-tlab-object-layout.html">S02</a></td><td>MCQ</td></tr>
+      <tr><td>10</td><td>Empty object size (compressed oops)</td><td><a href="../lessons/jvm-0002-heap-regions-tlab-object-layout.html">S02</a></td><td>MCQ</td></tr>
+      <tr><td>11</td><td>JIT warmup after deploy</td><td><a href="../lessons/jvm-0007-jit-compilation-runtime-optimizations.html">S07</a></td><td>Reasoning</td></tr>
+      <tr><td>12</td><td>Static map leak — first tool</td><td><a href="../lessons/jvm-0003-garbage-collection-fundamentals.html">S03</a> <a href="../lessons/jvm-0008-diagnostics-profiling-memory-leaks.html">S08</a></td><td>MCQ</td></tr>
+      <tr><td>13</td><td>ThreadLocal on pool thread</td><td><a href="../lessons/jvm-0006-class-loading-metaspace-classloader-leaks.html">S06</a> <a href="../lessons/jvm-0008-diagnostics-profiling-memory-leaks.html">S08</a></td><td>Reasoning</td></tr>
+      <tr><td>14</td><td><code>forName</code> vs <code>loadClass</code></td><td><a href="../lessons/jvm-0006-class-loading-metaspace-classloader-leaks.html">S06</a></td><td>MCQ</td></tr>
+      <tr><td>15</td><td>Latency + socketRead0 — tool?</td><td><a href="../lessons/jvm-0008-diagnostics-profiling-memory-leaks.html">S08</a></td><td>MCQ</td></tr>
+      <tr><td>16</td><td>Mixed GC pause SLO breach</td><td><a href="../lessons/jvm-0004-garbage-collectors-selection.html">S04</a> <a href="../lessons/jvm-0005-jvm-flags-gc-logging-tuning.html">S05</a></td><td>Reasoning</td></tr>
+    </tbody>
+  </table>
+
+  <h2>16 Troubleshooting Scenarios</h2>
+  <p class="meta">Cover answers before opening <code>&lt;details&gt;</code>. Option lengths matched.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">S01 — Pod OOM: <code>OutOfMemoryError: Metaspace</code>. First fix direction?</p>
+        <ol type="A">
+          <li>Investigate classloader retention.</li>
+          <li>Double -Xmx heap immediately.</li>
+          <li>Switch to Serial GC only.</li>
+          <li>Shrink Eden with -Xmn flag.</li>
+        </ol>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>A</strong> — <a href="../lessons/jvm-0006-class-loading-metaspace-classloader-leaks.html">S06</a>: Metaspace ≠ heap. Class metadata / loader leak.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S05 — GC log: <code>Pause Full (Allocation Failure) 950M-&gt;948M(1024M) 3800ms</code>. Meaning?</p>
+        <div class="log-snippet"><code>950M-&gt;948M(1024M) 3800ms</code></div>
+        <p>First action before raising <code>-Xmx</code>?</p>
+        <details>
+          <summary>Answer</summary>
+          <p>Live set ~948 MB / 1 GB — Full GC reclaimed ~2 MB in 3.8 s. <strong>Retention leak or legit huge live set</strong> — heap dump + dominator tree (<a href="../lessons/jvm-0008-diagnostics-profiling-memory-leaks.html">S08</a>). Not collector tune first.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S02/S03 — Short-lived DTOs survive accidental ref in singleton cache. Symptom?</p>
+        <ol type="A">
+          <li>Premature promotion fills Old gen.</li>
+          <li>StackOverflow on every request.</li>
+          <li>Metaspace cleared each Young GC.</li>
+          <li>TLAB disabled on all threads.</li>
+        </ol>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>A</strong> — Objects should die young but stay reachable → promote → Old grows → longer Mixed/Full GC (<a href="../lessons/jvm-0003-garbage-collection-fundamentals.html">S03</a>).</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S06 — Tomcat: 150 redeploys, heap flat, Metaspace stair-steps. Cause?</p>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>Classloader leak</strong> — old <code>WebappClassLoader</code> pinned (ThreadLocal, JDBC driver, shutdown hook). Fix retention; restart JVM. <code>-Xmx</code> irrelevant.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S08 — Thread dump: 48/50 pool threads <code>BLOCKED</code> on same monitor. Queue 8k tasks. First tool already used. Next?</p>
+        <ol type="A">
+          <li>Find lock holder stack in same dump.</li>
+          <li>Full heap dump before reading dump.</li>
+          <li>Raise -Xmx to clear queue faster.</li>
+          <li>Enable -XX:+UseZGC immediately.</li>
+        </ol>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>A</strong> — Thread dump already taken. Find <code>waiting to lock</code> and who holds monitor (<a href="../lessons/concurrency-0002-synchronization-monitors.html">M03 S02</a>). Not heap.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S01 — Netty service: <code>Direct buffer memory</code> OOM. Fix?</p>
+        <ol type="A">
+          <li>Release buffers; tune direct pool.</li>
+          <li>Double -Xmx heap to 16 GB.</li>
+          <li>MaxMetaspaceSize to 512m only.</li>
+          <li>-Xss 2m on all threads.</li>
+        </ol>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>A</strong> — Off-heap direct pool (<a href="../lessons/jvm-0008-diagnostics-profiling-memory-leaks.html">S08</a>). <code>MaxDirectMemorySize</code> guardrail; fix missing <code>release()</code>.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S05 — 2 GiB K8s limit. Dev sets <code>-Xmx2048m</code>. OOMKilled, no Java heap OOM. Why?</p>
+        <details>
+          <summary>Answer</summary>
+          <p>Heap = entire cgroup — no room for Metaspace, stacks, direct, Code Cache, native GC (<a href="../lessons/jvm-0001-jvm-runtime-architecture.html">S01</a>). Use ~50% <code>MaxRAMPercentage</code> or <code>-Xmx1024m</code> max.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S04 — Nightly ETL, 8 GB heap, 4 s pause OK at 2 AM. Collector?</p>
+        <ol type="A">
+          <li>Parallel GC for throughput.</li>
+          <li>ZGC for sub-ms pauses.</li>
+          <li>Serial GC for all cores.</li>
+          <li>G1 with MaxGCPauseMillis=10.</li>
+        </ol>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>A</strong> — Batch throughput; pauses off-peak acceptable. ZGC/G1 tight pause goals waste CPU.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S02 — TLAB primary benefit in multi-threaded service?</p>
+        <ol type="A">
+          <li>Avoid global Eden lock on most news.</li>
+          <li>Store static fields per thread.</li>
+          <li>Replace garbage collection fully.</li>
+          <li>Compress all objects at alloc time.</li>
+        </ol>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>A</strong> — Per-thread bump allocation in Eden slice.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S02 — Empty object bytes (64-bit, compressed oops typical)?</p>
+        <ol type="A">
+          <li>Sixteen bytes including header.</li>
+          <li>Zero bytes until first field set.</li>
+          <li>Four bytes reference only.</li>
+          <li>Thirty-two bytes always exact.</li>
+        </ol>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>A</strong> — Mark 8 + Klass 4 + padding 4 ≈ 16 bytes typical.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S07 — p99 180 ms first 8 min post-deploy; 35 ms steady. GC logs clean. Cause?</p>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>JIT warmup</strong> — interpreter → C1 → C2 tiered compile. Also class/cache warming. Not leak if plateau healthy. Confirm with <code>-Xlog:jit+compilation</code> if needed.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S08 — Old gen 92% after Full GC. Histogram: 3M <code>OrderDto</code>. First tool sequence?</p>
+        <ol type="A">
+          <li>Heap dump → dominator tree.</li>
+          <li>Thread dump only, skip heap.</li>
+          <li>Restart pod, skip capture.</li>
+          <li>Lower MaxGCPauseMillis to 50.</li>
+        </ol>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>A</strong> — Retention proof: dump + MAT dominator — find static <code>Map</code> or cache holder (<a href="../lessons/jvm-0003-garbage-collection-fundamentals.html">S03</a>).</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S06/S08 — Filter sets <code>ThreadLocal</code> per request, never <code>remove()</code>. Pool threads. Slow Metaspace/heap creep. Fix?</p>
+        <details>
+          <summary>Answer</summary>
+          <p><code>try { ... } finally { threadLocal.remove(); }</code> — pool thread retains prior request graph. Classic loader/heap leak pattern.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S06 — Which triggers <code>&lt;clinit&gt;</code> by default?</p>
+        <ol type="A">
+          <li>Class.forName with default args.</li>
+          <li>ClassLoader.loadClass only.</li>
+          <li>new Foo[100] array creation.</li>
+          <li>jmap -histo live snapshot.</li>
+        </ol>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>A</strong> — <code>forName</code> initializes; <code>loadClass</code> does not; arrays skip clinit.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S08 — p99 spike. GC pauses normal. 190/200 threads RUNNABLE at <code>socketRead0</code>. Category?</p>
+        <ol type="A">
+          <li>Downstream I/O latency.</li>
+          <li>Heap leak — raise Xmx.</li>
+          <li>Metaspace class leak only.</li>
+          <li>JIT deoptimization storm.</li>
+        </ol>
+        <details>
+          <summary>Answer</summary>
+          <p><strong>A</strong> — Threads waiting on DB/socket — fix dependency/timeouts, not GC. Incident arc from <a href="../lessons/jvm-0008-diagnostics-profiling-memory-leaks.html">S08</a>.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">S04/S05 — API 24 GB heap, G1 Mixed GC pauses 350 ms, p99 SLO 150 ms. Code clean. Next eval?</p>
+        <details>
+          <summary>Answer</summary>
+          <p>Trial <strong>ZGC</strong> on JDK 21 with baseline metrics — after GC logs prove Mixed GC is culprit. Don't only tighten <code>MaxGCPauseMillis</code> (soft goal). Measure one change (<a href="../lessons/jvm-0004-garbage-collectors-selection.html">S04</a>).</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <h2>Mock Interview Checklist</h2>
+  <p>After all 16 green (browser + optional JUnit), explain aloud:</p>
+  <ol>
+    <li>OOM message → which pool → which fix (S01 table).</li>
+    <li>GC log line → before/after/cause/pause ms (S05).</li>
+    <li>Thread dump vs heap dump decision tree (S08).</li>
+    <li>Why Metaspace stair-step ≠ heap leak (S06).</li>
+    <li>Container <code>-Xmx</code> headroom rule (S05).</li>
+    <li>JIT warmup vs leak on deploy latency (S07).</li>
+  </ol>
+
+  <h2>Optional JUnit Stub</h2>
+  <p>12 coded drills mirroring scenarios above — OOM pool id, GC math, tool pick, ThreadLocal fix, bounded cache.</p>
+  <div class="copy-bar">
+    <button type="button" id="copyBtn">Copy entire file</button>
+    <a href="JvmCapstoneExercise.java" download class="copy-bar-link">Download stub</a>
+  </div>
+  <pre id="javaSource"><code>Loading JvmCapstoneExercise.java…</code></pre>
+
+  <script>
+    const sourceEl = document.getElementById('javaSource');
+    const copyBtn = document.getElementById('copyBtn');
+    let fileText = '';
+
+    fetch('JvmCapstoneExercise.java')
+      .then(r => r.text())
+      .then(text => {
+        fileText = text;
+        sourceEl.innerHTML = '<code>' + text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</code>';
+      })
+      .catch(() => {
+        sourceEl.innerHTML = '<code>Open exercises/JvmCapstoneExercise.java in your editor.</code>';
+      });
+
+    copyBtn.addEventListener('click', () => {
+      if (!fileText) return;
+      navigator.clipboard.writeText(fileText).then(() => {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy entire file'; }, 2000);
+      });
+    });
+  </script>
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>

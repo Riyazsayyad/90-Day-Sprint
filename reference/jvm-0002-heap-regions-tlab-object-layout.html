@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Heap Regions, TLAB & Object Layout — Reference</title>
+  <meta name="description" content="Quick reference: generational heap, Eden/Survivor/Old, TLAB, object header layout, compressed oops, arrays.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/jvm-0002-heap-regions-tlab-object-layout.html">&larr; Lesson 02</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Heap Regions, TLAB & Object Layout Cheat Sheet</h1>
+  <p class="meta">Generational map, allocation, physical layout</p>
+
+  <h2>1. Generational Layout</h2>
+  <ul>
+    <li><strong>Young</strong> — Eden + Survivor S0 + S1</li>
+    <li><strong>Old (Tenured)</strong> — long-lived objects</li>
+    <li>Most objects die young → cheap Young GC</li>
+  </ul>
+
+  <h2>2. Object Journey</h2>
+  <ol>
+    <li><code>new</code> → Eden (TLAB)</li>
+    <li>Unreachable → reclaimed in Young GC</li>
+    <li>Survives → copied to other Survivor; age++</li>
+    <li>Age ≥ threshold or Survivor full → <strong>Old</strong></li>
+    <li>Large object → may <strong>pre-tenure</strong> to Old</li>
+  </ol>
+
+  <h2>3. TLAB</h2>
+  <ul>
+    <li>Per-thread Eden slice</li>
+    <li>Bump-pointer allocation — no lock</li>
+    <li>Full → new TLAB or slow shared path</li>
+    <li><code>-XX:+UseTLAB</code> (default on)</li>
+  </ul>
+
+  <h2>4. Object Layout (64-bit, compressed — typical)</h2>
+  <pre>
+Mark Word     8 bytes  (hash, GC age, lock state)
+Klass ptr     4 bytes  (→ Metaspace metadata)
+fields        (primitives + ref slots)
+padding       (8-byte align)
+  </pre>
+  <p>Empty object ≈ <strong>16 bytes</strong> (typical with compression)</p>
+
+  <h2>5. Mark Word States</h2>
+  <ul>
+    <li>Normal — GC age, identity hash</li>
+    <li>Biased / thin / fat lock encoding</li>
+    <li>GC mark bits during collection</li>
+  </ul>
+
+  <h2>6. Compressed Oops</h2>
+  <ul>
+    <li><code>-XX:+UseCompressedOops</code> — 4-byte heap refs</li>
+    <li>Default when heap ≤ ~32 GB</li>
+    <li><code>UseCompressedClassPointers</code> — 4-byte Klass</li>
+    <li>&gt;32 GB heap → often off → bigger objects</li>
+  </ul>
+
+  <h2>7. Arrays</h2>
+  <ul>
+    <li>Header + <strong>length field</strong> + elements</li>
+    <li><code>int[]</code> — dense primitives</li>
+    <li><code>Integer[]</code> — ref per slot + boxed objects</li>
+  </ul>
+
+  <h2>8. Enterprise Patterns</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid var(--border); background:var(--surface);">
+      <th align="left" style="padding:0.5rem;">Pattern</th>
+      <th align="left" style="padding:0.5rem;">Gen</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;">Request DTOs / JSON parse</td>
+      <td style="padding:0.5rem;">Young churn</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;">Singletons / caches / pools</td>
+      <td style="padding:0.5rem;">Old</td>
+    </tr>
+  </table>
+
+  <h2>9. False Sharing (preview)</h2>
+  <p>Different fields, same cache line → cores fight. <code>LongAdder</code> stripes. M07 detail.</p>
+
+  <h2>10. Cross-links</h2>
+  <ul>
+    <li><a href="../lessons/jvm-0001-jvm-runtime-architecture.html">S01 Runtime Architecture</a></li>
+    <li><a href="../lessons/oop-0005-object-lifecycle.html">Object Lifecycle</a></li>
+    <li><a href="../lessons/oop-0010-object-class.html">Mark Word / Object</a></li>
+  </ul>
+</body>
+</html>

@@ -54,7 +54,18 @@
     { num: '06', file: 'concurrency-0006-concurrent-collections-atomics.html', title: 'Concurrent Collections & Atomics', meta: '38 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' },
     { num: '07', file: 'concurrency-0007-completable-future.html', title: 'CompletableFuture', meta: '40 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' },
     { num: '08', file: 'concurrency-0008-virtual-threads.html', title: 'Virtual Threads', meta: '35 min read &bull; Concurrency', module: 'Concurrency & Threads', moduleNum: '03' },
-    { num: 'Ex', file: 'concurrency-capstone-exercise.html', title: 'Capstone Exercise', meta: '16 scenarios &bull; Coding', module: 'Concurrency & Threads', moduleNum: '03', kind: 'exercise' }
+    { num: 'Ex', file: 'concurrency-capstone-exercise.html', title: 'Capstone Exercise', meta: '16 scenarios &bull; Coding', module: 'Concurrency & Threads', moduleNum: '03', kind: 'exercise' },
+
+    // Module 04: JVM & Memory Management
+    { num: '01', file: 'jvm-0001-jvm-runtime-architecture.html', title: 'JVM Runtime Architecture & Memory Areas', meta: '30 min read &bull; JVM & Memory', module: 'JVM & Memory Management', moduleNum: '04' },
+    { num: '02', file: 'jvm-0002-heap-regions-tlab-object-layout.html', title: 'Heap Regions, TLAB & Object Layout', meta: '35 min read &bull; JVM & Memory', module: 'JVM & Memory Management', moduleNum: '04' },
+    { num: '03', file: 'jvm-0003-garbage-collection-fundamentals.html', title: 'Garbage Collection Fundamentals', meta: '35 min read &bull; JVM & Memory', module: 'JVM & Memory Management', moduleNum: '04' },
+    { num: '04', file: 'jvm-0004-garbage-collectors-selection.html', title: 'Garbage Collectors & Selection', meta: '35 min read &bull; JVM & Memory', module: 'JVM & Memory Management', moduleNum: '04' },
+    { num: '05', file: 'jvm-0005-jvm-flags-gc-logging-tuning.html', title: 'JVM Flags, GC Logging & Tuning', meta: '35 min read &bull; JVM & Memory', module: 'JVM & Memory Management', moduleNum: '04' },
+    { num: '06', file: 'jvm-0006-class-loading-metaspace-classloader-leaks.html', title: 'Class Loading, Metaspace & Classloader Leaks', meta: '35 min read &bull; JVM & Memory', module: 'JVM & Memory Management', moduleNum: '04' },
+    { num: '07', file: 'jvm-0007-jit-compilation-runtime-optimizations.html', title: 'JIT Compilation & Runtime Optimizations', meta: '35 min read &bull; JVM & Memory', module: 'JVM & Memory Management', moduleNum: '04' },
+    { num: '08', file: 'jvm-0008-diagnostics-profiling-memory-leaks.html', title: 'Diagnostics, Profiling & Memory Leaks', meta: '40 min read &bull; JVM & Memory', module: 'JVM & Memory Management', moduleNum: '04' },
+    { num: 'Ex', file: 'jvm-capstone-exercise.html', title: 'Capstone Exercise', meta: '16 scenarios &bull; Coding', module: 'JVM & Memory Management', moduleNum: '04', kind: 'exercise' }
   ];
 
 

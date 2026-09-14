@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Garbage Collection Fundamentals — Reference</title>
+  <meta name="description" content="Quick reference: GC roots, reference strengths, mark/sweep/compact, STW vs concurrent, minor vs major GC, safepoints, retention bugs.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/jvm-0003-garbage-collection-fundamentals.html">&larr; Lesson 03</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Garbage Collection Fundamentals Cheat Sheet</h1>
+  <p class="meta">Reachability, phases, pauses, generations</p>
+
+  <h2>1. Why GC</h2>
+  <ul>
+    <li>Automatic reclamation vs manual free/ leak risk</li>
+    <li>Trade-off: pauses + CPU vs safety + productivity</li>
+  </ul>
+
+  <h2>2. GC Roots</h2>
+  <ul>
+    <li>Thread stack locals</li>
+    <li>Static fields</li>
+    <li>JNI global refs</li>
+    <li>Monitor objects (threads blocked in sync)</li>
+    <li>JVM internals / class loaders</li>
+  </ul>
+  <p>Alive = strong path from any root. Unreachable = eligible (not instant).</p>
+
+  <h2>3. Reference Strengths — When Cleared</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid var(--border); background:var(--surface);">
+      <th align="left" style="padding:0.5rem;">Type</th>
+      <th align="left" style="padding:0.5rem;">Collected</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>Strong</strong></td>
+      <td style="padding:0.5rem;">While reachable</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>Soft</strong></td>
+      <td style="padding:0.5rem;">Before OOM — memory pressure</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>Weak</strong></td>
+      <td style="padding:0.5rem;">Next GC</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>Phantom</strong></td>
+      <td style="padding:0.5rem;">After object memory freed — queue cleanup</td>
+    </tr>
+  </table>
+
+  <h2>4. GC Phases</h2>
+  <ul>
+    <li><strong>Mark</strong> — find live objects from roots</li>
+    <li><strong>Sweep</strong> — free dead space (may fragment)</li>
+    <li><strong>Compact</strong> — move live, fix refs</li>
+    <li><strong>Copy</strong> — move live to new region (Young gen)</li>
+  </ul>
+
+  <h2>5. STW vs Concurrent</h2>
+  <ul>
+    <li><strong>STW</strong> — app threads paused at safepoint</li>
+    <li><strong>Concurrent</strong> — GC + app overlap; some STW still</li>
+    <li>APIs care <strong>p99 pause</strong>; batch cares throughput</li>
+  </ul>
+
+  <h2>6. Minor vs Major / Full</h2>
+  <ul>
+    <li><strong>Minor / Young GC</strong> — Eden + Survivors; frequent, short</li>
+    <li><strong>Major</strong> — Old gen</li>
+    <li><strong>Full</strong> — whole heap (+ often metadata); rare = investigate</li>
+  </ul>
+
+  <h2>7. Safepoints</h2>
+  <p>Known bytecode stops where stacks are scannable. GC, dumps, some VM ops need them.</p>
+
+  <h2>8. Classic Bugs</h2>
+  <ul>
+    <li>Static unbounded collections</li>
+    <li>ThreadLocal without <code>remove()</code></li>
+    <li>Inner class holding outer ref</li>
+    <li>Premature promotion → Old fills → long pauses</li>
+  </ul>
+
+  <h2>9. Cross-links</h2>
+  <ul>
+    <li><a href="../lessons/oop-0005-object-lifecycle.html">GC Roots (oop-0005)</a></li>
+    <li><a href="../lessons/jvm-0002-heap-regions-tlab-object-layout.html">Generations (S02)</a></li>
+    <li><a href="../lessons/concurrency-0002-synchronization-monitors.html">Monitors</a></li>
+    <li><a href="../lessons/concurrency-0003-volatile-java-memory-model.html">JMM (visibility only)</a></li>
+  </ul>
+</body>
+</html>

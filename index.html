@@ -42,13 +42,13 @@
         <div class="progress-stats-box" id="sprintProgressBox">
           <div class="progress-header">
             <span class="progress-label">Curriculum Progress</span>
-            <span class="progress-percent">36.4% Complete</span>
+            <span class="progress-percent">45.5% Complete</span>
           </div>
           <div class="progress-bar-container">
             <div class="progress-bar-fill" id="progressFill"></div>
           </div>
           <div class="progress-sub">
-            <span>4 Completed &bull; 0 Active</span>
+            <span>5 Completed &bull; 0 Active</span>
             <span>45 Completed Lessons</span>
           </div>
         </div>
@@ -180,7 +180,7 @@
         </div>
 
         <!-- Module 04: JVM & Memory -->
-        <div class="module-card locked">
+        <div class="module-card active" id="jvmCard">
           <div class="card-header">
             <div class="icon-wrapper">
               <svg viewBox="0 0 24 24">
@@ -188,24 +188,21 @@
                 <path d="M9 2v2M15 2v2M9 20v2M15 20v2M20 9h2M20 15h2M2 9h2M2 15h2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </div>
-            <span class="badge locked-badge">Locked</span>
+            <span class="badge completed">Completed</span>
           </div>
           <div class="card-body">
             <div class="card-num">Module 04</div>
             <h3 class="card-title">JVM & Memory Management</h3>
-            <p class="card-desc">Deep-dive into the Java Virtual Machine. Uncover garbage collection configurations, class loaders, JIT, and Heap/Stack tuning.</p>
-            
-            <div class="upcoming-topics">
-              <ul>
-                <li>Heap vs Stack Allocation Rules</li>
-                <li>G1, ZGC, & Garbage Collector Selection</li>
-                <li>JIT Compilation & Class Loading Steps</li>
-                <li>Diagnostic Profiling & Memory Leaks</li>
-              </ul>
-            </div>
+            <p class="card-desc">Deep-dive into the Java Virtual Machine. Runtime memory areas, garbage collection, class loaders, JIT, and production diagnostics.</p>
           </div>
           <div class="card-footer">
-            <span class="card-progress-text">Upcoming</span>
+            <span class="card-progress-text">8 Lessons &bull; 1 Exercise</span>
+            <span class="active-action">
+              View Lessons
+              <svg viewBox="0 0 24 24">
+                <path d="M5 12h14M12 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
           </div>
         </div>
 
@@ -1120,6 +1117,143 @@
         </a>
 
         <a href="exercises/concurrency-capstone-exercise.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">Ex</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Capstone Exercise</span>
+              <span class="lesson-meta">16 scenarios &bull; Coding</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar JVM Lesson Drawer -->
+  <div class="drawer" id="jvmDrawer">
+    <div class="drawer-header">
+      <div class="drawer-title-group">
+        <h2>JVM & Memory Management</h2>
+        <p>Module 04 &bull; 8 Lessons &bull; 1 Exercise</p>
+      </div>
+      <button class="close-btn" id="closeJvmDrawerBtn" aria-label="Close lesson list">
+        <svg viewBox="0 0 24 24">
+          <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="drawer-content">
+      <div class="lesson-list">
+
+        <a href="lessons/jvm-0001-jvm-runtime-architecture.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">01</div>
+            <div class="lesson-info">
+              <span class="lesson-title">JVM Runtime Architecture & Memory Areas</span>
+              <span class="lesson-meta">30 min read &bull; JVM & Memory</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+        <a href="lessons/jvm-0002-heap-regions-tlab-object-layout.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">02</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Heap Regions, TLAB & Object Layout</span>
+              <span class="lesson-meta">35 min read &bull; JVM & Memory</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+        <a href="lessons/jvm-0003-garbage-collection-fundamentals.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">03</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Garbage Collection Fundamentals</span>
+              <span class="lesson-meta">35 min read &bull; JVM & Memory</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+        <a href="lessons/jvm-0004-garbage-collectors-selection.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">04</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Garbage Collectors & Selection</span>
+              <span class="lesson-meta">35 min read &bull; JVM & Memory</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+        <a href="lessons/jvm-0005-jvm-flags-gc-logging-tuning.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">05</div>
+            <div class="lesson-info">
+              <span class="lesson-title">JVM Flags, GC Logging & Tuning</span>
+              <span class="lesson-meta">35 min read &bull; JVM & Memory</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+        <a href="lessons/jvm-0006-class-loading-metaspace-classloader-leaks.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">06</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Class Loading, Metaspace & Classloader Leaks</span>
+              <span class="lesson-meta">35 min read &bull; JVM & Memory</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+        <a href="lessons/jvm-0007-jit-compilation-runtime-optimizations.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">07</div>
+            <div class="lesson-info">
+              <span class="lesson-title">JIT Compilation & Runtime Optimizations</span>
+              <span class="lesson-meta">35 min read &bull; JVM & Memory</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+        <a href="lessons/jvm-0008-diagnostics-profiling-memory-leaks.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">08</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Diagnostics, Profiling & Memory Leaks</span>
+              <span class="lesson-meta">40 min read &bull; JVM & Memory</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+
+        <a href="exercises/jvm-capstone-exercise.html" class="lesson-item">
           <div class="lesson-left">
             <div class="lesson-num">Ex</div>
             <div class="lesson-info">

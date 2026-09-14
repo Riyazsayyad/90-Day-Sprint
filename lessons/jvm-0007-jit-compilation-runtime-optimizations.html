@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 7 — JIT Compilation & Runtime Optimizations</title>
+  <meta name="description" content="JIT compilation from a Senior Backend perspective: tiered C1/C2, OSR, inlining, deoptimization, escape analysis, final/devirtualization, cold start, and warmup benchmarking.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="jvm-0006-class-loading-metaspace-classloader-leaks.html">&larr; Lesson 6</a> &middot;
+    Lesson 7 of 8 &middot;
+    <a href="jvm-0008-diagnostics-profiling-memory-leaks.html">Lesson 8 &rarr;</a> &middot;
+    <a href="../reference/jvm-0007-jit-compilation-runtime-optimizations.html">Cheat sheet</a>
+  </nav>
+
+  <h1>JIT Compilation & Runtime Optimizations</h1>
+  <p class="meta">~35 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; builds on <a href="oop-0015-final.html">final & JIT hints</a>, <a href="oop-0003-stack-vs-heap.html">Escape Analysis</a>, <a href="streams-0006-stream-internals.html">Stream JIT fusion</a>, <a href="jvm-0002-heap-regions-tlab-object-layout.html">TLAB</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Can you explain why the first 10k requests after deploy are slower than hour-two traffic? Can you describe tiered compilation, what OSR is, and why polymorphic call sites cause deoptimization? Know escape analysis at interview depth — not C2 IR graphs.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/en/java/javase/21/vm/compilers.html">Oracle — JVM Compilers</a> ·
+    <a href="https://wiki.openjdk.org/display/HotSpot/Tiered+Compilation">OpenJDK — Tiered Compilation</a> ·
+    <a href="https://openjdk.org/projects/code-tools/jmh/">JMH — Java Microbenchmark Harness</a>
+  </p>
+
+  <h2>1. Interpreter → C1 → C2 — Why Warmup Matters</h2>
+  <p>Bytecode starts in the <strong>interpreter</strong> — correct, flexible, slow. HotSpot profiles execution and compiles hot code to native machine code via JIT compilers:</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Tier</th>
+        <th>Compiler</th>
+        <th>Trade-off</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Interpreter</td>
+        <td>None</td>
+        <td>Startup fast; steady-state slow</td>
+      </tr>
+      <tr>
+        <td>C1 ("client")</td>
+        <td>Quick compile, light optimizations</td>
+        <td>Fast compile time; decent speed</td>
+      </tr>
+      <tr>
+        <td>C2 ("server")</td>
+        <td>Slow compile, aggressive optimizations</td>
+        <td>Best peak throughput/latency after warmup</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>Tiered compilation (default on server JVM):</strong> method starts interpreted → C1 compiles quickly → if still hot, promoted to C2 with deeper analysis. You pay compile CPU upfront for faster hot loops later.</p>
+
+  <blockquote>Prod reality: cold JVM after deploy = interpreter + first C1/C2 compiles. p99 drops after warmup. Serverless scale-from-zero amplifies this.</blockquote>
+
+  <h2>2. Hot Methods, Thresholds & OSR</h2>
+  <ul>
+    <li><strong>Hot method:</strong> invocation counter crosses threshold → scheduled for compilation.</li>
+    <li><strong>Compilation threshold:</strong> ergonomics flags like <code>-XX:CompileThreshold</code> / tiered thresholds — JVM adapts; don't memorize numbers, know <em>concept</em>.</li>
+    <li><strong>OSR (On-Stack Replacement):</strong> long-running loop still in interpreter mid-method → JVM compiles loop body and <strong>replaces active stack frame</strong> without waiting for method exit. Critical for hot loops inside rarely-called methods.</li>
+  </ul>
+
+  <pre>
+Normal compile: method exits interpreter → C2 native code next entry
+
+OSR:              long loop running in interpreter → compile loop → swap frame in-place
+  </pre>
+
+  <h2>3. Key Optimizations (Interview Level)</h2>
+
+  <h3>3.1 Inlining</h3>
+  <p>Replace callee with callee body at call site — eliminates call overhead, enables further opts. HotSpot inlines small hot methods aggressively. You saw the effect in <a href="streams-0006-stream-internals.html">Stream Internals</a>: fused pipeline can become one tight loop.</p>
+
+  <h3>3.2 Devirtualization</h3>
+  <p>Virtual call <code>animal.speak()</code> normally uses vtable dispatch. If profiler sees <strong>one implementation</strong> (monomorphic) or stable dominant type, JIT may inline direct call — huge win.</p>
+  <p>Tie <a href="oop-0015-final.html">final methods/classes</a>: <code>final</code> methods cannot be overridden → compiler/JIT knows target at compile time for those callsites.</p>
+
+  <h3>3.3 Dead code elimination & constant folding</h3>
+  <p>Unreachable branches removed. <code>static final</code> compile-time constants inlined at use site.</p>
+
+  <h3>3.4 Loop unrolling</h3>
+  <p>Duplicate loop body iterations to reduce branch overhead — classic C2 transform on counted loops.</p>
+
+  <h3>3.5 Lock elision (preview)</h3>
+  <p>If JIT proves lock never contends (escape analysis + biased locking history), synchronized block may be stripped in compiled code. <strong>Not a license to skip synchronization</strong> — proof can fail → deopt.</p>
+
+  <h2>4. Deoptimization — When Speculation Fails</h2>
+  <p>JIT optimizes based on <strong>observed runtime behavior</strong>. Assumptions baked into compiled code:</p>
+  <ul>
+    <li>Call site always hits <code>Dog</code> — then <code>Cat</code> appears → <strong>deoptimization</strong></li>
+    <li>Field never changed — then reflection or another thread mutates → deopt</li>
+    <li>Lock elision invalid — contention appears → revert to locking</li>
+  </ul>
+
+  <p><strong>Deoptimization:</strong> discard optimized native code, return affected threads to interpreter (or recompile with new profile). Causes latency spike — "perf cliff" when workload changes.</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Pattern</th>
+        <th>JIT assumption</th>
+        <th>Failure trigger</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Monomorphic callsite</td>
+        <td>Single receiver type</td>
+        <td>2+ types at same callsite (megamorphic)</td>
+      </tr>
+      <tr>
+        <td>Inlined virtual method</td>
+        <td>Stable target</td>
+        <td>New subclass loaded / different receiver</td>
+      </tr>
+      <tr>
+        <td>Scalar-replaced object</td>
+        <td>Object doesn't escape</td>
+        <td>Reference stored to heap / returned</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>5. Escape Analysis & Scalar Replacement</h2>
+  <p>From <a href="oop-0003-stack-vs-heap.html">Stack vs Heap</a>: not all objects need heap allocation.</p>
+
+  <p><strong>Escape analysis:</strong> JIT analyzes if object reference leaves method/thread scope:</p>
+  <ul>
+    <li><strong>No escape</strong> — object only used locally, not returned, not stored in field, not passed to unknown code</li>
+    <li><strong>Scalar replacement</strong> — object fields become local variables (registers/stack slots); <code>new Point(x,y)</code> may never hit heap/TLAB at all</li>
+    <li><strong>Stack allocation</strong> (term often used) — fields live in frame, not as heap object shell</li>
+  </ul>
+
+  <pre><code>int sumOfPairs(List&lt;Pair&gt; data) {
+    int total = 0;
+    for (Pair p : data) {
+        Point local = new Point(p.x, p.y);  // may not allocate on heap if JIT proves no escape
+        total += local.x + local.y;
+    }
+    return total;
+}</code></pre>
+
+  <p><strong>Limits:</strong> large objects, escaping refs, debug flags off, unpredictable aliasing — allocation may still happen. Don't write "micro-benchmark clever" code expecting escape; measure.</p>
+
+  <h2>6. JIT Logs — Awareness Only</h2>
+  <p>Unified logging can surface compilation events (exact tags vary by JDK):</p>
+  <pre><code>-Xlog:jit+compilation=info</code></pre>
+  <p>Legacy (older material still in interviews):</p>
+  <pre><code>-XX:+PrintCompilation</code></pre>
+  <p>You'll see method signatures, compile level (e.g. 3 = C2), and OSR markers. Full flag cookbook not goal — know logs exist for "is this method compiled yet?"</p>
+
+  <h2>7. Enterprise — Cold Start & Benchmarking</h2>
+
+  <h3>7.1 Cold start (K8s / serverless)</h3>
+  <ul>
+    <li>New pod: class loading + interpreter + JIT compile storm + Spring context init</li>
+    <li>First N requests pay warmup tax — autoscaling policies must account for this</li>
+    <li>Mitigations: readiness probes that warm critical paths, AOT/native image (GraalVM — mention only), keeping min replicas &gt; 0</li>
+  </ul>
+
+  <h3>7.2 Benchmark after warmup — JMH nod</h3>
+  <p>Never trust a single <code>main()</code> loop timing:</p>
+  <ul>
+    <li><strong>JMH</strong> — warms up JIT, forks JVMs, avoids dead-code elimination traps</li>
+    <li>Measure after warmup iterations; report percentiles</li>
+    <li>Microbenchmark ≠ production — allocation rate, GC, and concurrency differ</li>
+  </ul>
+
+  <h3>7.3 What seniors watch</h3>
+  <ul>
+    <li>Latency drop after deploy plateau (warmup curve)</li>
+    <li>Deoptimization spikes when traffic pattern changes (new code path, new types)</li>
+    <li>Code Cache fill — too many compiled methods → sweeps/recompiles (<a href="jvm-0001-jvm-runtime-architecture.html">S01</a>)</li>
+  </ul>
+
+  <p><strong>GraalVM / Native Image:</strong> ahead-of-time compile trades peak JIT optimality for instant startup — different trade-off space; not default HotSpot path.</p>
+
+  <p><strong>Out of scope:</strong> C2 IR graphs, assembly reading, Module 07 perf engineering depth, GraalVM as primary lesson.</p>
+
+  <hr>
+
+  <h2>8. Revision Notes</h2>
+  <ul>
+    <li>Interpreter → C1 → C2 tiered; warmup required for peak perf.</li>
+    <li>OSR compiles hot loops inside long methods.</li>
+    <li>Inlining + devirtualization = big wins on monomorphic calls.</li>
+    <li>Deopt when profile assumptions break (polymorphism).</li>
+    <li>Escape analysis → scalar replacement may skip heap alloc.</li>
+    <li>Cold start hurts serverless/K8s scale-from-zero.</li>
+    <li>Benchmark with JMH after warmup — not naive loops.</li>
+  </ul>
+
+  <hr>
+
+  <h2>9. Reasoning Exercises</h2>
+  <ol>
+    <li>
+      <p><strong>Deploy new version. p99 200 ms first 5 min, then 40 ms steady. GC normal. Explain?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>JIT warmup</strong> — hot paths moving interpreter → C1 → C2. Also possible class data cache warming. Not necessarily a bug.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>Interface method with 5 implementations called randomly at one callsite. Inlining?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>Megamorphic</strong> — JIT unlikely to inline all targets. Virtual dispatch remains. Deopt if earlier monomorphic assumption breaks.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong><code>final</code> class method called from known type. Devirtualization easier?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>Yes.</strong> No subclasses → stable target. JIT can inline aggressively (oop-0015).</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>Lambda in hot stream pipeline never escapes intermediate objects. Heap allocation?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p>JIT may fuse + escape-analyze — fewer heap objects than naive reading (<a href="streams-0006-stream-internals.html">streams-0006</a>). Not guaranteed; measure under load.</p>
+      </details>
+    </li>
+  </ol>
+
+  <hr>
+
+  <h2>10. 6 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Why first requests after deploy slower?</p>
+        <ol type="A">
+          <li>Interpreter plus JIT not warmed.</li>
+          <li>GC disabled until ten minutes.</li>
+          <li>Heap fixed at one megabyte.</li>
+          <li>Metaspace cleared every request.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Interpreter plus JIT not warmed.)</strong></p>
+          <p>Bytecode runs interpreted until hot methods compile to native code. Tiered compilation takes time.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: OSR primarily helps which case?</p>
+        <ol type="A">
+          <li>Hot loop inside rare method.</li>
+          <li>Static clinit running once.</li>
+          <li>Class loading verify phase.</li>
+          <li>Metaspace cap exceeded event.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Hot loop inside rare method.)</strong></p>
+          <p>On-Stack Replacement compiles and swaps an active long-running loop without waiting for method return.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: Deoptimization triggered when?</p>
+        <ol type="A">
+          <li>JIT assumption no longer holds.</li>
+          <li>Any Young GC cycle runs.</li>
+          <li>Thread enters WAITING state.</li>
+          <li>Compressed oops turned off.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (JIT assumption no longer holds.)</strong></p>
+          <p>e.g. monomorphic callsite becomes megamorphic. Optimized code discarded; interpreter or recompile.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: Escape analysis enables what?</p>
+        <ol type="A">
+          <li>Scalar replace non-escaping object.</li>
+          <li>Move static fields to stack.</li>
+          <li>Skip class loading entirely.</li>
+          <li>Disable garbage collection.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Scalar replace non-escaping object.)</strong></p>
+          <p>If object doesn't escape scope, fields may live in registers/locals without heap allocation.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: C2 vs C1 trade-off?</p>
+        <ol type="A">
+          <li>C2 slower compile deeper opts.</li>
+          <li>C1 never compiles any code.</li>
+          <li>C2 only runs in interpreter.</li>
+          <li>C1 replaces garbage collector.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (C2 slower compile deeper opts.)</strong></p>
+          <p>C1 compiles fast with lighter optimizations. C2 spends more compile time for aggressive peak performance.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: Reliable microbenchmark practice?</p>
+        <ol type="A">
+          <li>JMH with warmup iterations.</li>
+          <li>Single main timing loop only.</li>
+          <li>Measure before any classes load.</li>
+          <li>Disable tiered compilation always.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (JMH with warmup iterations.)</strong></p>
+          <p>JMH accounts for JIT warmup and JVM pitfalls. Naive loops mislead.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>11. Bridge to Next Lesson</h2>
+  <ul>
+    <li><strong>S08</strong> — when JIT/GC tuning can't explain it: heap dumps, JFR, async-profiler</li>
+    <li><strong>M07</strong> — systematic perf engineering beyond interview JIT overview</li>
+    <li><strong>Streams / final</strong> — design for monomorphic hot paths; don't fight the optimizer</li>
+  </ul>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="jvm-0006-class-loading-metaspace-classloader-leaks.html">&larr; Lesson 6</a> &middot;
+    <a href="jvm-0008-diagnostics-profiling-memory-leaks.html">Lesson 8 &rarr;</a> &middot;
+    <a href="../reference/jvm-0007-jit-compilation-runtime-optimizations.html">Cheat sheet</a>
+  </nav>
+</body>
+</html>

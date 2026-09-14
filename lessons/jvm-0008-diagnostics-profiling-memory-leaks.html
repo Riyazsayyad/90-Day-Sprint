@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 8 — Diagnostics, Profiling & Memory Leaks</title>
+  <meta name="description" content="JVM diagnostics from a Senior Backend perspective: jcmd, jstack, jmap, MAT dominator tree, leak patterns, native memory, flame graphs, JFR, and production incident workflow.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="jvm-0007-jit-compilation-runtime-optimizations.html">&larr; Lesson 7</a> &middot;
+    Lesson 8 of 8 &middot;
+    <a href="../reference/jvm-0008-diagnostics-profiling-memory-leaks.html">Cheat sheet</a> &middot;
+    <a href="../exercises/jvm-capstone-exercise.html">➡️ Capstone Exercise</a>
+  </nav>
+
+  <h1>Diagnostics, Profiling & Memory Leaks</h1>
+  <p class="meta">~40 minutes &middot; Module 04 capstone &middot; ties to <a href="jvm-0001-jvm-runtime-architecture.html">S01–S07</a>, <a href="concurrency-0001-thread-fundamentals.html">Thread Dumps</a>, <a href="concurrency-0005-executors.html">Pool Exhaustion</a>, <a href="concurrency-0002-synchronization-monitors.html">Locks</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Under incident pressure, can you pick the right tool in 30 seconds? Thread dump for "all threads stuck" — GC logs for pause spikes — heap histogram/dump for growing Old gen. Can you walk an interviewer through latency spike → thread dump + GC log + histogram without opening MAT? Know leak patterns cold; production discipline: reproduce, one change, keep logs.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/specs/man/jcmd.html">Oracle — <code>jcmd</code></a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/troubleshoot/">Oracle — Troubleshooting Guide</a> ·
+    <a href="https://docs.oracle.com/javacomponents/eclipse-memory-analyzer/">Eclipse MAT — Concepts</a>
+  </p>
+
+  <h2>1. Diagnostic Toolbox Map</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Tool</th>
+        <th>Command / entry</th>
+        <th>Answers</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>jps</strong></td>
+        <td><code>jps -l</code></td>
+        <td>Which Java PIDs are running? Main class / JAR name</td>
+      </tr>
+      <tr>
+        <td><strong>jcmd</strong></td>
+        <td><code>jcmd &lt;pid&gt; help</code></td>
+        <td>Swiss army knife — thread dump, GC heap info, VM flags, JFR start (preferred modern entry)</td>
+      </tr>
+      <tr>
+        <td><strong>jstat</strong></td>
+        <td><code>jstat -gc &lt;pid&gt; 1s</code></td>
+        <td>Live GC pool sizes, GC counts, pause times — lightweight monitoring</td>
+      </tr>
+      <tr>
+        <td><strong>jstack</strong></td>
+        <td><code>jstack &lt;pid&gt;</code> or <code>jcmd &lt;pid&gt; Thread.print</code></td>
+        <td>Thread dump — what every thread is doing, lock states</td>
+      </tr>
+      <tr>
+        <td><strong>jmap</strong></td>
+        <td><code>jmap -histo:live &lt;pid&gt;</code>, <code>jmap -dump</code></td>
+        <td>Heap histogram (class instance counts) or full heap dump file</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <blockquote>Modern preference: <code>jcmd</code> over legacy tools where equivalent. In K8s: <code>kubectl exec</code> into pod, find PID, run jcmd — or capture via sidecar/agent.</blockquote>
+
+  <h2>2. Thread Dump Reading</h2>
+  <p>You met thread dumps in <a href="concurrency-0001-thread-fundamentals.html">Thread Fundamentals</a>. Under incident, scan for patterns:</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>State</th>
+        <th>Often means</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>BLOCKED</strong></td>
+        <td>Waiting to enter <code>synchronized</code> monitor</td>
+        <td>Find "waiting to lock &lt;0x...&gt;" and who holds that lock (<a href="concurrency-0002-synchronization-monitors.html">S02</a>)</td>
+      </tr>
+      <tr>
+        <td><strong>WAITING</strong></td>
+        <td><code>wait()</code>, <code>park</code>, join — no timeout</td>
+        <td>Trace park target; pool queue empty?</td>
+      </tr>
+      <tr>
+        <td><strong>TIMED_WAITING</strong></td>
+        <td>Sleep, timed wait, lock timeout</td>
+        <td>Check if stuck in slow I/O or lock tryLock timeout loop</td>
+      </tr>
+      <tr>
+        <td><strong>RUNNABLE</strong></td>
+        <td>Runnable or in native (socket read, JDBC)</td>
+        <td>Many at <code>socketRead0</code> → downstream slowness, not CPU</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <pre><code>"pool-3-thread-1" #42 prio=5 os_prio=0 BLOCKED
+  waiting to lock &lt;0x00000000e1234567&gt; (a com.app.Cache)
+  at com.app.Cache.get(Cache.java:88)
+  ...
+
+"http-nio-8080-exec-5" #31 RUNNABLE
+  at java.net.SocketInputStream.socketRead0(Native Method)
+  at org.postgresql.jdbc.PgStream.receive(...)</code></pre>
+
+  <p><strong>Pool exhaustion</strong> (<a href="concurrency-0005-executors.html">Executors</a>): all worker threads BLOCKED or in I/O → queue grows → timeouts. Thread dump shows 200 threads all waiting on same lock or DB.</p>
+  <p><strong>Explicit locks</strong> (<a href="concurrency-0004-explicit-locks.html">L04</a>): look for <code>ReentrantLock</code> / <code>AbstractQueuedSynchronizer</code> frames.</p>
+
+  <h2>3. Heap Dump — When & How</h2>
+
+  <h3>3.1 When to take</h3>
+  <ul>
+    <li>Old gen climbing, Full GC not reclaiming — <code>Java heap space</code> OOM imminent or occurred</li>
+    <li>Suspected retention leak — heap healthy at restart, grows over hours/days</li>
+    <li><strong>Not</strong> first tool for pure CPU spike or thread deadlock — thread dump first</li>
+  </ul>
+
+  <h3>3.2 How (production-safe awareness)</h3>
+  <pre><code># Histogram — lighter, triggers Full GC with :live
+jcmd &lt;pid&gt; GC.class_histogram
+
+# Full dump — STW pause, large file
+jcmd &lt;pid&gt; GC.heap_dump /tmp/heap.hprof
+# legacy: jmap -dump:live,format=b,file=heap.hprof &lt;pid&gt;</code></pre>
+
+  <p>Enable on OOM automatically (<a href="jvm-0005-jvm-flags-gc-logging-tuning.html">S05</a>):</p>
+  <pre><code>-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/</code></pre>
+
+  <h3>3.3 MAT / dominator tree (concept — not click-by-click)</h3>
+  <p><strong>Dominator tree:</strong> for each object, which retention path would free the most memory if removed? Top dominators = leak suspects.</p>
+  <ul>
+    <li><code>static HashMap</code> holding millions of entries → dominator is map or static holder class</li>
+    <li>Leak detector report: "Problem suspect" — one big collection retaining 80% heap</li>
+    <li>Compare two dumps (baseline vs leak) — what grew?</li>
+  </ul>
+
+  <h2>4. Common Leak Patterns (S01–S07 Synthesis)</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Pattern</th>
+        <th>Symptom</th>
+        <th>Find with</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Static unbounded Map/List</strong></td>
+        <td>Old gen grows; Full GC poor reclaim</td>
+        <td>Histogram: huge <code>HashMap$Node[]</code> or domain objects</td>
+      </tr>
+      <tr>
+        <td><strong>Unclosed resources</strong></td>
+        <td>FD exhaustion, native memory, connection pool starved</td>
+        <td>Heap + OS <code>lsof</code>; try-with-resources fix</td>
+      </tr>
+      <tr>
+        <td><strong>Listener registries</strong></td>
+        <td>Objects never collected after "logout"</td>
+        <td>Dominator: event bus / observer list holding subscribers</td>
+      </tr>
+      <tr>
+        <td><strong>ThreadLocal</strong></td>
+        <td>Slow Metaspace/heap creep on pool threads</td>
+        <td>Thread dump + heap; missing <code>remove()</code> (<a href="jvm-0006-class-loading-metaspace-classloader-leaks.html">S06</a>)</td>
+      </tr>
+      <tr>
+        <td><strong>Classloader leak</strong></td>
+        <td>Metaspace stair-step; heap may be flat</td>
+        <td>Metaspace OOM; redeploy without restart</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>5. Native Memory & Direct Buffers</h2>
+  <p>Not in heap dump — <code>ByteBuffer.allocateDirect</code>, Netty pooled direct memory:</p>
+  <ul>
+    <li>OOM: <code>Direct buffer memory</code> — not fixed by <code>-Xmx</code></li>
+    <li>Netty <code>PooledByteBufAllocator</code> — leaks if buffers not released</li>
+    <li>Native Memory Tracking (awareness): <code>-XX:NativeMemoryTracking=summary</code>, <code>jcmd &lt;pid&gt; VM.native_memory summary</code></li>
+    <li>RSS &gt; heap + Metaspace → suspect direct/native (<a href="jvm-0001-jvm-runtime-architecture.html">S01</a>)</li>
+  </ul>
+
+  <h2>6. CPU vs Allocation Profiling — Flame Graph Mental Model</h2>
+  <p><strong>CPU flame graph</strong> (async-profiler, JFR CPU events):</p>
+  <ul>
+    <li>X-axis = sample proportion (wider = more CPU time)</li>
+    <li>Y-axis = stack depth (bottom = entry, top = hot leaf)</li>
+    <li>Find wide plateau at <code>HashMap.get</code> or regex — optimize that path</li>
+  </ul>
+
+  <p><strong>Allocation profiling</strong>:</p>
+  <ul>
+    <li>Answers "who allocates most?" — Young GC pressure, TLAB churn</li>
+    <li>Wide bar at <code>new byte[]</code> or JSON parser — reduce allocation rate</li>
+    <li>Different fix than CPU: object reuse, streaming, primitive arrays</li>
+  </ul>
+
+  <blockquote>Interview: CPU profile for "slow" — allocation profile for "GC thrashing but low CPU business logic."</blockquote>
+
+  <h2>7. JFR — Java Flight Recorder (Awareness)</h2>
+  <ul>
+    <li>Low-overhead event recorder built into JDK — safe for prod with tuning</li>
+    <li><code>jcmd &lt;pid&gt; JFR.start duration=60s filename=recording.jfr</code></li>
+    <li>Events: GC pauses, thread blocks, socket I/O, allocation samples, method hot spots</li>
+    <li>Analyze in JDK Mission Control (JMC) — timeline correlates GC + thread + CPU</li>
+    <li>Continuous profiling alternative to always-on APM — no vendor config lesson here</li>
+  </ul>
+
+  <h2>8. Production Discipline</h2>
+  <ol>
+    <li><strong>Reproduce under load</strong> — staging with prod-like traffic; thread dump alone on idle JVM misleads</li>
+    <li><strong>One change at a time</strong> — flag, code fix, pool size — measure before/after</li>
+    <li><strong>Keep GC logs</strong> — enabled from deploy (<a href="jvm-0005-jvm-flags-gc-logging-tuning.html">S05</a>)</li>
+    <li><strong>Capture before restart</strong> — restart destroys evidence; dump/thread print first</li>
+    <li><strong>Time-correlate</strong> — APM p99 spike timestamp = GC log line = thread dump</li>
+  </ol>
+
+  <h2>9. Enterprise Incident Story Arc</h2>
+  <p><strong>Symptom:</strong> API p99 3 s (normal 80 ms). Error rate low. Started 14:02.</p>
+
+  <pre>
+14:02  APM p99 spike
+14:03  Check GC logs → Mixed GC pauses 400ms (not enough for 3s alone)
+14:04  jcmd Thread.print → 180/200 tomcat threads RUNNABLE at socketRead0
+14:05  Root cause hypothesis: DB replica lag — not JVM tune
+---
+Alt path:
+14:02  p99 spike + timeouts
+14:03  GC logs → Full GC every 60s, heap 95% after GC
+14:04  jmap -histo:live → 4M OrderDto instances
+14:05  Static cache field in OrderService — code fix, not -Xmx
+  </pre>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Signal</th>
+        <th>Tool first</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Latency + all threads in I/O</td>
+        <td>Thread dump → downstream dependency</td>
+      </tr>
+      <tr>
+        <td>Latency + long GC pauses in logs</td>
+        <td>GC logs → heap tuning or leak</td>
+      </tr>
+      <tr>
+        <td>Heap growing over days</td>
+        <td>Histogram → heap dump → dominator tree</td>
+      </tr>
+      <tr>
+        <td>CPU 100% steady</td>
+        <td>CPU profile / JFR — hot method</td>
+      </tr>
+      <tr>
+        <td>Metaspace OOM</td>
+        <td>Classloader leak path (<a href="jvm-0006-class-loading-metaspace-classloader-leaks.html">S06</a>)</td>
+      </tr>
+      <tr>
+        <td>Pool task rejected</td>
+        <td>Thread dump + pool metrics (<a href="concurrency-0005-executors.html">L05</a>)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>Out of scope:</strong> full MAT tutorial, async-profiler install, APM vendor setup, Spring Actuator (M05).</p>
+
+  <hr>
+
+  <h2>10. Module 04 Revision — Full Arc</h2>
+  <ul>
+    <li><strong>S01</strong> — memory map, OOM types, cgroup headroom</li>
+    <li><strong>S02</strong> — generations, TLAB, object layout</li>
+    <li><strong>S03</strong> — reachability, GC phases, retention</li>
+    <li><strong>S04</strong> — G1/ZGC selection</li>
+    <li><strong>S05</strong> — flags, GC log reading</li>
+    <li><strong>S06</strong> — classloaders, Metaspace leaks</li>
+    <li><strong>S07</strong> — JIT warmup, deopt, escape analysis</li>
+    <li><strong>S08</strong> — diagnostics tie it together under fire</li>
+  </ul>
+
+  <hr>
+
+  <h2>11. Reasoning Exercises</h2>
+  <ol>
+    <li>
+      <p><strong>All 50 pool threads BLOCKED on same monitor. Queue size 10k. First tool?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>Thread dump</strong> — identify lock holder thread and stack. Fix lock scope or deadlock — not heap dump.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>Heap 90% after Full GC. Histogram shows 2M <code>char[]</code>. Next?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>Heap dump + dominator tree</strong> — find what retains char arrays (often giant JSON strings or caches).</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>RSS 3 GB, <code>-Xmx1g</code>, heap dump 1 GB. Gap?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>Off-heap:</strong> Metaspace, thread stacks, direct buffers, Code Cache. Check <code>VM.native_memory</code> and direct buffer OOM history.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>CPU 95%, GC logs quiet. Young GC normal. Tool?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>CPU profiler / JFR CPU samples</strong> — hot method loop, not GC tuning.</p>
+      </details>
+    </li>
+  </ol>
+
+  <hr>
+
+  <h2>12. 6 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: First tool for suspected deadlock?</p>
+        <ol type="A">
+          <li>Thread dump via jstack or jcmd.</li>
+          <li>Full heap dump with jmap only.</li>
+          <li>Disable garbage collection flags.</li>
+          <li>Restart pod before any capture.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Thread dump via jstack or jcmd.)</strong></p>
+          <p>Thread dump shows BLOCKED threads, locks waited on, and holders. Heap dump doesn't show lock graph clearly.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Dominator tree in MAT primarily shows?</p>
+        <ol type="A">
+          <li>Objects retaining most heap memory.</li>
+          <li>JIT compilation tier per method.</li>
+          <li>Metaspace classloader hierarchy only.</li>
+          <li>Thread stack depth histogram.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Objects retaining most heap memory.)</strong></p>
+          <p>Dominator analysis finds retention paths — top dominators are leak suspects.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: jstat -gc best for?</p>
+        <ol type="A">
+          <li>Live GC pool and pause stats.</li>
+          <li>Bytecode verify per class file.</li>
+          <li>Decompiling hot methods only.</li>
+          <li>Editing Spring bean definitions.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Live GC pool and pause stats.)</strong></p>
+          <p>jstat samples GC counters over time — lightweight compared to full dump.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: Direct buffer OOM fixed by raising Xmx?</p>
+        <ol type="A">
+          <li>No — separate off-heap pool.</li>
+          <li>Yes — Xmx covers all memory.</li>
+          <li>Yes — if UseZGC enabled only.</li>
+          <li>No — only StackOverflow applies.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (No — separate off-heap pool.)</strong></p>
+          <p>Direct memory is outside heap. Fix release/pooling or MaxDirectMemorySize.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: CPU flame graph wide bar means?</p>
+        <ol type="A">
+          <li>High proportion of CPU samples.</li>
+          <li>Thread is in WAITING state.</li>
+          <li>Object escaped to heap always.</li>
+          <li>Class failed verification step.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (High proportion of CPU samples.)</strong></p>
+          <p>Width = time in that stack frame and children — hot CPU path.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: Production incident best discipline?</p>
+        <ol type="A">
+          <li>Capture dumps then one fix at time.</li>
+          <li>Change ten flags and redeploy.</li>
+          <li>Skip logs and restart first always.</li>
+          <li>Profile only on developer laptop.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Capture dumps then one fix at time.)</strong></p>
+          <p>Preserve evidence; reproduce under load; single variable changes with GC logs retained.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="jvm-0007-jit-compilation-runtime-optimizations.html">&larr; Lesson 7</a> &middot;
+    <a href="../reference/jvm-0008-diagnostics-profiling-memory-leaks.html">Cheat sheet</a> &middot;
+    <a href="../exercises/jvm-capstone-exercise.html">➡️ Capstone Exercise</a>
+  </nav>
+</body>
+</html>

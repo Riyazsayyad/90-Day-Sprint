@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 3 — Garbage Collection Fundamentals</title>
+  <meta name="description" content="Garbage collection fundamentals from a Senior Backend perspective: GC roots, reference strengths, mark/sweep/compact, STW vs concurrent, minor vs major GC, safepoints, retention bugs, and p99 latency framing.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="jvm-0002-heap-regions-tlab-object-layout.html">&larr; Lesson 2</a> &middot;
+    Lesson 3 of 8 &middot;
+    <a href="jvm-0004-garbage-collectors-selection.html">Lesson 4 &rarr;</a> &middot;
+    <a href="../reference/jvm-0003-garbage-collection-fundamentals.html">Cheat sheet</a>
+  </nav>
+
+  <h1>Garbage Collection Fundamentals</h1>
+  <p class="meta">~35 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; builds on <a href="oop-0005-object-lifecycle.html">GC Roots & References</a>, <a href="jvm-0002-heap-regions-tlab-object-layout.html">S02 Generations</a>, <a href="concurrency-0002-synchronization-monitors.html">Monitors</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Interviewers probe whether you understand <em>reachability</em> (not "delete when null"), what a pause actually blocks, and why a cache in a static <code>Map</code> is a GC problem not a "memory leak in C sense." You should explain Minor vs Major GC, reference strengths with <em>when</em> the collector acts, and why p99 latency often matters more than average throughput for APIs.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/en/java/javase/21/gctooling/introduction.html">Oracle — Java GC Introduction</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/ref/package-summary.html">Oracle — <code>java.lang.ref</code></a> ·
+    <a href="https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html#jvms-2.5">JVM Spec — GC Roots</a>
+  </p>
+
+  <h2>1. Why GC Exists — Trade-offs</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Approach</th>
+        <th>Pros</th>
+        <th>Cons</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Manual</strong> (C/C++ <code>free</code>)</td>
+        <td>Predictable dealloc timing; no collector pauses</td>
+        <td>Use-after-free, double-free, leaks — security + stability risk at scale</td>
+      </tr>
+      <tr>
+        <td><strong>Automatic</strong> (Java GC)</td>
+        <td>Developer focuses on business logic; fewer dangling-pointer bugs</td>
+        <td>Pause times, CPU overhead, non-deterministic reclamation timing</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Java bets: developer productivity and safety beat perfect determinism. Your job in production is to <strong>shape allocation and retention</strong> so GC stays within SLO — not to micromanage every <code>free</code>.</p>
+
+  <h2>2. Reachability from GC Roots</h2>
+  <p>GC does not run when you assign <code>null</code>. It runs when memory pressure triggers a collection, then asks: <strong>is this object reachable from any GC root via strong references?</strong></p>
+  <p>You covered roots in <a href="oop-0005-object-lifecycle.html">Object Lifecycle</a>. Production-complete root set:</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>GC Root</th>
+        <th>Example</th>
+        <th>Why it matters</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Thread stacks</strong></td>
+        <td>Local refs in active stack frames</td>
+        <td>Request-scoped objects alive while handler runs</td>
+      </tr>
+      <tr>
+        <td><strong>Static fields</strong></td>
+        <td><code>private static Map&lt;K,V&gt; CACHE</code></td>
+        <td>Classic accidental retention — lives for JVM lifetime</td>
+      </tr>
+      <tr>
+        <td><strong>JNI global refs</strong></td>
+        <td>Native code holding Java objects</td>
+        <td>Native libs can pin objects invisible to Java code</td>
+      </tr>
+      <tr>
+        <td><strong>Synchronized monitor refs</strong></td>
+        <td>Thread blocked in <code>synchronized(obj)</code></td>
+        <td>JVM keeps monitor object reachable while thread waits (<a href="concurrency-0002-synchronization-monitors.html">Lesson 2</a>)</td>
+      </tr>
+      <tr>
+        <td><strong>Class loaders / JVM internals</strong></td>
+        <td>Loaded classes, JMX beans, some thread locals</td>
+        <td>Metaspace + heap cross-links (S06 preview)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <pre><code>void handle() {
+    Order o = load();     // o reachable from stack root
+    process(o);
+}   // frame popped → o eligible unless retained elsewhere
+
+static List&lt;Order&gt; LOG = new ArrayList&lt;&gt;();
+LOG.add(o);             // now reachable from static root → never collected</code></pre>
+
+  <p><strong>Unreachable ≠ immediately freed.</strong> Eligible for collection on next GC cycle in that generation. Visibility to other threads is a separate JMM topic — see <a href="concurrency-0003-volatile-java-memory-model.html">volatile & JMM</a>; GC only cares about reference graph integrity at safepoint.</p>
+
+  <h2>3. Reference Strengths — When the Collector Runs Each</h2>
+  <p>Expand <a href="oop-0005-object-lifecycle.html">oop-0005</a> with collector timing (not finalize):</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Strength</th>
+        <th>Collected when</th>
+        <th>Typical use</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Strong</strong></td>
+        <td>Never while reachable from roots</td>
+        <td>Normal fields, locals, collections</td>
+      </tr>
+      <tr>
+        <td><strong>Soft</strong> (<code>SoftReference</code>)</td>
+        <td>After heap is tight — collector clears soft refs <em>before</em> throwing OOM, usually after stronger refs processed</td>
+        <td>Memory-sensitive caches (image thumbnails, parsed docs) — "keep until we need RAM back"</td>
+      </tr>
+      <tr>
+        <td><strong>Weak</strong> (<code>WeakReference</code>)</td>
+        <td>Next GC cycle when only weakly reachable — regardless of heap fullness</td>
+        <td><code>WeakHashMap</code> keys, canonicalization maps, class loader adjacency</td>
+      </tr>
+      <tr>
+        <td><strong>Phantom</strong> (<code>PhantomReference</code>)</td>
+        <td>After object finalized/deallocated — ref enqueued; <code>get()</code> always <code>null</code></td>
+        <td>Post-mortem cleanup via <code>ReferenceQueue</code> + <code>Cleaner</code> (off-heap resource release)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <blockquote>Interview ordering: Strong survives longest → Soft cleared under memory pressure → Weak at next GC → Phantom signals "object memory gone, run cleanup action."</blockquote>
+
+  <h2>4. GC Phase Vocabulary</h2>
+  <p>All collectors compose variants of these ideas:</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Phase</th>
+        <th>What happens</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Mark</strong></td>
+        <td>Traverse from roots; mark live objects</td>
+      </tr>
+      <tr>
+        <td><strong>Sweep</strong></td>
+        <td>Reclaim unmarked space; may leave fragmentation</td>
+      </tr>
+      <tr>
+        <td><strong>Compact</strong></td>
+        <td>Move live objects together; updates references; eliminates fragmentation</td>
+      </tr>
+      <tr>
+        <td><strong>Copy</strong></td>
+        <td>Copy live objects to fresh region; abandon old region in one go — no sweep fragmentation</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Copying vs Mark-Sweep-Compact</h3>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Strategy</th>
+        <th>Where used</th>
+        <th>Trade-off</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Copying</strong></td>
+        <td>Young generation (Eden → Survivor)</td>
+        <td>Fast when few survivors; needs spare space (from-space / to-space)</td>
+      </tr>
+      <tr>
+        <td><strong>Mark-Sweep-Compact</strong></td>
+        <td>Old generation (classic)</td>
+        <td>Works in place; compact phase is costly (longer pauses)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>5. Stop-The-World vs Concurrent Phases</h2>
+  <ul>
+    <li><strong>Stop-The-World (STW):</strong> all application mutator threads paused at safepoints. GC (or part of it) runs. Your API handlers literally stop making progress.</li>
+    <li><strong>Concurrent:</strong> GC threads work while app threads run — with barriers/bookkeeping so app and collector don't corrupt the heap. Still usually has <em>some</em> short STW phases.</li>
+  </ul>
+
+  <p><strong>Pause</strong> = wall-clock time your service threads are frozen at safepoints. Metrics:</p>
+  <ul>
+    <li><strong>Throughput</strong> — % time app runs vs GC (batch jobs care)</li>
+    <li><strong>Latency / p99</strong> — tail pause hits slowest requests (APIs care)</li>
+  </ul>
+
+  <blockquote>Enterprise framing: A 50 ms average pause sounds fine until p99 is 800 ms during Mixed GC — that's user-facing timeout territory. Measure pause distribution, not just mean.</blockquote>
+
+  <h2>6. Generational Hypothesis (Bridge from S02)</h2>
+  <p><strong>Hypothesis:</strong> most objects die young; few survive long.</p>
+  <ul>
+    <li>Collect <strong>Young</strong> often — small live set, copying collector, short pause.</li>
+    <li>Collect <strong>Old</strong> rarely — large graph, expensive mark/compact.</li>
+    <li><strong>Promotion</strong> — survivors age in Survivor spaces then move Old (<a href="jvm-0002-heap-regions-tlab-object-layout.html">S02</a>).</li>
+  </ul>
+
+  <h2>7. Minor GC vs Major / Full GC</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Term</th>
+        <th>Typical scope</th>
+        <th>Frequency / pause</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Minor / Young GC</strong></td>
+        <td>Eden + Survivors</td>
+        <td>Often; usually milliseconds</td>
+      </tr>
+      <tr>
+        <td><strong>Major GC</strong></td>
+        <td>Old generation</td>
+        <td>Less often; can be hundreds of ms+</td>
+      </tr>
+      <tr>
+        <td><strong>Full GC</strong></td>
+        <td>Entire heap + often class metadata cleanup</td>
+        <td>Rare in healthy apps; long STW — incident signal</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>Naming caveat:</strong> logs vary by collector (G1 "Young" vs "Mixed" — S04). Fundamentals: know <em>what generation</em> is being collected and whether app threads paused.</p>
+
+  <pre>
+Healthy API service pattern:
+
+  Minor GC  ████░░░░████░░░░████   frequent, small pauses
+  Major/Mixed GC  ░░░░█░░░░░░█░░░   occasional, watch p99
+  Full GC  ░░░░░░░░░░░█░░░░░░░   rare — investigate
+  </pre>
+
+  <h2>8. Safepoints — Why Threads Must Pause</h2>
+  <p>From <a href="jvm-0001-jvm-runtime-architecture.html">S01</a>: GC must see a consistent reference graph. If threads moved references mid-copy, the heap corrupts.</p>
+  <ul>
+    <li>JVM inserts <strong>safepoint polls</strong> in bytecode (loops, method returns, etc.).</li>
+    <li>At safepoint, thread stack roots are frozen and scannable.</li>
+    <li>Long counted loops without safepoint poll → "GC stuck waiting for thread" (rare but real in tight native/math loops).</li>
+  </ul>
+  <p>Thread dumps, deoptimization, and some lock operations also use safepoints — GC isn't the only reason.</p>
+
+  <h2>9. Classic Bugs</h2>
+
+  <h3>9.1 Accidental retention</h3>
+  <ul>
+    <li><strong>Static collections</strong> — <code>static List&lt;Event&gt; buffer</code> never cleared; every event pinned until restart.</li>
+    <li><strong>Inner class holding outer</strong> — non-static inner holds implicit <code>this$0</code> → entire outer graph retained.</li>
+    <li><strong>ThreadLocal leak (preview)</strong> — pool thread + <code>ThreadLocal</code> without <code>remove()</code> after request → previous request's graph stuck on thread. Brutal with Tomcat worker pools.</li>
+    <li><strong>Listener registries</strong> — forgot to unregister callback on shutdown.</li>
+  </ul>
+
+  <h3>9.2 Premature promotion</h3>
+  <p>Short-lived objects that survive one or two Young GCs due to timing (not true long-lived data) get promoted to Old. Old fills faster → more Major GC → longer pauses.</p>
+  <ul>
+    <li>Cause: allocation burst + unlucky GC timing, Survivor too small, <code>-XX:MaxTenuringThreshold</code> too low.</li>
+    <li>Fix direction: reduce unnecessary retention in request path; tune Survivor/tenuring (S05) after proving with GC logs — not guesswork.</li>
+  </ul>
+
+  <h2>10. Enterprise — p99 Latency vs Throughput</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Workload</th>
+        <th>GC priority</th>
+        <th>Why</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>REST / gRPC APIs</td>
+        <td>Low pause (p99, p999)</td>
+        <td>STW pause = stalled request; SLA breach on tail</td>
+      </tr>
+      <tr>
+        <td>Batch ETL / report generation</td>
+        <td>Throughput</td>
+        <td>Total jobs/hour; occasional long pause OK if bounded</td>
+      </tr>
+      <tr>
+        <td>Real-time pricing / gaming</td>
+        <td>Hard pause ceiling</td>
+        <td>Sub-10 ms pauses may matter — collector choice critical (S04)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>What seniors monitor:</strong> GC pause times (p99), allocation rate, promotion rate, Old gen occupancy trend, Full GC count. Alert on Full GC frequency, not every Minor GC.</p>
+
+  <p><strong>Out of scope:</strong> G1 vs ZGC comparison (S04), flag cookbook (S05), heap dump walkthrough (S08). JMM visibility — <a href="concurrency-0003-volatile-java-memory-model.html">concurrency-0003</a> only.</p>
+
+  <hr>
+
+  <h2>11. Revision Notes</h2>
+  <ul>
+    <li>GC reclaims <strong>unreachable</strong> objects, not "null" objects on demand.</li>
+    <li>Roots: stacks, statics, JNI, monitors, JVM internals.</li>
+    <li>Strong → Soft (memory pressure) → Weak (next GC) → Phantom (post-death queue).</li>
+    <li>Mark / sweep / compact / copy — building blocks of all collectors.</li>
+    <li>STW = app frozen; concurrent reduces but rarely eliminates pauses.</li>
+    <li>Minor = Young; Major/Full = Old / whole heap — watch p99 not just average.</li>
+    <li>Safepoints freeze stacks for consistent root scan.</li>
+    <li>Static maps + ThreadLocal = classic retention; premature promotion fills Old.</li>
+  </ul>
+
+  <hr>
+
+  <h2>12. Reasoning Exercises</h2>
+  <ol>
+    <li>
+      <p><strong><code>WeakHashMap</code> used for session cache keyed by user. User logs out, no other refs. When is entry collected?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p>Key held via <strong>weak</strong> reference. Next GC when key only weakly reachable — entry can be reclaimed. Not instant on logout; on next GC cycle. For immediate eviction, remove explicitly or use TTL cache (Caffeine).</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>Minor GC every second, 5 ms pause. Old gen flat. API p99 stable. Action?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>Often none.</strong> Healthy short-lived allocation pattern from S02. Optimize only if GC CPU % too high or pauses grow. Don't chase Minor GC count alone.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>Thread pool worker holds <code>ThreadLocal&lt;Map&gt;</code> with request context, never <code>remove()</code>. Symptom?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p>Each reused thread retains prior requests' maps → Old gen grows, effective leak. Fix: <code>finally { threadLocal.remove(); }</code> or scoped context (VT era: prefer explicit propagation).</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>SoftReference cache of 500 MB images. Heap fills. What happens before OOM?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p>GC clears soft references to reclaim memory — cache entries dropped progressively. OOM only if even after clearing soft refs there isn't enough heap for new strong allocations.</p>
+      </details>
+    </li>
+  </ol>
+
+  <hr>
+
+  <h2>13. 6 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Object eligible for GC when?</p>
+        <ol type="A">
+          <li>No strong path from any root.</li>
+          <li>Variable assigned null immediately.</li>
+          <li>Method that created it returns only.</li>
+          <li>finalize method has never run yet.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (No strong path from any root.)</strong></p>
+          <p>Reachability defines life. <code>null</code> and method return are common ways to break reachability, but collection happens later on GC cycle.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: WeakReference to object. Only weak refs remain. When collected?</p>
+        <ol type="A">
+          <li>Next GC cycle regardless of heap.</li>
+          <li>Only when heap is nearly full.</li>
+          <li>Never until JVM shutdown.</li>
+          <li>Immediately on last strong drop.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Next GC cycle regardless of heap.)</strong></p>
+          <p>Weak refs are cleared aggressively at GC. Soft refs wait for memory pressure.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: Young GC typically uses which strategy?</p>
+        <ol type="A">
+          <li>Copy live objects to Survivor.</li>
+          <li>Compact entire Old generation.</li>
+          <li>Sweep Metaspace class bytes.</li>
+          <li>Flush thread stacks to disk.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Copy live objects to Survivor.)</strong></p>
+          <p>Young gen copying collector exploits few survivors. Old gen uses mark-sweep-compact variants.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: Stop-the-world pause means what for API thread?</p>
+        <ol type="A">
+          <li>Thread frozen at safepoint.</li>
+          <li>Only GC threads stop running.</li>
+          <li>Network sockets auto-close always.</li>
+          <li>Heap is expanded without lock.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Thread frozen at safepoint.)</strong></p>
+          <p>Mutators pause so roots and heap are consistent. Request latency includes pause time.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: static HashMap grows forever in service. GC issue?</p>
+        <ol type="A">
+          <li>Accidental retention from static root.</li>
+          <li>WeakReference on every key by default.</li>
+          <li>Objects move to Code Cache area.</li>
+          <li>Minor GC cannot run while map exists.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Accidental retention from static root.)</strong></p>
+          <p>Static field is a GC root. All reachable entries stay alive — looks like leak, is retention.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: Backend API SLO on p99 latency. Metric first?</p>
+        <ol type="A">
+          <li>GC pause p99 not average only.</li>
+          <li>Young GC count per minute only.</li>
+          <li>Total heap bytes allocated ever.</li>
+          <li>Number of loaded classes only.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (GC pause p99 not average only.)</strong></p>
+          <p>Tail pauses drive tail latency. Mean pause hides Mixed/Full GC spikes.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>14. Bridge to Next Lesson</h2>
+  <ul>
+    <li><strong>S04</strong> — G1, ZGC, Parallel — which collector matches your latency/throughput profile</li>
+    <li><strong>S05</strong> — flags that connect to generations and pause goals</li>
+    <li><strong>S08</strong> — when fundamentals say "retention bug," prove it with heap dump</li>
+  </ul>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="jvm-0002-heap-regions-tlab-object-layout.html">&larr; Lesson 2</a> &middot;
+    <a href="jvm-0004-garbage-collectors-selection.html">Lesson 4 &rarr;</a> &middot;
+    <a href="../reference/jvm-0003-garbage-collection-fundamentals.html">Cheat sheet</a>
+  </nav>
+</body>
+</html>

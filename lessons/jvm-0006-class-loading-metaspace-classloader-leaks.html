@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 6 — Class Loading, Metaspace & Classloader Leaks</title>
+  <meta name="description" content="Java class loading from a Senior Backend perspective: loading phases, clinit, classloader hierarchy, delegation, Metaspace vs PermGen, classloader leaks, and enterprise fat JAR / agent patterns.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="jvm-0005-jvm-flags-gc-logging-tuning.html">&larr; Lesson 5</a> &middot;
+    Lesson 6 of 8 &middot;
+    <a href="jvm-0007-jit-compilation-runtime-optimizations.html">Lesson 7 &rarr;</a> &middot;
+    <a href="../reference/jvm-0006-class-loading-metaspace-classloader-leaks.html">Cheat sheet</a>
+  </nav>
+
+  <h1>Class Loading, Metaspace & Classloader Leaks</h1>
+  <p class="meta">~35 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; builds on <a href="jvm-0001-jvm-runtime-architecture.html">S01 Metaspace</a>, <a href="oop-0014-static.html">static & clinit</a>, <a href="oop-0004-constructors.html">Init Order</a>, <a href="jvm-0005-jvm-flags-gc-logging-tuning.html">S05 MaxMetaspaceSize</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Can you walk through class loading phases and say exactly when <code>&lt;clinit&gt;</code> runs? Can you explain why redeploying a WAR 200 times without restart blows Metaspace — and why raising <code>-Xmx</code> won't help? Know delegation, when SPI breaks it, and the three classic classloader leak patterns (ThreadLocal, JDBC drivers, redeploy).
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-5.html">JVM Spec — Loading, Linking, Initialization</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/ClassLoader.html">Oracle — <code>ClassLoader</code></a> ·
+    <a href="https://docs.oracle.com/javase/tutorial/ext/basics/load.html">Oracle — Class Loaders</a>
+  </p>
+
+  <h2>1. Class Loading Phases</h2>
+  <p>Before any <code>new Foo()</code>, the JVM must load class <code>Foo</code>. Three high-level phases:</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Phase</th>
+        <th>What happens</th>
+        <th>Interview note</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Loading</strong></td>
+        <td>Find bytecode (.class / JAR), define <code>Klass</code> structure in Metaspace, create <code>java.lang.Class</code> mirror on heap</td>
+        <td>Binary name → bytes → metadata</td>
+      </tr>
+      <tr>
+        <td><strong>Linking</strong></td>
+        <td><strong>Verify</strong> bytecode safety · <strong>Prepare</strong> static fields (defaults, no user code) · <strong>Resolve</strong> symbolic refs (may be lazy)</td>
+        <td>Verification is not "run your static block" yet</td>
+      </tr>
+      <tr>
+        <td><strong>Initialization</strong></td>
+        <td>Execute <code>&lt;clinit&gt;</code> — static field assignments + static blocks in source order</td>
+        <td><strong>First active use</strong> triggers this (below)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>Parent class initialized before child. Interfaces initialized when a class implementing them is initialized (rules have edge cases — parent-first is the safe interview answer).</p>
+
+  <h2>2. When <code>&lt;clinit&gt;</code> Runs — Tie to Static Blocks</h2>
+  <p>From <a href="oop-0014-static.html">static lesson</a>: static blocks compile into one <code>&lt;clinit&gt;</code> method. Runs <strong>once per class per defining class loader</strong>.</p>
+
+  <p><strong>Triggers initialization</strong> (first active use):</p>
+  <ul>
+    <li><code>new MyClass()</code> — instance creation</li>
+    <li>Access static field declared in class (not inherited without override confusion)</li>
+    <li>Invoke static method declared in class</li>
+    <li><code>Class.forName("com.app.Config")</code> — <strong>with initialization</strong> (default)</li>
+    <li>Reflection on class for first time in certain operations</li>
+  </ul>
+
+  <p><strong>Does NOT trigger</strong> child init alone:</p>
+  <ul>
+    <li>Creating array <code>new MyClass[10]</code> — loads <code>MyClass</code> but does not run <code>&lt;clinit&gt;</code></li>
+    <li>Accessing static field that is compile-time constant (<code>static final</code> primitive or String literal) — may be inlined without loading class</li>
+  </ul>
+
+  <pre><code>public class Config {
+    static { System.out.println("clinit"); }  // runs once on first active use
+}
+
+// First call prints "clinit":
+Config.getUrl();
+
+// Array — no clinit:
+Config[] arr = new Config[10];</code></pre>
+
+  <p>Failed <code>&lt;clinit&gt;</code> → <code>ExceptionInInitializerError</code>; later use → <code>NoClassDefFoundError</code>.</p>
+
+  <h2>3. Classloader Hierarchy & Delegation</h2>
+  <pre>
+Bootstrap (null in Java API)  — rt/java.base, core JDK classes
+        ↑
+Platform (Extension)        — JDK modules / endorsed libs
+        ↑
+Application (System)        — your classpath / -cp / JAR
+        ↑
+Custom loaders              — Tomcat Webapp, Spring nested JAR, OSGi bundle
+  </pre>
+
+  <p><strong>Delegation model (default):</strong> child asks parent to load first. Parent can't → child tries. Ensures <code>java.lang.String</code> always comes from bootstrap — security + single definition.</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Loader</th>
+        <th>Loads</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Bootstrap</strong></td>
+        <td><code>java.*</code>, core modules — C++ inside JVM; <code>ClassLoader.getParent()</code> returns null</td>
+      </tr>
+      <tr>
+        <td><strong>Platform</strong></td>
+        <td>JDK modules not in bootstrap (historical "extension")</td>
+      </tr>
+      <tr>
+        <td><strong>Application</strong></td>
+        <td>Your app classpath — <code>ClassLoader.getSystemClassLoader()</code></td>
+      </tr>
+      <tr>
+        <td><strong>Custom</strong></td>
+        <td>Per-deploy unit — Tomcat <code>WebappClassLoader</code>, plugin frameworks</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4. Breaking Delegation — SPI & Fat JARs</h2>
+  <p>Default delegation fails when <strong>parent needs classes implemented by child</strong>:</p>
+  <ul>
+    <li><strong>Service Provider Interface (SPI):</strong> <code>ServiceLoader</code> — JDBC drivers, logging backends. Parent API (<code>java.sql.Driver</code>) in bootstrap; implementation in app JAR. <code>META-INF/services/</code> registration.</li>
+    <li><strong>Spring Boot fat JAR:</strong> nested JARs use custom <code>LaunchedURLClassLoader</code> — parent-last or modified delegation so app libs don't clash with embedded container. Deep internals → M05; interview: "Boot doesn't use plain AppClassLoader on flat classpath."</li>
+    <li><strong>OSGi / JPMS (awareness):</strong> module boundaries and explicit exports break naive single hierarchy — know name for interview breadth.</li>
+  </ul>
+
+  <h2>5. <code>Class.forName</code> vs <code>ClassLoader.loadClass</code></h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>API</th>
+        <th>Initialization?</th>
+        <th>Typical use</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>Class.forName("com.foo.Bar")</code></td>
+        <td><strong>Yes</strong> — runs <code>&lt;clinit&gt;</code></td>
+        <td>JDBC <code>Class.forName(driver)</code> — register driver static block</td>
+      </tr>
+      <tr>
+        <td><code>Class.forName(name, false, loader)</code></td>
+        <td><strong>No</strong> if second arg false</td>
+        <td>Load without triggering static init</td>
+      </tr>
+      <tr>
+        <td><code>loader.loadClass("com.foo.Bar")</code></td>
+        <td><strong>No</strong> — link only, defer init</td>
+        <td>Frameworks that want control over init timing</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <blockquote>Interview trap: "loadClass and forName are the same" — false. forName initializes by default; loadClass does not.</blockquote>
+
+  <h2>6. Metaspace vs PermGen (Pre-Java 8)</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th>PermGen (Java 7−)</th>
+        <th>Metaspace (Java 8+)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Location</strong></td>
+        <td>Fixed region inside JVM heap</td>
+        <td>Native memory — not in <code>-Xmx</code></td>
+      </tr>
+      <tr>
+        <td><strong>Growth</strong></td>
+        <td>Fixed max — <code>-XX:MaxPermSize</code></td>
+        <td>Grows with loaded classes; <code>-XX:MaxMetaspaceSize</code> cap</td>
+      </tr>
+      <tr>
+        <td><strong>OOM message</strong></td>
+        <td><code>PermGen space</code></td>
+        <td><code>Metaspace</code></td>
+      </tr>
+      <tr>
+        <td><strong>Interview story</strong></td>
+        <td>"Hot redeploy + class versions = PermGen OOM"</td>
+        <td>Same leak pattern — different pool name</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Metaspace fixed the "tiny fixed PermGen" problem but <strong>did not fix classloader leaks</strong>. Unlimited growth → cgroup OOMKill if no <code>MaxMetaspaceSize</code>.</p>
+
+  <h2>7. Classloader Leaks — Classic Patterns</h2>
+  <p>A classloader is collectible only when <strong>no strong references</strong> to it exist and all its loaded classes are unreachable. Leaks pin the entire loader graph + all its classes in Metaspace.</p>
+
+  <h3>7.1 Redeploy without restart</h3>
+  <p>Tomcat / app server creates new <code>WebappClassLoader</code> per deploy. Old loader should die. If something still references old loader → old classes never unloaded → Metaspace stair-steps up each deploy.</p>
+
+  <h3>7.2 ThreadLocal + loaded class</h3>
+  <pre><code>// Request filter sets ThreadLocal holding UserContext from webapp classloader
+threadLocal.set(new UserContext());
+
+// Pool thread reused — never threadLocal.remove()
+// Thread holds ref → ThreadLocalMap → Value → Class from OLD loader</code></pre>
+  <p>Brutal in servlet thread pools. Fix: <code>finally { threadLocal.remove(); }</code>. Virtual threads: same discipline (<a href="concurrency-0008-virtual-threads.html">M03 L8</a>).</p>
+
+  <h3>7.3 JDBC driver registration</h3>
+  <p>Legacy pattern: driver JAR static block registers with <code>DriverManager</code> (held by bootstrap/system refs). Redeploy loads new driver class; old driver + loader pinned.</p>
+  <p>Modern: JDBC 4+ SPI (<code>META-INF/services/java.sql.Driver</code>) + <code>DriverManager.deregisterDriver</code> on shutdown; use connection pool that manages lifecycle.</p>
+
+  <h3>7.4 Other common pins</h3>
+  <ul>
+    <li>Custom shutdown hooks referencing webapp classes</li>
+    <li>Static singletons in container scope referencing old context</li>
+    <li>Thread started by old deployment still running</li>
+    <li>APM / Hibernate bytecode agents holding transformed class refs</li>
+  </ul>
+
+  <h2>8. When Can a ClassLoader Be GC'd?</h2>
+  <ol>
+    <li>No strong references to the <code>ClassLoader</code> instance</li>
+    <li>No strong references to any <code>Class</code> objects it defined</li>
+    <li>No threads have stack frames executing methods from those classes</li>
+    <li>All instances of loaded classes unreachable</li>
+  </ol>
+  <p>Metaspace for that loader's metadata reclaimed when loader is collected — not before. This is why one stray ThreadLocal can retain <strong>megabytes of class metadata</strong>.</p>
+
+  <h2>9. Enterprise Patterns</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Scenario</th>
+        <th>Classloading impact</th>
+        <th>Practice</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Spring Boot fat JAR</strong></td>
+        <td>Custom loader, nested JARs, many classes at startup</td>
+        <td>Accept one-time Metaspace footprint; avoid duplicate agent instrumentation</td>
+      </tr>
+      <tr>
+        <td><strong>Dev hot-reload</strong> (Spring DevTools, JRebel)</td>
+        <td>Reloads classes / loaders frequently</td>
+        <td>Dev-only; restart periodically; never compare dev Metaspace to prod</td>
+      </tr>
+      <tr>
+        <td><strong>Prod</strong></td>
+        <td>Stable loader tree</td>
+        <td>No redeploy-without-restart on long-lived pods — roll new pod instead (K8s)</td>
+      </tr>
+      <tr>
+        <td><strong>Hibernate / bytecode enhancement</strong></td>
+        <td>Runtime-generated subclasses (proxies)</td>
+        <td>More classes in Metaspace; monitor <code>MaxMetaspaceSize</code></td>
+      </tr>
+      <tr>
+        <td><strong>APM agents</strong> (Datadog, New Relic)</td>
+        <td>Instrument every loaded class</td>
+        <td>Agent overhead + Metaspace; align agent version with JDK</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>K8s framing:</strong> immutable deployments → new pod = fresh JVM = clean loaders. Metaspace leaks from redeploy are a **app-server-on-long-lived-JVM** smell more than stateless K8s — but ThreadLocal + pool threads still bite everywhere.</p>
+
+  <p><strong>Out of scope:</strong> bytecode verification algorithms, ASM/Javassist, deep <code>LaunchedURLClassLoader</code> (M05), JPMS encyclopedia.</p>
+
+  <hr>
+
+  <h2>10. Revision Notes</h2>
+  <ul>
+    <li>Load → link (verify, prepare, resolve) → init (<code>&lt;clinit&gt;</code>).</li>
+    <li>Init on first active use; arrays don't run clinit.</li>
+    <li>Bootstrap → Platform → Application; parent delegation default.</li>
+    <li>SPI / fat JAR break naive delegation.</li>
+    <li><code>forName</code> initializes; <code>loadClass</code> does not.</li>
+    <li>PermGen story = Metaspace story with different pool name.</li>
+    <li>Leaks: redeploy, ThreadLocal, JDBC drivers, long-lived threads.</li>
+    <li>Loader GC'd only when zero strong refs to loader + its classes.</li>
+  </ul>
+
+  <hr>
+
+  <h2>11. Reasoning Exercises</h2>
+  <ol>
+    <li>
+      <p><strong><code>Class.forName("com.mysql.cj.jdbc.Driver")</code> in static app init. Side effect?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p>Runs driver <code>&lt;clinit&gt;</code> — registers with <code>DriverManager</code>. Needed for legacy explicit load; JDBC 4+ SPI often makes this unnecessary.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>200 Tomcat redeploys, Metaspace 2 GB, heap stable. Cause?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>Classloader leak</strong> — old <code>WebappClassLoader</code> instances pinned. Find ThreadLocal, threads, DriverManager, shutdown hooks. Restart JVM or fix leak; <code>-Xmx</code> irrelevant.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong><code>new Config[100]</code> — does Config clinit run?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>No.</strong> Array creation loads class for element type but does not initialize it. No static blocks execute.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>Child class first accessed. Parent clinit order?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>Parent <code>&lt;clinit&gt;</code> runs first</strong>, then child. Superclass static state ready before subclass static init.</p>
+      </details>
+    </li>
+  </ol>
+
+  <hr>
+
+  <h2>12. 6 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Static block runs in which loading phase?</p>
+        <ol type="A">
+          <li>Initialization after linking.</li>
+          <li>Loading before bytes read.</li>
+          <li>Verify step of linking only.</li>
+          <li>Every new object constructor.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Initialization after linking.)</strong></p>
+          <p>Static blocks compile to <code>&lt;clinit&gt;</code> executed during class initialization, not during load or verify alone.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Default classloader delegation order?</p>
+        <ol type="A">
+          <li>Parent asked to load first.</li>
+          <li>Child always loads before parent.</li>
+          <li>Bootstrap loads application classes.</li>
+          <li>No hierarchy on JDK twenty-one.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Parent asked to load first.)</strong></p>
+          <p>Child delegates up so core JDK classes have single bootstrap definition.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: loadClass vs forName default difference?</p>
+        <ol type="A">
+          <li>forName runs clinit by default.</li>
+          <li>loadClass always runs clinit first.</li>
+          <li>Both skip initialization always.</li>
+          <li>forName only works for arrays.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (forName runs clinit by default.)</strong></p>
+          <p><code>ClassLoader.loadClass</code> resolves without initializing. <code>Class.forName(name)</code> initializes unless initialize flag is false.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: Java eight plus class metadata lives in?</p>
+        <ol type="A">
+          <li>Metaspace native memory area.</li>
+          <li>Fixed PermGen inside heap.</li>
+          <li>Eden young generation only.</li>
+          <li>Per-thread stack frames only.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Metaspace native memory area.)</strong></p>
+          <p>PermGen removed in Java 8. Metaspace is off-heap; capped with <code>MaxMetaspaceSize</code>.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: Classic redeploy Metaspace leak cause?</p>
+        <ol type="A">
+          <li>Old classloader still referenced.</li>
+          <li>Heap Xmx set far too low.</li>
+          <li>Too many Eden TLAB slices.</li>
+          <li>Compressed oops disabled only.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Old classloader still referenced.)</strong></p>
+          <p>Pinned loader retains all its class metadata. ThreadLocal and JDBC registration are frequent culprits.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: new Foo[50] triggers Foo clinit?</p>
+        <ol type="A">
+          <li>No — array creation skips init.</li>
+          <li>Yes — same as new Foo().</li>
+          <li>Only if Foo has static block.</li>
+          <li>Only on JDK eight and older.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (No — array creation skips init.)</strong></p>
+          <p>Array creation loads the element class but does not run static initialization.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>13. Bridge to Next Lessons</h2>
+  <ul>
+    <li><strong>S07</strong> — JIT, escape analysis (more generated code / compile artifacts)</li>
+    <li><strong>S08</strong> — heap dump won't show Metaspace class leak; use class histogram / native memory tracking</li>
+    <li><strong>M05</strong> — Spring Boot classloader and nested JAR loading detail</li>
+  </ul>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="jvm-0005-jvm-flags-gc-logging-tuning.html">&larr; Lesson 5</a> &middot;
+    <a href="jvm-0007-jit-compilation-runtime-optimizations.html">Lesson 7 &rarr;</a> &middot;
+    <a href="../reference/jvm-0006-class-loading-metaspace-classloader-leaks.html">Cheat sheet</a>
+  </nav>
+</body>
+</html>

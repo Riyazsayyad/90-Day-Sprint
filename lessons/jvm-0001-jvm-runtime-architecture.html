@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 1 — JVM Runtime Architecture & Memory Areas</title>
+  <meta name="description" content="JVM runtime architecture from a Senior Backend perspective: JDK vs JRE vs JVM, process vs threads, heap, stack, Metaspace, Code Cache, direct memory, TLAB preview, safepoints, and enterprise OOM triage.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="../exercises/concurrency-capstone-exercise.html">⬅️ Prev: Concurrency Capstone</a> &middot;
+    Lesson 1 of 8 &middot;
+    <a href="jvm-0002-heap-regions-tlab-object-layout.html">Lesson 2 &rarr;</a> &middot;
+    <a href="../reference/jvm-0001-jvm-runtime-architecture.html">Cheat sheet</a>
+  </nav>
+
+  <h1>JVM Runtime Architecture & Memory Areas</h1>
+  <p class="meta">~30 minutes &middot; ties to <a href="../MISSION.md">mission</a> &middot; builds on <a href="oop-0003-stack-vs-heap.html">Stack vs Heap</a>, <a href="oop-0002-class-vs-object.html">Class in Metaspace</a>, <a href="concurrency-0001-thread-fundamentals.html">Threads Share Heap</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Interviewers expect you to map a running Spring Boot pod to concrete JVM structures — not recite textbook diagrams. Can you explain what <code>docker stats</code> / cgroup memory includes vs what <code>-Xmx</code> caps? Where do class definitions live vs object instances? Why is a heap OOM fix different from Metaspace or direct-buffer OOM? This lesson stitches together what you already learned in OOP and Concurrency into one production mental model.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.oracle.com/en/java/javase/21/docs/specs/man/java.html">Oracle — <code>java</code> launcher (SE 21)</a> ·
+    <a href="https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-2.html">JVM Spec — Runtime Data Areas</a> ·
+    <a href="https://docs.oracle.com/en/java/javase/21/gctooling/ergonomics.html">Oracle — GC Ergonomics (memory pools)</a>
+  </p>
+
+  <h2>1. JDK vs JRE vs JVM — What Actually Runs in Prod</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Component</th>
+        <th>What it is</th>
+        <th>Prod relevance</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>JVM</strong></td>
+        <td>The virtual machine: bytecode interpreter + JIT + GC + thread scheduler + memory manager</td>
+        <td><strong>This is the process.</strong> One JVM instance per typical Java service container.</td>
+      </tr>
+      <tr>
+        <td><strong>JRE</strong></td>
+        <td>JVM + core class libraries (<code>rt.jar</code> era; now modular <code>jmods</code> on the module path)</td>
+        <td>Historical term. Modern deployments ship a <strong>JRE subset</strong> or full JDK inside the image.</td>
+      </tr>
+      <tr>
+        <td><strong>JDK</strong></td>
+        <td>JRE + developer tools (<code>javac</code>, <code>jlink</code>, <code>jcmd</code>, <code>jmap</code>, etc.)</td>
+        <td>Build stage uses full JDK. Runtime image often uses <code>jlink</code>-trimmed runtime or distroless JRE.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>Container reality:</strong> Kubernetes sees one OS process — usually <code>java -jar app.jar</code> or a shell wrapper around it. That process <em>is</em> the JVM. cgroup memory limit must cover:</p>
+  <ul>
+    <li><strong>Java heap</strong> (<code>-Xmx</code>)</li>
+    <li><strong>Metaspace</strong> (class metadata — not in <code>-Xmx</code>)</li>
+    <li><strong>Thread stacks</strong> (platform threads × stack size; virtual threads are much cheaper)</li>
+    <li><strong>Code Cache</strong> (JIT-compiled native code)</li>
+    <li><strong>Direct / native memory</strong> (NIO direct buffers, Netty, JNI, compression dictionaries)</li>
+    <li><strong>JVM native overhead</strong> (GC structures, card tables, etc.)</li>
+  </ul>
+  <blockquote>Senior trap: setting <code>-Xmx</code> to 100% of container limit guarantees OOMKill. Leave headroom for off-heap areas — rule of thumb 25–40% below cgroup cap depending on stack count and Netty usage.</blockquote>
+
+  <h2>2. Process vs JVM vs Application Threads</h2>
+  <p>You already drew this in <a href="concurrency-0001-thread-fundamentals.html">Thread Fundamentals</a>. Zoom out one level:</p>
+  <pre>
+┌────────────── OS Process (PID 4821) ──────────────┐
+│  JVM (HotSpot / OpenJDK)                         │
+│  ┌─────────────────────────────────────────────┐ │
+│  │ Shared: Heap · Metaspace · Code Cache       │ │
+│  │         Direct/Native (off-heap)            │ │
+│  └─────────────────────────────────────────────┘ │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ │
+│  │ Stack   │ │ Stack   │ │ Stack   │ │ Stack   │ │
+│  │ main    │ │ http-1  │ │ pool-3  │ │ GC svc  │ │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ │
+└──────────────────────────────────────────────────┘
+  </pre>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Layer</th>
+        <th>Count in typical microservice</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>OS process</strong></td>
+        <td>1 per pod/container (usual case)</td>
+        <td>Crash = pod restart. <code>kill -9</code> = hard stop, no GC cleanup.</td>
+      </tr>
+      <tr>
+        <td><strong>JVM instance</strong></td>
+        <td>1 per process</td>
+        <td>Owns all memory pools below. One GC subsystem, one Metaspace (per class loader tree).</td>
+      </tr>
+      <tr>
+        <td><strong>Application threads</strong></td>
+        <td>Many (Tomcat workers, pool threads, GC threads, JIT compiler threads)</td>
+        <td>Share heap + Metaspace. Each has private stack. Races = unsynchronized heap writes.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>Production threads you'll see in a thread dump:</strong></p>
+  <ul>
+    <li><code>http-nio-8080-exec-N</code> — servlet request workers</li>
+    <li><code>pool-N-thread-M</code> — your <code>ExecutorService</code></li>
+    <li><code>ForkJoinPool.commonPool-worker-N</code> — parallel streams</li>
+    <li><code>GC Thread#N</code> — garbage collector workers</li>
+    <li><code>C1/C2 CompilerThreadN</code> — JIT tiers (detail in S07)</li>
+    <li><code>VM Thread</code> — safepoint coordination (below)</li>
+  </ul>
+  <p>All of them share the same heap. That's why <code>HashMap</code> in a singleton Spring bean is everyone's problem.</p>
+
+  <h2>3. Runtime Memory Areas — The Full Map</h2>
+  <p>From <a href="oop-0003-stack-vs-heap.html">Lesson 3 (OOP)</a> you know stack vs heap. Here is the complete HotSpot map senior engineers keep in their head:</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Area</th>
+        <th>Scope</th>
+        <th>Stores</th>
+        <th>Grows / reclaimed by</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Heap</strong></td>
+        <td>Shared (all threads)</td>
+        <td>Object instances, arrays</td>
+        <td><code>-Xms</code> / <code>-Xmx</code>. GC reclaims unreachable objects (S03).</td>
+      </tr>
+      <tr>
+        <td><strong>Stack</strong> (per thread)</td>
+        <td>Private per thread</td>
+        <td>Stack frames, local primitives, reference slots</td>
+        <td>Fixed per thread (<code>-Xss</code>). Popped on method return — no GC.</td>
+      </tr>
+      <tr>
+        <td><strong>Metaspace</strong></td>
+        <td>Shared (class loaders)</td>
+        <td>Class metadata, method bytecode, vtables, <code>static</code> fields</td>
+        <td>Native memory. Grows until class loaders collected (S06). <code>-XX:MaxMetaspaceSize</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>Code Cache</strong></td>
+        <td>Shared</td>
+        <td>JIT-compiled machine code</td>
+        <td>Native. <code>-XX:ReservedCodeCacheSize</code>. Swept when full.</td>
+      </tr>
+      <tr>
+        <td><strong>Direct / Native memory</strong></td>
+        <td>Shared (process)</td>
+        <td>NIO direct buffers, Netty pooled buffers, JNI allocations</td>
+        <td>Not in heap. Limited by <code>-XX:MaxDirectMemorySize</code> (default ≈ <code>-Xmx</code>).</td>
+      </tr>
+      <tr>
+        <td><strong>PC Registers</strong></td>
+        <td>Per thread</td>
+        <td>Current bytecode instruction address</td>
+        <td>JVM-managed, tiny — rarely discussed in interviews.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p><strong>Heap generations (preview for S03):</strong> Young (Eden + Survivor) + Old. Most objects die young. Long-lived caches, singletons, session state → Old. TLABs live inside Eden.</p>
+
+  <pre>
+                    ┌─── Metaspace ───┐
+                    │ class metadata  │
+                    │ static fields   │
+                    └────────┬────────┘
+                             │ Klass pointer
+┌──────────── Heap ──────────┼──────────────────────────┐
+│  Young (Eden + S0 + S1)    │   Old Generation         │
+│  ┌ TLAB per thread ─┐      │   long-lived objects     │
+│  └──────────────────┘      │                          │
+└───────────────────────────────────────────────────────┘
+
+Per thread: Stack frames ──► reference slots point into Heap
+Shared: Code Cache (JIT) · Direct buffers (off-heap)
+  </pre>
+
+  <h2>4. What Lives Where — Primitives, References, Statics</h2>
+  <p>Reconcile <a href="oop-0002-class-vs-object.html">Class vs Object</a> with the full map:</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Thing</th>
+        <th>Where</th>
+        <th>Interview one-liner</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Local <code>int x = 5</code></td>
+        <td>Stack frame (actual value)</td>
+        <td>Value lives in the frame; dies when method returns.</td>
+      </tr>
+      <tr>
+        <td>Local <code>String s = "hi"</code></td>
+        <td>Reference on stack → object on heap</td>
+        <td>Variable is a pointer slot; <code>"hi"</code> may be in string pool on heap.</td>
+      </tr>
+      <tr>
+        <td>Instance field <code>private int age</code></td>
+        <td>Inside object on heap</td>
+        <td>Even primitives inside objects are heap-resident.</td>
+      </tr>
+      <tr>
+        <td><code>static int count</code></td>
+        <td>Metaspace (with class metadata)</td>
+        <td>One copy per class loader, not per instance.</td>
+      </tr>
+      <tr>
+        <td><code>static final List&lt;T&gt; CACHE</code></td>
+        <td>Static reference in Metaspace → List object on heap</td>
+        <td>Reference slot in Metaspace; the list and its elements are heap objects.</td>
+      </tr>
+      <tr>
+        <td>Class definition / bytecode</td>
+        <td>Metaspace</td>
+        <td>Loaded once per class loader. <code>java.lang.Class</code> is a heap mirror.</td>
+      </tr>
+      <tr>
+        <td>Method local array <code>new int[1000]</code></td>
+        <td>Heap (arrays are objects)</td>
+        <td>Reference may be on stack; array body always heap.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Trace exercise</h3>
+  <pre><code>public class OrderService {
+    private static final Map&lt;Long, Order&gt; CACHE = new ConcurrentHashMap&lt;&gt;();
+
+    public Order find(long id) {
+        int retries = 3;                          // (A)
+        Order cached = CACHE.get(id);             // (B)
+        if (cached == null) {
+            Order fresh = repository.load(id);    // (C)
+            CACHE.put(id, fresh);
+            return fresh;
+        }
+        return cached;
+    }
+}</code></pre>
+  <p><strong>Reasoning (cover answers, then check):</strong></p>
+  <ol>
+    <li><strong>(A)</strong> <code>retries</code> — stack (primitive local).</li>
+    <li><strong>(B)</strong> <code>cached</code> reference — stack; <code>CACHE</code> static ref — Metaspace; <code>ConcurrentHashMap</code> object + entries — heap.</li>
+    <li><strong>(C)</strong> <code>fresh</code> reference — stack; <code>Order</code> instance — heap.</li>
+  </ol>
+
+  <h2>5. TLAB Preview — Why Allocation Is Fast</h2>
+  <p>Every <code>new</code> hitting a global Eden lock would bottleneck multi-threaded services. HotSpot gives each thread a <strong>Thread-Local Allocation Buffer (TLAB)</strong> — a small private slice of Eden.</p>
+  <ul>
+    <li>Allocation inside TLAB = <strong>bump-the-pointer</strong> (move an offset) — no lock, nanoseconds.</li>
+    <li>TLAB full → thread gets a new TLAB or allocates slowly in shared Eden.</li>
+    <li>Very large objects may bypass TLAB and go straight to Old (threshold: <code>-XX:PretenureSizeThreshold</code>).</li>
+  </ul>
+  <p>You already met TLABs in <a href="streams-0001-stream-fundamentals.html">Stream Fundamentals</a> (short-lived pipeline objects). Full mechanics — sizing, waste, tuning — in <strong>S02 (Object Allocation)</strong>.</p>
+  <blockquote>Interview sound bite: "Most ephemeral objects never contend on a global heap lock because TLABs make allocation mostly thread-local bump-pointer."</blockquote>
+
+  <h2>6. Safepoints & Stop-The-World Preview</h2>
+  <p>The JVM must pause application threads at well-defined moments to:</p>
+  <ul>
+    <li>Run GC root scanning and compaction (S03)</li>
+    <li>Deoptimize / recompile hot methods (S07)</li>
+    <li>Dump threads (<code>jcmd Thread.print</code>, <code>kill -3</code>)</li>
+    <li>Revoke biased locks, walk stacks for roots</li>
+  </ul>
+
+  <p>A <strong>safepoint</strong> is a bytecode location where the thread can safely stop and expose a consistent stack/heap view. Between safepoints, a thread may be mid-method.</p>
+
+  <p><strong>Stop-The-World (STW):</strong> all mutator threads blocked at safepoints while VM work runs. Short STW pauses (milliseconds) are normal; multi-second STW = production incident (S03–S05).</p>
+
+  <p><strong>Thread dump connection:</strong> When you capture a dump, each thread's stack trace is a snapshot at a safepoint. That's why all threads show a coherent state — and why "RUNNABLE" in a dump doesn't mean "on-CPU right now" (it can mean runnable-but-not-yet-scheduled).</p>
+
+  <pre>
+Thread-1: RUNNABLE at Safepoint
+  at com.app.OrderService.find(OrderService.java:42)
+  ...
+
+GC Thread#2: RUNNABLE
+  at GC work...
+  </pre>
+
+  <p>Concurrent collectors (G1, ZGC) reduce but don't always eliminate STW phases. Detail in S03.</p>
+
+  <h2>7. Enterprise OOM Triage — Three Different Beasts</h2>
+  <p>Senior on-call skill: read the exception class and message — fixes are <em>not</em> interchangeable.</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Error</th>
+        <th>Typical message</th>
+        <th>What ran out</th>
+        <th>Common causes</th>
+        <th>Fix direction</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Heap OOM</strong></td>
+        <td><code>Java heap space</code></td>
+        <td><code>-Xmx</code> heap</td>
+        <td>Memory leak, unbounded cache, huge collections, loading too much data per request</td>
+        <td>Heap dump / MAT (S08), fix retention, paginate, raise <code>-Xmx</code> only after proving need</td>
+      </tr>
+      <tr>
+        <td><strong>Metaspace OOM</strong></td>
+        <td><code>Metaspace</code> / <code>class metadata</code></td>
+        <td>Class metadata area</td>
+        <td>Classloader leak (hot redeploy, dynamic proxies, Groovy/bytecode gen), too many class loaders</td>
+        <td>Find leaking loader, limit generated classes, <code>-XX:MaxMetaspaceSize</code> as guardrail not cure</td>
+      </tr>
+      <tr>
+        <td><strong>Direct buffer OOM</strong></td>
+        <td><code>Direct buffer memory</code></td>
+        <td>Off-heap direct memory</td>
+        <td>Netty, NIO, gRPC, large off-heap buffers without release</td>
+        <td>Pool sizing, leak detection, <code>-XX:MaxDirectMemorySize</code>, fix missing <code>release()</code></td>
+      </tr>
+      <tr>
+        <td><strong>Unable to create native thread</strong></td>
+        <td><code>unable to create native thread</code></td>
+        <td>OS thread / stack budget</td>
+        <td>Unbounded <code>new Thread()</code>, thread pool misconfig, ulimit</td>
+        <td>Bounded executors, virtual threads for I/O, lower <code>-Xss</code>, raise ulimit</td>
+      </tr>
+      <tr>
+        <td><strong>StackOverflowError</strong></td>
+        <td><code>Stack overflow</code></td>
+        <td>Thread stack depth</td>
+        <td>Infinite recursion, very deep XML/JSON parsing</td>
+        <td>Fix recursion, streaming parser — not a heap problem</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <strong>On-call scenario:</strong> Pod OOMKilled by Kubernetes but no Java heap dump. cgroup killed the <em>process</em> because <strong>total</strong> memory (heap + metaspace + direct + stacks + native) exceeded limit — even if <code>-Xmx</code> looked fine. Check container limit vs <code>-Xmx</code> headroom first.
+  </div>
+
+  <h2>8. Classic Production Mistakes</h2>
+  <ul>
+    <li><strong>"We raised -Xmx to fix Metaspace OOM."</strong> Wrong pool. Classes kept generating; heap change irrelevant.</li>
+    <li><strong>"Heap is 70% used so we're fine."</strong> Ignores direct memory spike during Netty upgrade.</li>
+    <li><strong>Static <code>Map</code> cache without bounds</strong> — heap leak disguised as "performance optimization."</li>
+    <li><strong>Assuming primitives are "light" on heap</strong> — a <code>new int[50_000_000]</code> is ~200 MB on heap regardless.</li>
+    <li><strong>Thread dump shows BLOCKED everywhere</strong> — heap healthy but thread starvation; not a GC lesson (concurrency module).</li>
+  </ul>
+
+  <p><strong>Out of scope (later sections):</strong> collector algorithms (S03–S04), full GC tuning flags (S05), classloader delegation (S06), JIT tiers (S07), MAT heap dump walkthrough (S08).</p>
+
+  <hr>
+
+  <h2>9. Revision Notes</h2>
+  <ul>
+    <li>Prod container runs <strong>one JVM process</strong> — not "the JDK."</li>
+    <li>Many threads, one shared heap + Metaspace; stacks are private.</li>
+    <li>Locals/refs on stack; objects on heap; statics in Metaspace (object refs point to heap).</li>
+    <li>TLAB = fast thread-local Eden allocation; detail in S02.</li>
+    <li>Safepoints enable GC, JIT, thread dumps; STW = all threads paused.</li>
+    <li>Heap OOM ≠ Metaspace OOM ≠ direct OOM — read the message, fix the right pool.</li>
+  </ul>
+
+  <hr>
+
+  <h2>10. Reasoning Exercises</h2>
+  <ol>
+    <li>
+      <p><strong>Microservice pod limit 512 MiB. You set <code>-Xmx512m</code>. Healthy?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>No.</strong> Metaspace, thread stacks, Code Cache, and direct memory also consume cgroup budget. JVM will be OOMKilled. Target ~60–75% of limit for <code>-Xmx</code> unless you have precise off-heap measurements.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>After redeploying 200 times without restart, Metaspace grows monotonically. Heap stable. Leak?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>Likely classloader leak</strong> — old loaders not collectable because something still references them. Classic hot-reload / agent / dynamic codegen pattern. Not a heap leak.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong>Thread dump shows 400 <code>http-nio-exec</code> threads all RUNNABLE at <code>socketRead0</code>. Heap 40%. Problem?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p><strong>Not heap.</strong> Threads blocked in I/O — downstream slowness or missing timeouts. Fix latency/backpressure; virtual threads may help (M03 L8). GC tuning won't help.</p>
+      </details>
+    </li>
+    <li>
+      <p><strong><code>static final byte[] BUFFER = new byte[1_000_000]</code> — where does the byte array live?</strong></p>
+      <details>
+        <summary>Answer</summary>
+        <p>Static <em>reference</em> in Metaspace; <strong>byte array object on heap</strong>. One array shared by all instances under that class loader.</p>
+      </details>
+    </li>
+  </ol>
+
+  <hr>
+
+  <h2>11. 6 Senior-Level MCQs</h2>
+  <p class="meta">Option lengths matched to prevent visual hints.</p>
+
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Docker cgroup OOMKill with -Xmx at 70% of limit. Likely cause?</p>
+        <ol type="A">
+          <li>Off-heap exceeded remaining budget.</li>
+          <li>Heap alone always equals cgroup.</li>
+          <li>JVM ignores container limits always.</li>
+          <li>Only Code Cache uses off-heap.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Off-heap exceeded remaining budget.)</strong></p>
+          <p>Metaspace, stacks, direct buffers, and native GC structures sit outside <code>-Xmx</code>. Total process RSS must fit the cgroup.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Where does static reference field store its pointer?</p>
+        <ol type="A">
+          <li>Metaspace with class metadata.</li>
+          <li>Inside each instance on heap.</li>
+          <li>On the main thread stack only.</li>
+          <li>Code Cache next to JIT code.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Metaspace with class metadata.)</strong></p>
+          <p>Static fields live with the class definition. The referenced object itself is on the heap.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: TLAB primary benefit in multi-threaded service?</p>
+        <ol type="A">
+          <li>Avoid global Eden lock on most news.</li>
+          <li>Store static fields per thread.</li>
+          <li>Replace garbage collection entirely.</li>
+          <li>Move all objects to Old gen faster.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Avoid global Eden lock on most news.)</strong></p>
+          <p>TLABs let threads allocate via bump-pointer in a private Eden slice. Full sizing in S02.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: Thread dump taken during GC safepoint. What is true?</p>
+        <ol type="A">
+          <li>Stacks are consistent snapshot points.</li>
+          <li>Threads mid-bytecode show half frames.</li>
+          <li>Only RUNNABLE threads appear.</li>
+          <li>Heap contents printed inline always.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Stacks are consistent snapshot points.)</strong></p>
+          <p>Safepoints freeze mutators at safe locations so VM can walk stacks. That's why dumps are coherent.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: OutOfMemoryError: Metaspace. First sensible action?</p>
+        <ol type="A">
+          <li>Investigate classloader retention.</li>
+          <li>Double -Xmx heap immediately.</li>
+          <li>Disable garbage collection.</li>
+          <li>Shrink thread stack -Xss only.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Investigate classloader retention.)</strong></p>
+          <p>Metaspace stores class metadata. Leaked loaders or unbounded dynamic class generation are the usual suspects — not heap size.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: Local int x = 42 inside running method. Location?</p>
+        <ol type="A">
+          <li>Current thread stack frame.</li>
+          <li>Heap next to object header.</li>
+          <li>Metaspace with static data.</li>
+          <li>Direct buffer off-heap area.</li>
+        </ol>
+        <details>
+          <summary>View Answer & Explanation</summary>
+          <p><strong>Answer: A (Current thread stack frame.)</strong></p>
+          <p>Primitive locals live in the stack frame's local variable array. Instance field primitives live inside heap objects.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2>12. Bridge to Next Lessons</h2>
+  <ul>
+    <li><strong>S02</strong> — object allocation, TLAB sizing, escape analysis</li>
+    <li><strong>S03–S04</strong> — GC algorithms, STW vs concurrent phases</li>
+    <li><strong>S05</strong> — tuning flags that match your memory map</li>
+    <li><strong>S06</strong> — class loaders and Metaspace lifecycle</li>
+    <li><strong>Concurrency cross-link</strong> — shared heap + safepoint dumps explain races and diagnostics you already studied</li>
+  </ul>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="../exercises/concurrency-capstone-exercise.html">⬅️ Prev: Concurrency Capstone</a> &middot;
+    <a href="jvm-0002-heap-regions-tlab-object-layout.html">Lesson 2 &rarr;</a> &middot;
+    <a href="../reference/jvm-0001-jvm-runtime-architecture.html">Cheat sheet</a>
+  </nav>
+</body>
+</html>

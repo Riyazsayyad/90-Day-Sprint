@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Garbage Collectors & Selection — Reference</title>
+  <meta name="description" content="Quick reference: Serial, Parallel, CMS legacy, G1, ZGC, Shenandoah, selection matrix, JDK 21 defaults, K8s heap ratio.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/jvm-0004-garbage-collectors-selection.html">&larr; Lesson 04</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Garbage Collectors & Selection Cheat Sheet</h1>
+  <p class="meta">Collector families, G1/ZGC, when to pick</p>
+
+  <h2>1. Collector Families</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid var(--border); background:var(--surface);">
+      <th align="left" style="padding:0.5rem;">Collector</th>
+      <th align="left" style="padding:0.5rem;">Goal</th>
+      <th align="left" style="padding:0.5rem;">Flag (JDK 21)</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;">Serial</td>
+      <td style="padding:0.5rem;">Tiny footprint</td>
+      <td style="padding:0.5rem;"><code>UseSerialGC</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;">Parallel</td>
+      <td style="padding:0.5rem;">Throughput</td>
+      <td style="padding:0.5rem;"><code>UseParallelGC</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;">CMS</td>
+      <td style="padding:0.5rem;">Legacy — removed</td>
+      <td style="padding:0.5rem;">—</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>G1</strong></td>
+      <td style="padding:0.5rem;">Balanced / default</td>
+      <td style="padding:0.5rem;">Default</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;">ZGC</td>
+      <td style="padding:0.5rem;">Low pause, large heap</td>
+      <td style="padding:0.5rem;"><code>UseZGC</code></td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;">Shenandoah</td>
+      <td style="padding:0.5rem;">Low pause concurrent</td>
+      <td style="padding:0.5rem;"><code>UseShenandoahGC</code></td>
+    </tr>
+  </table>
+
+  <h2>2. G1 Essentials</h2>
+  <ul>
+    <li>Heap = equal <strong>regions</strong> (Eden / Survivor / Old / Humongous)</li>
+    <li><strong>Young GC</strong> — evacuate Eden + Survivor</li>
+    <li><strong>Mixed GC</strong> — Young + garbage-first Old regions</li>
+    <li><strong>Humongous</strong> — object &gt; ½ region → dedicated Old regions</li>
+    <li><code>MaxGCPauseMillis=200</code> — pause <em>goal</em>, not guarantee</li>
+  </ul>
+
+  <h2>3. ZGC / Shenandoah (concept)</h2>
+  <ul>
+    <li><strong>ZGC</strong> — colored pointers, concurrent relocation, tiny STW phases</li>
+    <li><strong>Shenandoah</strong> — concurrent compaction, forwarding pointers</li>
+    <li>Neither eliminates STW entirely</li>
+    <li>JDK 21: generational ZGC evolving — check release notes</li>
+  </ul>
+
+  <h2>4. Selection Matrix</h2>
+  <ul>
+    <li><strong>API / p99 latency</strong> → G1 default; ZGC if Mixed GC spikes at large heap</li>
+    <li><strong>Batch / throughput</strong> → Parallel</li>
+    <li><strong>Small heap K8s pod</strong> → G1 + conservative <code>-Xmx</code></li>
+    <li><strong>32 GB+ latency-sensitive</strong> → evaluate ZGC</li>
+  </ul>
+
+  <h2>5. When NOT to Tune</h2>
+  <ol>
+    <li>Defaults until prod metrics exist</li>
+    <li>Fix retention before collector swap</li>
+    <li>Don't set <code>-Xmx</code> = container limit</li>
+  </ol>
+
+  <h2>6. K8s Spring Boot</h2>
+  <ul>
+    <li><code>-Xmx</code> ≈ 50–75% of cgroup limit</li>
+    <li>Enable GC unified logging from day one</li>
+    <li>Alert Full GC count, correlate with APM p99</li>
+    <li>JVM opts in container env — not <code>application.properties</code></li>
+  </ul>
+
+  <h2>7. Cross-links</h2>
+  <ul>
+    <li><a href="../lessons/jvm-0003-garbage-collection-fundamentals.html">S03 GC Fundamentals</a></li>
+    <li><a href="../lessons/jvm-0001-jvm-runtime-architecture.html">S01 OOM / cgroup</a></li>
+  </ul>
+</body>
+</html>

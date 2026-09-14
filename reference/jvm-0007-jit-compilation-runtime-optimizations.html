@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JIT Compilation & Runtime Optimizations — Reference</title>
+  <meta name="description" content="Quick reference: tiered compilation, OSR, inlining, deoptimization, escape analysis, cold start, JMH.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/jvm-0007-jit-compilation-runtime-optimizations.html">&larr; Lesson 07</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>JIT & Runtime Optimizations Cheat Sheet</h1>
+  <p class="meta">Warmup, tiers, escape analysis</p>
+
+  <h2>1. Compilation Tiers</h2>
+  <pre>
+Interpreter → C1 (fast compile) → C2 (deep optimize)
+  </pre>
+  <p>Tiered compilation default on server JVM. Warmup required.</p>
+
+  <h2>2. Hot Methods & OSR</h2>
+  <ul>
+    <li>Invocation counter → compile threshold</li>
+    <li><strong>OSR</strong> — compile hot loop inside active frame</li>
+  </ul>
+
+  <h2>3. Key Optimizations</h2>
+  <ul>
+    <li><strong>Inlining</strong> — callee body at callsite</li>
+    <li><strong>Devirtualization</strong> — monomorphic virtual call → direct</li>
+    <li><strong>Dead code elimination</strong> / constant folding</li>
+    <li><strong>Loop unrolling</strong></li>
+    <li><strong>Lock elision</strong> — if provably uncontended (preview)</li>
+  </ul>
+
+  <h2>4. Deoptimization</h2>
+  <p>Profile assumption fails → drop native code → interpreter/recompile.</p>
+  <p>Triggers: megamorphic callsite, escaped object, lock contention.</p>
+
+  <h2>5. final & Monomorphic Sites</h2>
+  <ul>
+    <li><code>final</code> methods/classes — stable JIT target (oop-0015)</li>
+    <li>One receiver type at callsite → inline likely</li>
+    <li>Many types → megamorphic → no inline</li>
+  </ul>
+
+  <h2>6. Escape Analysis</h2>
+  <ul>
+    <li>Object doesn't leave method/thread scope</li>
+    <li><strong>Scalar replacement</strong> — fields → locals/registers</li>
+    <li>May skip heap/TLAB allocation</li>
+  </ul>
+
+  <h2>7. JIT Logging (awareness)</h2>
+  <pre>-Xlog:jit+compilation=info
+-XX:+PrintCompilation  (legacy)</pre>
+
+  <h2>8. Enterprise</h2>
+  <ul>
+    <li><strong>Cold start</strong> — serverless/K8s scale-from-zero pays warmup</li>
+    <li><strong>JMH</strong> — warmup before measure</li>
+    <li><strong>GraalVM Native</strong> — AOT startup vs peak JIT (mention)</li>
+  </ul>
+
+  <h2>9. Cross-links</h2>
+  <ul>
+    <li><a href="../lessons/oop-0015-final.html">final & inlining</a></li>
+    <li><a href="../lessons/oop-0003-stack-vs-heap.html">Escape analysis intro</a></li>
+    <li><a href="../lessons/streams-0006-stream-internals.html">Pipeline fusion</a></li>
+  </ul>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JVM Flags, GC Logging & Tuning — Reference</title>
+  <meta name="description" content="Quick reference: Xms/Xmx, MaxRAMPercentage, Metaspace, unified GC logging, G1 knobs, OOM triage, Docker JVM.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/jvm-0005-jvm-flags-gc-logging-tuning.html">&larr; Lesson 05</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>JVM Flags, GC Logging & Tuning Cheat Sheet</h1>
+  <p class="meta">Heap, Metaspace, logs, G1, OOM</p>
+
+  <h2>1. Heap Flags</h2>
+  <ul>
+    <li><code>-Xms</code> — initial heap</li>
+    <li><code>-Xmx</code> — max heap (objects only)</li>
+    <li>Prod: <strong>Xms = Xmx</strong></li>
+    <li><code>-XX:MaxRAMPercentage=50-75</code> — % of container RAM</li>
+    <li><code>-XX:InitialRAMPercentage</code> — initial % match</li>
+  </ul>
+
+  <h2>2. Metaspace</h2>
+  <ul>
+    <li>Not in <code>-Xmx</code></li>
+    <li><code>-XX:MaxMetaspaceSize=256m</code> — fail-fast cap</li>
+    <li>Blows up: Spring, Hibernate agents, dynamic proxies, hot redeploy</li>
+  </ul>
+
+  <h2>3. GC Logging (JDK 9+)</h2>
+  <pre>-Xlog:gc*:file=/var/log/gc.log:utctime,level,tags:filecount=5,filesize=20M</pre>
+  <p>Read each line for:</p>
+  <ul>
+    <li><strong>Cause</strong> — Young / Mixed / Full</li>
+    <li><strong>before-&gt;after(capacity)</strong> — heap reclaim</li>
+    <li><strong>NNNms</strong> — STW pause time</li>
+  </ul>
+
+  <h2>4. G1 Knobs (know meaning)</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid var(--border); background:var(--surface);">
+      <th align="left" style="padding:0.5rem;">Flag</th>
+      <th align="left" style="padding:0.5rem;">Does</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>MaxGCPauseMillis</code></td>
+      <td style="padding:0.5rem;">Soft pause goal (default 200)</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>G1HeapRegionSize</code></td>
+      <td style="padding:0.5rem;">Region size 1–32 MB</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>InitiatingHeapOccupancyPercent</code></td>
+      <td style="padding:0.5rem;">IHOP — start concurrent mark %</td>
+    </tr>
+  </table>
+
+  <h2>5. Tuning Order</h2>
+  <ol>
+    <li>Enable GC logs</li>
+    <li>Load test / prod metrics</li>
+    <li>Fix retention & allocation</li>
+    <li>Heap/container ratio</li>
+    <li>Collector / pause goal</li>
+    <li>Individual G1 knobs last</li>
+  </ol>
+
+  <h2>6. OOM Map</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid var(--border); background:var(--surface);">
+      <th align="left" style="padding:0.5rem;">Message</th>
+      <th align="left" style="padding:0.5rem;">Fix</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>Java heap space</code></td>
+      <td style="padding:0.5rem;">Dump, leak, paginate, -Xmx last</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>Metaspace</code></td>
+      <td style="padding:0.5rem;">Classloader / agents</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>unable to create native thread</code></td>
+      <td style="padding:0.5rem;">Pool bounds, -Xss, ulimit</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>Direct buffer memory</code></td>
+      <td style="padding:0.5rem;">Netty/NIO release</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><code>GC overhead limit exceeded</code></td>
+      <td style="padding:0.5rem;">Leak or heap too small for live set</td>
+    </tr>
+  </table>
+
+  <h2>7. StackOverflowError</h2>
+  <p>Thread <strong>stack</strong> depth — recursion. Not heap. Fix code; <code>-Xss</code> is per-thread multiplier.</p>
+
+  <h2>8. Docker Starter (2 GiB pod)</h2>
+  <pre>-XX:MaxRAMPercentage=50.0
+-XX:MaxMetaspaceSize=256m
+-XX:+HeapDumpOnOutOfMemoryError
+-Xlog:gc*:file=/tmp/gc.log:utctime,level,tags</pre>
+
+  <h2>9. Cross-links</h2>
+  <ul>
+    <li><a href="../lessons/jvm-0004-garbage-collectors-selection.html">S04 Collectors</a></li>
+    <li><a href="../lessons/jvm-0001-jvm-runtime-architecture.html">S01 Memory map</a></li>
+    <li><a href="../lessons/oop-0003-stack-vs-heap.html">Stack vs Heap</a></li>
+  </ul>
+</body>
+</html>
