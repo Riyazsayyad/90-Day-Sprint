@@ -65,7 +65,19 @@
     { num: '06', file: 'jvm-0006-class-loading-metaspace-classloader-leaks.html', title: 'Class Loading, Metaspace & Classloader Leaks', meta: '35 min read &bull; JVM & Memory', module: 'JVM & Memory Management', moduleNum: '04' },
     { num: '07', file: 'jvm-0007-jit-compilation-runtime-optimizations.html', title: 'JIT Compilation & Runtime Optimizations', meta: '35 min read &bull; JVM & Memory', module: 'JVM & Memory Management', moduleNum: '04' },
     { num: '08', file: 'jvm-0008-diagnostics-profiling-memory-leaks.html', title: 'Diagnostics, Profiling & Memory Leaks', meta: '40 min read &bull; JVM & Memory', module: 'JVM & Memory Management', moduleNum: '04' },
-    { num: 'Ex', file: 'jvm-capstone-exercise.html', title: 'Capstone Exercise', meta: '16 scenarios &bull; Coding', module: 'JVM & Memory Management', moduleNum: '04', kind: 'exercise' }
+    { num: 'Ex', file: 'jvm-capstone-exercise.html', title: 'Capstone Exercise', meta: '16 scenarios &bull; Coding', module: 'JVM & Memory Management', moduleNum: '04', kind: 'exercise' },
+
+    // Module 05: Spring Boot Internals
+    { num: '01', file: 'spring-0001-why-spring-ioc-di.html', title: 'Why Spring: IoC, DI, Layers & Manual Wiring', meta: '30 min read &bull; Spring Boot', module: 'Spring Boot Internals', moduleNum: '05' },
+    { num: '02', file: 'spring-0002-applicationcontext-scopes-lifecycle.html', title: 'ApplicationContext, Scopes & Lifecycle', meta: '35 min read &bull; Spring Boot', module: 'Spring Boot Internals', moduleNum: '05' },
+    { num: '03', file: 'spring-0003-configuration-component-scan-profiles.html', title: '@Configuration, Scanning & Profiles', meta: '30 min read &bull; Spring Boot', module: 'Spring Boot Internals', moduleNum: '05' },
+    { num: '04', file: 'spring-0004-properties-conditional-primary.html', title: 'Properties, Conditions & Primary', meta: '35 min read &bull; Spring Boot', module: 'Spring Boot Internals', moduleNum: '05' },
+    { num: '05', file: 'spring-0005-auto-configuration-internals.html', title: 'Auto-Configuration Internals', meta: '40 min read &bull; Spring Boot', module: 'Spring Boot Internals', moduleNum: '05' },
+    { num: '06', file: 'spring-0006-aop-proxies-transactional.html', title: 'AOP Proxies & @Transactional', meta: '40 min read &bull; Spring Boot', module: 'Spring Boot Internals', moduleNum: '05' },
+    { num: '07', file: 'spring-0007-servlet-tomcat-mvc-dispatch.html', title: 'Servlet Stack: Tomcat, Filters & MVC', meta: '35 min read &bull; Spring Boot', module: 'Spring Boot Internals', moduleNum: '05' },
+    { num: '08', file: 'spring-0008-actuator-health-metrics.html', title: 'Actuator, Health & Metrics', meta: '30 min read &bull; Spring Boot', module: 'Spring Boot Internals', moduleNum: '05' },
+    { num: '09', file: 'spring-0009-webflux-vs-mvc.html', title: 'WebFlux vs Servlet MVC', meta: '35 min read &bull; Spring Boot', module: 'Spring Boot Internals', moduleNum: '05' },
+    { num: 'Ex', file: 'spring-internals-capstone-exercise.html', title: 'Capstone Exercise', meta: '5 scenarios &bull; Coding', module: 'Spring Boot Internals', moduleNum: '05', kind: 'exercise' }
   ];
 
 

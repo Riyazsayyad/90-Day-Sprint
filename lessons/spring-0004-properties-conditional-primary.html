@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 4 — Properties, @ConfigurationProperties, @Conditional &amp; @Primary</title>
+  <meta name="description" content="Spring Environment, @Value vs @ConfigurationProperties, Boot conditions, @Primary vs @Qualifier, NoSuchBean and NoUniqueBean debugging.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0003-configuration-component-scan-profiles.html">&larr; Lesson 3</a> &middot;
+    Lesson 4 of 9 &middot;
+    <a href="spring-0005-auto-configuration-internals.html">Lesson 5 &rarr;</a> &middot;
+    <a href="../reference/spring-0004-properties-conditional-primary.html">Cheat sheet</a>
+  </nav>
+
+  <h1>Properties, @Conditional &amp; @Primary</h1>
+  <p class="meta">~35 minutes &middot; Module 05 Lesson 4 of 9 &middot; builds on <a href="spring-0003-configuration-component-scan-profiles.html">S03</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Spring decides <em>whether a bean exists</em> with conditions, and <em>which bean wins</em> with type matching, @Primary, and @Qualifier. Can you debug NoSuchBeanDefinitionException vs NoUniqueBeanDefinitionException in 30 seconds? Auto-config (S05) is this lesson applied at classpath scale.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.spring.io/spring-boot/reference/features/external-config.html">Externalized Configuration</a> ·
+    <a href="https://docs.spring.io/spring-boot/reference/features/developing-auto-configuration.html">Conditions (auto-config)</a> ·
+    <a href="https://docs.spring.io/spring-framework/reference/core/beans/annotation-config/autowired.html">@Autowired</a>
+  </p>
+
+  <h2>1. properties vs yml</h2>
+  <p>Same <code>Environment</code>. YAML is nested and lists; <code>.properties</code> is flat keys. Pick one per app. Illegal YAML indentation is a silent wrong-value bug — treat as a parse incident.</p>
+
+  <h2>2. Property Sources (High Level)</h2>
+  <p>Boot builds an ordered <code>Environment</code>. Later sources win. Practical seniority: <strong>command line &gt; env vars &gt; profile-specific file &gt; application.yml</strong> (simplified — full list is long; don’t recite 15 ranks unless asked).</p>
+  <p>Env vars: <code>SPRING_DATASOURCE_URL</code> maps to <code>spring.datasource.url</code>. K8s ConfigMap/Secret → env → Environment. Never commit secrets (S08).</p>
+
+  <h2>3. @Value</h2>
+  <pre><code class="language-java">public Pricing(@Value("${pricing.markup:1.0}") BigDecimal markup) { ... }</code></pre>
+  <p>Pros: one-off. Cons: stringly typed, scattered keys, SpEL <code>#{ }</code> surprises, hard to validate a group. Prefer for truly single flags.</p>
+  <p><strong>Nice to know:</strong> <code>${}</code> is placeholder; <code>#{}</code> is SpEL — mixing them is a footgun.</p>
+
+  <h2>4–6. @ConfigurationProperties</h2>
+  <pre><code class="language-java">@ConfigurationProperties(prefix = "shop.payments")
+public record PaymentsProps(
+    @NotBlank String provider,
+    Duration timeout
+) {}</code></pre>
+  <p>Boot 3: records work. Enable with <code>@EnableConfigurationProperties(PaymentsProps.class)</code> or <code>@ConfigurationPropertiesScan</code>. Bind types, not strings. Validate with <code>@Validated</code> + Jakarta constraints — fail at startup, not on first payment.</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th>@Value</th>
+        <th>@ConfigurationProperties</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Typing</td>
+        <td>Per field conversion</td>
+        <td>Structured object / record</td>
+      </tr>
+      <tr>
+        <td>Validation</td>
+        <td>Manual</td>
+        <td>@Validated on the type</td>
+      </tr>
+      <tr>
+        <td>IDE metadata</td>
+        <td>Weak</td>
+        <td>spring-boot-configuration-processor</td>
+      </tr>
+      <tr>
+        <td>Use</td>
+        <td>One key</td>
+        <td>A config area (pool, payments, feature flags)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>7. Profiles + Precedence Story</h2>
+  <pre>
+application.yml              markup: 1.0
+application-prod.yml         markup: 1.2
+ENV SHOP_PAYMENTS_TIMEOUT=5s
+java -jar app.jar --shop.payments.provider=stripe
+</pre>
+  <p>Prod file overlays default; env overlays file; CLI wins. Interview: tell a story, not a 20-row table.</p>
+
+  <h2>8–11. Conditions — Why a Bean Exists</h2>
+  <p><strong>Must know:</strong> A <code>Condition</code> is evaluated against the <code>ConditionContext</code> (Environment, classloader, registry) <em>before</em> the bean is registered or created. False → no BeanDefinition (or skipped auto-config class).</p>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Annotation</th>
+        <th>True when</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>@Conditional</code></td>
+        <td>Custom <code>Condition.matches</code></td>
+      </tr>
+      <tr>
+        <td><code>@ConditionalOnProperty</code></td>
+        <td>Property equals expected (or present)</td>
+      </tr>
+      <tr>
+        <td><code>@ConditionalOnClass</code></td>
+        <td>Class on classpath (safe — uses class name string internally in auto-config)</td>
+      </tr>
+      <tr>
+        <td><code>@ConditionalOnMissingBean</code></td>
+        <td>No user bean of that type/name yet</td>
+      </tr>
+      <tr>
+        <td><code>@ConditionalOnWebApplication</code></td>
+        <td>Servlet or reactive web app type</td>
+      </tr>
+    </tbody>
+  </table>
+  <pre><code class="language-java">@Bean
+@ConditionalOnProperty(name = "shop.payments.provider", havingValue = "stripe")
+PaymentGateway stripeGateway(PaymentsProps props) {
+  return new StripeGateway(props);
+}</code></pre>
+  <p>This is the seed of auto-config (S05): classpath + missing bean + property → create DataSource.</p>
+
+  <h2>12–15. Multiple Beans Same Type</h2>
+  <pre>
+Need PaymentGateway
+   candidates: stripeGateway, razorpayGateway
+        │
+        ├─ injection point has @Qualifier("stripeGateway") → that name
+        ├─ field/param name matches bean name (fallback)
+        ├─ @Primary on one candidate → that one
+        └─ else NoUniqueBeanDefinitionException
+</pre>
+  <pre><code class="language-java">public interface PaymentGateway { Receipt charge(Money m); }
+
+@Service
+@Primary
+class StripePaymentService implements PaymentGateway { }
+
+@Service
+class RazorpayPaymentService implements PaymentGateway { }
+
+@Service
+class CheckoutService {
+  CheckoutService(
+      PaymentGateway defaultGw,                 // Stripe (@Primary)
+      @Qualifier("razorpayPaymentService")
+      PaymentGateway inrGw) { ... }
+}</code></pre>
+  <p><strong>@Primary vs @Qualifier:</strong> Primary = default when type is unique-enough. Qualifier = this injection point wants a specific bean. Don’t use Primary as a silent override in a 6-implementations zoo — name them.</p>
+
+  <h2>16. Startup Errors</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Exception</th>
+        <th>Means</th>
+        <th>Debug</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>NoSuchBeanDefinitionException</code></td>
+        <td>Zero candidates</td>
+        <td>Scan (S03), profile, <code>@Conditional*</code> false, typo name</td>
+      </tr>
+      <tr>
+        <td><code>NoUniqueBeanDefinitionException</code></td>
+        <td>Two+ candidates, no winner</td>
+        <td>@Primary / @Qualifier / inject List&lt;T&gt;</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Tools: <code>--debug</code> condition report (S05), <code>/actuator/beans</code>, <code>/actuator/conditions</code> (S08).</p>
+
+  <h2>Decision Tree</h2>
+  <pre>
+Autowire type T
+  0 beans? → NoSuchBean → scan / profile / condition / @Bean
+  1 bean?  → inject it
+  2+ beans?
+       Qualifier / name match? → that bean
+       @Primary unique? → primary
+       else → NoUniqueBean
+</pre>
+
+  <h2>Production Relevance</h2>
+  <p>Feature flags as <code>@ConditionalOnProperty</code> keep dead integrations off the classpath graph. A missing env var that should enable Stripe → NoSuchBean in prod only. Config validation at startup is cheaper than a 500 on checkout.</p>
+
+  <h2>Interview Articulation</h2>
+  <p><em>“Environment is an ordered set of property sources. I bind groups with @ConfigurationProperties and validate them. Conditions skip BeanDefinitions when a property or class is absent — that’s how auto-config backs off when I define my own DataSource. If two PaymentGateways exist, @Qualifier picks a site; @Primary picks the default; otherwise NoUniqueBeanDefinitionException.”</em></p>
+
+  <h2>Senior Interview Questions</h2>
+  <ol>
+    <li>@Value vs @ConfigurationProperties — when each?</li>
+    <li>How does an env var become spring.datasource.url?</li>
+    <li>What does @ConditionalOnMissingBean actually check?</li>
+    <li>Walk two PaymentGateway beans into CheckoutService.</li>
+    <li>@Primary vs @Qualifier — conflict if both present?</li>
+    <li>NoSuchBean vs NoUniqueBean — first three checks each.</li>
+    <li>Why validate properties at startup?</li>
+    <li>How do conditions preview auto-configuration?</li>
+  </ol>
+
+  <h2>Revision Notes</h2>
+  <ul>
+    <li>Environment overlay: files → env → CLI (simplified).</li>
+    <li>Records + @ConfigurationProperties + @Validated.</li>
+    <li>Conditions gate registration.</li>
+    <li>Resolution: qualifier → primary → fail.</li>
+  </ul>
+
+  <h2>Interview One-Liners</h2>
+  <ul>
+    <li>“Zero beans is scan/condition; many beans is identity.”</li>
+    <li>“@Primary is a default, not a substitute for naming.”</li>
+    <li>“Fail at refresh() if config is illegal.”</li>
+  </ul>
+
+  <h2>Senior MCQs</h2>
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Two PaymentGateway beans, no @Primary/@Qualifier?</p>
+        <ol type="A">
+          <li>NoUniqueBeanDefinitionException at injection.</li>
+          <li>Spring randomly picks one each request.</li>
+          <li>Both are silently ignored forever.</li>
+          <li>Tomcat converts them into filters.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (NoUniqueBeanDefinitionException at injection.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: @ConditionalOnProperty false. Result?</p>
+        <ol type="A">
+          <li>Bean is not registered / not created.</li>
+          <li>Bean is created then immediately destroyed.</li>
+          <li>Bean becomes request-scoped automatically.</li>
+          <li>Only field injection still works.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Bean is not registered / not created.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: Prefer @ConfigurationProperties when?</p>
+        <ol type="A">
+          <li>A group of related typed settings.</li>
+          <li>You need SpEL inside SQL strings.</li>
+          <li>The value is a local loop counter.</li>
+          <li>You want to skip the Environment.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (A group of related typed settings.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: @Qualifier vs @Primary at one injection point?</p>
+        <ol type="A">
+          <li>Qualifier wins for that parameter.</li>
+          <li>Primary always overrides Qualifier.</li>
+          <li>Both are ignored if types match.</li>
+          <li>Causes Metaspace leaks in JDK 21.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Qualifier wins for that parameter.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: NoSuchBeanDefinitionException first checks?</p>
+        <ol type="A">
+          <li>Scan path, profile, conditions, bean name.</li>
+          <li>Only whether Tomcat maxThreads is 200.</li>
+          <li>Whether the class used synchronized.</li>
+          <li>G1 vs ZGC collector selection only.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Scan path, profile, conditions, bean name.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: @ConditionalOnMissingBean purpose in Boot?</p>
+        <ol type="A">
+          <li>User @Bean makes auto-config back off.</li>
+          <li>Deletes all beans of other types.</li>
+          <li>Forces field injection on DataSource.</li>
+          <li>Disables the Environment completely.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (User @Bean makes auto-config back off.)</strong></p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0003-configuration-component-scan-profiles.html">&larr; Lesson 3</a> &middot;
+    <a href="spring-0005-auto-configuration-internals.html">Lesson 5 &rarr;</a> &middot;
+    <a href="../reference/spring-0004-properties-conditional-primary.html">Cheat sheet</a>
+  </nav>
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ApplicationContext, Scopes &amp; Lifecycle — Reference</title>
+  <meta name="description" content="Cheat sheet: ApplicationContext vs BeanFactory, lifecycle order, scopes, prototype trap, circular deps, ObjectProvider.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/spring-0002-applicationcontext-scopes-lifecycle.html">&larr; Lesson 02</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+  <h1>ApplicationContext &amp; Lifecycle Cheat Sheet</h1>
+  <p class="meta">Module 05 S02</p>
+
+  <h2>1. Pipeline</h2>
+  <p>Config → BeanDefinition → instantiate → DI → @PostConstruct → singleton cache → @PreDestroy on close</p>
+
+  <h2>2. Context vs Factory</h2>
+  <ul>
+    <li>BeanFactory: getBean, definitions</li>
+    <li>ApplicationContext: + events, i18n, AOP integration, eager singletons</li>
+  </ul>
+
+  <h2>3. Scopes</h2>
+  <ul>
+    <li>singleton (default) — one / context</li>
+    <li>prototype — new at lookup; destroy not tracked like singleton</li>
+    <li>request / session / application / websocket — web</li>
+  </ul>
+
+  <h2>4. Traps</h2>
+  <ul>
+    <li>Spring singleton ≠ enum singleton</li>
+    <li>Prototype into singleton = one instance unless ObjectProvider / scoped proxy</li>
+    <li>Constructor cycles fail (Boot 3) — refactor, don’t enable circular refs</li>
+    <li>@Lazy moves failure from startup to first use</li>
+  </ul>
+
+  <h2>5. Ordering</h2>
+  <ul>
+    <li>@DependsOn — init order</li>
+    <li>@Order — among same-type callbacks/filters</li>
+  </ul>
+</body>
+</html>

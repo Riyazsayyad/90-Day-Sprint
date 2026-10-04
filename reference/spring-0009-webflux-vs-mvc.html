@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebFlux vs MVC — Reference</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/spring-0009-webflux-vs-mvc.html">&larr; Lesson 09</a>
+  </nav>
+  <h1>WebFlux vs MVC Cheat Sheet</h1>
+  <ul>
+    <li>MVC: worker (or VT) per blocking request</li>
+    <li>WebFlux: event loop; blocking JDBC on loop = stall</li>
+    <li>Mono 0..1; Flux 0..N; subscribe starts work</li>
+    <li>Not automatically faster</li>
+    <li>JPA CRUD → MVC ± virtual threads</li>
+    <li>Gateway / streaming / reactive DB → WebFlux</li>
+  </ul>
+</body>
+</html>

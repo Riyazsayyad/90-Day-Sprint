@@ -42,14 +42,14 @@
         <div class="progress-stats-box" id="sprintProgressBox">
           <div class="progress-header">
             <span class="progress-label">Curriculum Progress</span>
-            <span class="progress-percent">45.5% Complete</span>
+            <span class="progress-percent">54.5% Complete</span>
           </div>
           <div class="progress-bar-container">
             <div class="progress-bar-fill" id="progressFill"></div>
           </div>
           <div class="progress-sub">
-            <span>5 Completed &bull; 0 Active</span>
-            <span>45 Completed Lessons</span>
+            <span>6 Completed &bull; 0 Active</span>
+            <span>54 Completed Lessons</span>
           </div>
         </div>
 
@@ -207,31 +207,28 @@
         </div>
 
         <!-- Module 05: Spring Boot Internals -->
-        <div class="module-card locked">
+        <div class="module-card active" id="springCard">
           <div class="card-header">
             <div class="icon-wrapper">
               <svg viewBox="0 0 24 24">
                 <path d="M2 22C2 12 10 4 22 2c0 10-8 18-20 20zM2 22l7-7" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </div>
-            <span class="badge locked-badge">Locked</span>
+            <span class="badge completed">Completed</span>
           </div>
           <div class="card-body">
             <div class="card-num">Module 05</div>
             <h3 class="card-title">Spring Boot Internals</h3>
-            <p class="card-desc">Look under the hood of Spring. Master the Bean Lifecycle, custom Starters, transactional layers, and Reactive WebFlux setups.</p>
-            
-            <div class="upcoming-topics">
-              <ul>
-                <li>ApplicationContext & Bean Lifecycle</li>
-                <li>Custom Spring Boot Auto-Configuration</li>
-                <li>Spring Transaction Internals & Proxies</li>
-                <li>Reactive Stack (WebFlux) Architecture</li>
-              </ul>
-            </div>
+            <p class="card-desc">Look under the hood of Spring. IoC and DI, bean lifecycle, auto-configuration, AOP transactions, servlet dispatch, Actuator, and WebFlux vs MVC.</p>
           </div>
           <div class="card-footer">
-            <span class="card-progress-text">Upcoming</span>
+            <span class="card-progress-text">9 Lessons &bull; 1 Exercise</span>
+            <span class="active-action">
+              View Lessons
+              <svg viewBox="0 0 24 24">
+                <path d="M5 12h14M12 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
           </div>
         </div>
 
@@ -1266,6 +1263,145 @@
           </div>
         </a>
 
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar Spring Lesson Drawer -->
+  <div class="drawer" id="springDrawer">
+    <div class="drawer-header">
+      <div class="drawer-title-group">
+        <h2>Spring Boot Internals</h2>
+        <p>Module 05 &bull; 9 Lessons &bull; 1 Exercise</p>
+      </div>
+      <button class="close-btn" id="closeSpringDrawerBtn" aria-label="Close lesson list">
+        <svg viewBox="0 0 24 24">
+          <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="drawer-content">
+      <div class="lesson-list">
+        <a href="lessons/spring-0001-why-spring-ioc-di.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">01</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Why Spring: IoC, DI, Layers &amp; Manual Wiring</span>
+              <span class="lesson-meta">30 min read &bull; Spring Boot</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+        <a href="lessons/spring-0002-applicationcontext-scopes-lifecycle.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">02</div>
+            <div class="lesson-info">
+              <span class="lesson-title">ApplicationContext, Scopes &amp; Lifecycle</span>
+              <span class="lesson-meta">35 min read &bull; Spring Boot</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+        <a href="lessons/spring-0003-configuration-component-scan-profiles.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">03</div>
+            <div class="lesson-info">
+              <span class="lesson-title">@Configuration, Scanning &amp; Profiles</span>
+              <span class="lesson-meta">30 min read &bull; Spring Boot</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+        <a href="lessons/spring-0004-properties-conditional-primary.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">04</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Properties, Conditions &amp; Primary</span>
+              <span class="lesson-meta">35 min read &bull; Spring Boot</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+        <a href="lessons/spring-0005-auto-configuration-internals.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">05</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Auto-Configuration Internals</span>
+              <span class="lesson-meta">40 min read &bull; Spring Boot</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+        <a href="lessons/spring-0006-aop-proxies-transactional.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">06</div>
+            <div class="lesson-info">
+              <span class="lesson-title">AOP Proxies &amp; @Transactional</span>
+              <span class="lesson-meta">40 min read &bull; Spring Boot</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+        <a href="lessons/spring-0007-servlet-tomcat-mvc-dispatch.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">07</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Servlet Stack: Tomcat, Filters &amp; MVC</span>
+              <span class="lesson-meta">35 min read &bull; Spring Boot</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+        <a href="lessons/spring-0008-actuator-health-metrics.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">08</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Actuator, Health &amp; Metrics</span>
+              <span class="lesson-meta">30 min read &bull; Spring Boot</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+        <a href="lessons/spring-0009-webflux-vs-mvc.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">09</div>
+            <div class="lesson-info">
+              <span class="lesson-title">WebFlux vs Servlet MVC</span>
+              <span class="lesson-meta">35 min read &bull; Spring Boot</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
+        <a href="exercises/spring-internals-capstone-exercise.html" class="lesson-item">
+          <div class="lesson-left">
+            <div class="lesson-num">Ex</div>
+            <div class="lesson-info">
+              <span class="lesson-title">Capstone Exercise</span>
+              <span class="lesson-meta">5 scenarios &bull; Coding</span>
+            </div>
+          </div>
+          <div class="lesson-arrow">
+            <svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </a>
       </div>
     </div>
   </div>

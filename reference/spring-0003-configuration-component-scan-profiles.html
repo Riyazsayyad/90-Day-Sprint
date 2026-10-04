@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scan, @Bean &amp; Profiles — Reference</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/spring-0003-configuration-component-scan-profiles.html">&larr; Lesson 03</a>
+  </nav>
+  <h1>Configuration, Scan &amp; Profiles Cheat Sheet</h1>
+  <ul>
+    <li>Default scan: package of @SpringBootApplication + subpackages</li>
+    <li>@Component / @Service / @Repository / @Controller — same core DI</li>
+    <li>@Bean — third-party / explicit construction; name = method name</li>
+    <li>@Configuration (proxyBeanMethods true): sibling @Bean calls → singleton</li>
+    <li>@Profile + spring.profiles.active / SPRING_PROFILES_ACTIVE</li>
+    <li>Missing bean: scan → profile → name → then conditions (S04)</li>
+  </ul>
+</body>
+</html>

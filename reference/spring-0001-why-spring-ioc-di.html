@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Why Spring — IoC & DI — Reference</title>
+  <meta name="description" content="Quick reference: manual wiring, IoC vs DI, injection styles, beans, layers, DIP, misconceptions, Boot startup preview.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/spring-0001-why-spring-ioc-di.html">&larr; Lesson 01</a> &middot;
+    <a href="../GLOSSARY.md">Glossary</a>
+  </nav>
+
+  <h1>Why Spring — IoC &amp; DI Cheat Sheet</h1>
+  <p class="meta">Module 05 S01 &middot; concepts before annotations</p>
+
+  <h2>1. Manual wiring (baseline)</h2>
+  <pre><code>UserRepository repo = new UserRepository(dataSource);
+UserService service = new UserService(repo);
+UserController controller = new UserController(service);</code></pre>
+  <ul>
+    <li>Explicit, testable, no magic — scales poorly when graphs branch (envs, mocks, features).</li>
+  </ul>
+
+  <h2>2. IoC vs DI</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid var(--border); background:var(--surface);">
+      <th align="left" style="padding:0.5rem;">Term</th>
+      <th align="left" style="padding:0.5rem;">Meaning</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>IoC</strong></td>
+      <td style="padding:0.5rem;">Framework controls object creation &amp; lifecycle — inversion of control flow.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>DI</strong></td>
+      <td style="padding:0.5rem;">Dependencies supplied from outside (constructor/setter/field) — one technique inside IoC.</td>
+    </tr>
+  </table>
+
+  <h2>3. Injection styles</h2>
+  <table style="width:100%; border-collapse:collapse; font-size:0.9rem; margin:1rem 0;">
+    <tr style="border-bottom:1px solid var(--border); background:var(--surface);">
+      <th align="left" style="padding:0.5rem;">Style</th>
+      <th align="left" style="padding:0.5rem;">Senior take</th>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>Constructor</strong></td>
+      <td style="padding:0.5rem;">Preferred — required deps, immutable <code>final</code>, easy unit tests.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>Setter</strong></td>
+      <td style="padding:0.5rem;">Optional / reconfigurable deps only.</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(0,0,0,0.05);">
+      <td style="padding:0.5rem;"><strong>Field</strong></td>
+      <td style="padding:0.5rem;">Avoid in app code — hides deps, hard to test without Spring.</td>
+    </tr>
+  </table>
+
+  <h2>4. Bean</h2>
+  <ul>
+    <li>Object whose <strong>lifecycle &amp; wiring</strong> the Spring container manages.</li>
+    <li>Not every <code>new</code> — DTOs, entities, value objects often stay outside the container.</li>
+  </ul>
+
+  <h2>5. Layers &amp; dependency direction</h2>
+  <pre><code>Controller → Service → Repository → Database
+         (depends on interfaces upward)</code></pre>
+  <ul>
+    <li>Upper layers depend on <strong>abstractions</strong> owned by domain/service boundaries.</li>
+    <li>Repository interface in domain; JDBC impl in infra package.</li>
+  </ul>
+
+  <h2>6. DIP sketch</h2>
+  <pre><code>interface PaymentGateway { Receipt charge(Money m); }
+class StripeGateway implements PaymentGateway { ... }
+class CheckoutService {
+  private final PaymentGateway gateway;
+  CheckoutService(PaymentGateway gateway) { this.gateway = gateway; }
+}</code></pre>
+
+  <h2>7. Spring &gt; boilerplate</h2>
+  <ul>
+    <li>Lifecycle callbacks, profiles, conditional beans</li>
+    <li>AOP cross-cuts (transactions, security, metrics)</li>
+    <li>Test slices (<code>@WebMvcTest</code>, <code>@DataJpaTest</code> — later)</li>
+    <li>Boot: auto-config + embedded servers + actuator hooks</li>
+  </ul>
+
+  <h2>8. Misconceptions</h2>
+  <ul>
+    <li>Spring ≠ creates every object</li>
+    <li><code>new</code> is not banned (builders, DTOs, domain events)</li>
+    <li>DI ≠ IoC (DI is how; IoC is who controls creation)</li>
+  </ul>
+
+  <h2>9. Boot startup (preview)</h2>
+  <ol>
+    <li><code>main</code> → <code>SpringApplication.run</code></li>
+    <li>Prepare environment (properties, profiles)</li>
+    <li>Create <code>ApplicationContext</code></li>
+    <li>Register &amp; process bean definitions</li>
+    <li>Instantiate singleton beans, inject dependencies</li>
+    <li>Run runners / start embedded web server</li>
+  </ol>
+  <p>Detail: S02 (context), S05 (auto-config).</p>
+
+  <h2>10. Interview traps</h2>
+  <ul>
+    <li>“Spring replaces OOP” — no, it orchestrates object graphs.</li>
+    <li>“@Autowired on field is fine” — works, but constructor + <code>final</code> is the senior default.</li>
+    <li>“IoC and DI are synonyms” — precision matters.</li>
+  </ul>
+
+  <h2>11. Cross-links</h2>
+  <ul>
+    <li><a href="../lessons/oop-0009-abstraction.html">Abstraction &amp; interfaces</a></li>
+    <li><a href="../lessons/oop-0015-final.html">final + constructor injection</a></li>
+    <li><a href="../lessons/oop-0008-polymorphism.html">Polymorphism &amp; DI</a></li>
+  </ul>
+</body>
+</html>

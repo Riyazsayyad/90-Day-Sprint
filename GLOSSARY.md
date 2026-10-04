@@ -452,6 +452,52 @@ _Avoid_: using StampedLock as a general service mutex
 Wait-set bound to a `Lock` (`await` / `signal` / `signalAll`). Replaces `wait` / `notify` / `notifyAll`. Caller must hold the lock. Multiple conditions on one lock (e.g. `notFull` and `notEmpty`).
 _Avoid_: signalling without holding the lock; `if` instead of `while` around `await`
 
+## Spring Boot Internals Terms
+
+**IoC (Inversion of Control)**:
+The container owns object creation, wiring, and when your code is called. Not a synonym for annotations.
+_Avoid_: equating IoC with DI
+
+**DI (Dependency Injection)**:
+Collaborators passed in (constructor preferred). One technique of IoC; possible with manual `new` at a composition root.
+_Avoid_: field injection as the default in application code
+
+**Bean**:
+Container-managed object with a BeanDefinition. DTOs, JPA entities, and loop-local collections are usually not beans.
+_Avoid_: “Spring creates every object”
+
+**ApplicationContext**:
+IoC container used in production: BeanFactory plus events, `MessageSource`, AOP integration, eager singleton refresh.
+_Avoid_: calling it “the Tomcat server”
+
+**BeanDefinition**:
+Metadata (type, name, scope, deps) registered before instances exist. Scan, `@Bean`, and auto-config all write definitions.
+_Avoid_: debugging injection before checking whether a definition exists
+
+**Auto-configuration**:
+Boot 3: classes listed in `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`, gated by `@Conditional*`. User `@Bean` typically wins via `@ConditionalOnMissingBean`.
+_Avoid_: citing `spring.factories` EnableAutoConfiguration as current Boot 3 discovery
+
+**AOP proxy**:
+Object injected into other beans that runs advice then the target. `@Transactional` lives here. `this.foo()` skips it.
+_Avoid_: `new Service()` and expecting transactions
+
+**REQUIRED / REQUIRES_NEW**:
+REQUIRED joins or starts a tx. REQUIRES_NEW suspends and starts an independent tx (extra connection).
+_Avoid_: REQUIRES_NEW as a default “to be safe”
+
+**DispatcherServlet**:
+Spring MVC front controller: HandlerMapping + HandlerAdapter + message conversion. Filters wrap the servlet; interceptors wrap handlers.
+_Avoid_: treating Filter and Interceptor as the same layer
+
+**Liveness vs readiness**:
+Liveness → restart the process. Readiness → take traffic. Dependency checks belong on readiness.
+_Avoid_: database ping on liveness causing crashloops
+
+**WebFlux event loop**:
+Small set of threads that must not block. Blocking JDBC on the loop stalls many connections. Not “always faster than MVC.”
+_Avoid_: JPA on the Netty loop
+
 
 
 

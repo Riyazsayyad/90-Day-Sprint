@@ -155,3 +155,9 @@
 - Scope: Lock contract, ReentrantLock, RW lock, StampedLock interview-level, Condition, liveness, enterprise framing. Deferred executors (S05), concurrent collections (S06), CF/virtual threads, AQS/lock-free.
 - Indexed: lesson-tray, index drawer (4/8), nav chain from L03.
 - Notes: user planned written notes after this lesson — they may start now; do not nag.
+
+## Session (2026-10-04) — Module 05 full curriculum
+- User invoked `/teach` for S01 then asked to generate **all** M05 lessons (S01–S09 + S10 capstone) to JVM quality.
+- Files: `lessons/spring-0001` … `spring-0009`, `exercises/spring-internals-capstone-exercise.html` + JUnit stub.
+- Indexed: tray, dashboard 54.5% (6/11), spring drawer, search index, nav from JVM capstone.
+- Study still starts at S01 — curriculum complete ≠ studied.

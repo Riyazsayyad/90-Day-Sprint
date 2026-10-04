@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Servlet / Tomcat / MVC — Reference</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/spring-0007-servlet-tomcat-mvc-dispatch.html">&larr; Lesson 07</a>
+  </nav>
+  <h1>Servlet Stack Cheat Sheet</h1>
+  <pre>LB → Tomcat worker → Filters → DispatcherServlet → HandlerMapping → Controller → Service → Repo</pre>
+  <ul>
+    <li>Blocking I/O holds the worker; max threads ≠ DB capacity</li>
+    <li>Hikari often the real concurrency limit</li>
+    <li>Filter (servlet) vs Interceptor (MVC) vs @ControllerAdvice (exceptions)</li>
+    <li>MDC/ThreadLocal: clear in finally</li>
+    <li>Boot 3.2: spring.threads.virtual.enabled — I/O wait, not extra DB</li>
+    <li>Dump threads (jcmd) when latency spikes — JVM S08</li>
+  </ul>
+</body>
+</html>

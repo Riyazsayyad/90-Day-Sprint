@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 8 — Actuator, Health, Metrics &amp; Production Configuration</title>
+  <meta name="description" content="Spring Boot Actuator: health, liveness vs readiness, metrics, Micrometer, endpoint exposure, secrets, incident walkthrough vs jcmd.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0007-servlet-tomcat-mvc-dispatch.html">&larr; Lesson 7</a> &middot;
+    Lesson 8 of 9 &middot;
+    <a href="spring-0009-webflux-vs-mvc.html">Lesson 9 &rarr;</a> &middot;
+    <a href="../reference/spring-0008-actuator-health-metrics.html">Cheat sheet</a>
+  </nav>
+
+  <h1>Actuator, Health, Metrics &amp; Production Configuration</h1>
+  <p class="meta">~30 minutes &middot; Module 05 Lesson 8 of 9 &middot; builds on <a href="jvm-0008-diagnostics-profiling-memory-leaks.html">JVM diagnostics</a>, <a href="spring-0005-auto-configuration-internals.html">conditions</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Observability is how you keep a JVM service honest in K8s. Can you map liveness vs readiness to probes, name which Actuator endpoint you hit first on a latency spike, and say what must never be public? Actuator is the app view; jcmd/JFR is the JVM view — both.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.spring.io/spring-boot/reference/actuator.html">Spring Boot Actuator</a> ·
+    <a href="https://docs.spring.io/spring-boot/reference/actuator/endpoints.html">Endpoints</a> ·
+    <a href="https://docs.spring.io/spring-boot/reference/actuator/metrics.html">Metrics</a>
+  </p>
+
+  <h2>1–2. Why Observability; What Actuator Is</h2>
+  <p>Without signals you guess. Actuator exposes <strong>HTTP/JMX endpoints</strong> and wires <strong>Micrometer</strong> meters. It is a Boot feature (auto-config), not a replacement for logs or traces.</p>
+
+  <h2>3. Endpoints (What Each Is For)</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Endpoint</th>
+        <th>Question it answers</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>/health</code></td>
+        <td>Should this instance take traffic / is process alive?</td>
+      </tr>
+      <tr>
+        <td><code>/info</code></td>
+        <td>Build version, git commit — deploy verification</td>
+      </tr>
+      <tr>
+        <td><code>/metrics</code></td>
+        <td>Named meters (JVM, Tomcat, Hikari, HTTP)</td>
+      </tr>
+      <tr>
+        <td><code>/loggers</code></td>
+        <td>Runtime log level (dangerous if public)</td>
+      </tr>
+      <tr>
+        <td><code>/threaddump</code></td>
+        <td>Same idea as jstack — app-level dump</td>
+      </tr>
+      <tr>
+        <td><code>/heapdump</code></td>
+        <td>hprof — huge, sensitive, last resort</td>
+      </tr>
+      <tr>
+        <td><code>/conditions</code></td>
+        <td>Auto-config report (S05)</td>
+      </tr>
+      <tr>
+        <td><code>/beans</code> <code>/env</code> <code>/configprops</code></td>
+        <td>Wiring and property values — <strong>secrets risk</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4. Exposure — Never Public Full Actuator</h2>
+  <p><strong>Must know:</strong> By default web exposure is limited (<code>health</code> often). Do not <code>include=*</code> on the public 8080. Pattern:</p>
+  <ul>
+    <li><code>management.server.port=8081</code> — not on the LoadBalancer</li>
+    <li>NetworkPolicy: only kubelet / Prometheus scrape</li>
+    <li>Auth on sensitive endpoints if the port is reachable</li>
+  </ul>
+  <p><code>/env</code> and <code>/heapdump</code> on the internet = incident.</p>
+
+  <h2>5–7. Health, Liveness, Readiness, K8s</h2>
+  <pre>
+Liveness  → kubelet: restart the container if deadlocked / stuck
+Readiness → Service: remove from LB if cannot accept traffic (warming, downstream down)
+</pre>
+  <p>Boot 2.3+: <code>/health/liveness</code> and <code>/health/readiness</code> (or groups). Custom <code>HealthIndicator</code> for “can I reach Redis?” — usually <strong>readiness</strong>, not liveness (don’t restart-loop because Redis blipped).</p>
+  <blockquote>Trap: liveness pinging the database → DB outage = crashloop. Liveness = process health. Readiness = dependency health.</blockquote>
+
+  <h2>8–10. Micrometer</h2>
+  <p>Meters (counters, timers, gauges) → registry (Prometheus, OTLP, …). You don’t implement scrape format by hand.</p>
+  <p>Metrics that matter:</p>
+  <ul>
+    <li>HTTP latency / error rate (server requests)</li>
+    <li>JVM memory, GC pause (ties Module 04)</li>
+    <li>Tomcat threads busy / max</li>
+    <li>Hikari: active, pending, timeout</li>
+  </ul>
+  <pre><code class="language-java">@Timed("checkout.place")
+public OrderId place(PlaceOrder cmd) { ... }
+
+// or
+registry.counter("payments.failed", "provider", "stripe").increment();</code></pre>
+  <p><strong>Nice to know:</strong> Cardinality explosion (per-user tags) kills Prometheus. Tag bounded sets only.</p>
+
+  <h2>11–12. Production Config &amp; Secrets</h2>
+  <ul>
+    <li>Profiles: <code>prod</code> in the cluster only</li>
+    <li>Env vars / K8s Secret / Vault — not git</li>
+    <li>Externalized config (S04) — 12-factor</li>
+  </ul>
+
+  <h2>13. Incident: Latency Spike — First Moves</h2>
+  <pre>
+1. HTTP metrics: p99, error ratio, in-flight
+2. Hikari pending / Tomcat busy  → pool story (S07)
+3. /threaddump or jcmd Thread.print  → BLOCKED vs socketRead (JVM S08)
+4. GC metrics — if CPU in GC, Module 04 path
+5. Do not heapdump first on a giant heap under load
+</pre>
+
+  <h2>14. Actuator vs jcmd</h2>
+  <p>Actuator: needs HTTP, security, may miss native deadlocks if the web thread pool is stuck. <code>jcmd</code> from the pod: works if the JVM still answers attach. Seniors use both.</p>
+
+  <h2>Production Relevance</h2>
+  <p>Probes misconfigured = rolling deploy never becomes Ready, or pods killed during GC pause (liveness timeout too aggressive). Heapdump endpoint left open = PII on the internet.</p>
+
+  <h2>Interview Articulation</h2>
+  <p><em>“Actuator exposes health and metrics. Liveness is ‘restart me’; readiness is ‘stop sending traffic.’ I scrape Micrometer via a private management port. On latency I look at HTTP timers, thread and connection pool gauges, then a thread dump. Heapdump and /env stay locked down. JVM tools remain valid when HTTP is already dead.”</em></p>
+
+  <h2>Senior Interview Questions</h2>
+  <ol>
+    <li>Liveness vs readiness — K8s mapping.</li>
+    <li>Why not check DB on liveness?</li>
+    <li>Which endpoints must not be public?</li>
+    <li>Latency spike — first three signals.</li>
+    <li>Micrometer vs logging vs tracing.</li>
+    <li>When Actuator dump vs jcmd?</li>
+    <li>Custom HealthIndicator — which group?</li>
+    <li>How secrets get into Environment in K8s.</li>
+  </ol>
+
+  <h2>Revision Notes</h2>
+  <ul>
+    <li>Management port + least exposure.</li>
+    <li>Liveness ≠ dependencies.</li>
+    <li>Hikari + Tomcat + HTTP timers.</li>
+    <li>Conditions endpoint debugs S05.</li>
+    <li>Actuator + jcmd complementary.</li>
+  </ul>
+
+  <h2>Interview One-Liners</h2>
+  <ul>
+    <li>“Restart loops from a DB health check are a liveness mistake.”</li>
+    <li>“include=* on 8080 is a finding, not a convenience.”</li>
+    <li>“Metrics first, dumps second, heapdump last.”</li>
+  </ul>
+
+  <h2>Senior MCQs</h2>
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Redis down. Which probe should fail?</p>
+        <ol type="A">
+          <li>Readiness — stop traffic, don’t crashloop.</li>
+          <li>Liveness — kubelet must always restart.</li>
+          <li>Neither — hide all health endpoints.</li>
+          <li>Only heapdump should turn red.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Readiness — stop traffic, don’t crashloop.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Safe public exposure?</p>
+        <ol type="A">
+          <li>Minimal health — never env/heapdump on 8080.</li>
+          <li>include=* on the LoadBalancer port.</li>
+          <li>/loggers open without auth globally.</li>
+          <li>/beans to the whole internet always.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Minimal health — never env/heapdump on 8080.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: First metric family on API latency spike?</p>
+        <ol type="A">
+          <li>HTTP timers plus pool/thread gauges.</li>
+          <li>Only Metaspace class count.</li>
+          <li>Git commit hash from /info.</li>
+          <li>Disk UUID of the container image.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (HTTP timers plus pool/thread gauges.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: /actuator/conditions helps debug?</p>
+        <ol type="A">
+          <li>Why auto-config beans appeared or not.</li>
+          <li>Native thread creation in the kernel.</li>
+          <li>G1 region size exclusively.</li>
+          <li>Whether records are on the heap.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Why auto-config beans appeared or not.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: HTTP actuator dead, JVM alive. Next?</p>
+        <ol type="A">
+          <li>jcmd from the pod — attach still works.</li>
+          <li>Only retry /heapdump on 8080.</li>
+          <li>Disable GC to free the servlet pool.</li>
+          <li>Restart etcd in the cluster first.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (jcmd from the pod — attach still works.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: High-cardinality userId tags on timers?</p>
+        <ol type="A">
+          <li>Dangerous — explodes time series.</li>
+          <li>Required for Micrometer to work.</li>
+          <li>Replaces the need for logs.</li>
+          <li>Forces CGLIB off globally.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Dangerous — explodes time series.)</strong></p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0007-servlet-tomcat-mvc-dispatch.html">&larr; Lesson 7</a> &middot;
+    <a href="spring-0009-webflux-vs-mvc.html">Lesson 9 &rarr;</a> &middot;
+    <a href="../reference/spring-0008-actuator-health-metrics.html">Cheat sheet</a>
+  </nav>
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>

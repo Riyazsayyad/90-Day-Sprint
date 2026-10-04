@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 3 — @Configuration, @Bean, Component Scanning &amp; Profiles</title>
+  <meta name="description" content="Spring component scan, stereotypes, @Configuration vs @Bean, CGLIB config interception, profiles, bean-not-found debugging.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0002-applicationcontext-scopes-lifecycle.html">&larr; Lesson 2</a> &middot;
+    Lesson 3 of 9 &middot;
+    <a href="spring-0004-properties-conditional-primary.html">Lesson 4 &rarr;</a> &middot;
+    <a href="../reference/spring-0003-configuration-component-scan-profiles.html">Cheat sheet</a>
+  </nav>
+
+  <h1>@Configuration, @Bean, Component Scanning &amp; Profiles</h1>
+  <p class="meta">~30 minutes &middot; Module 05 Lesson 3 of 9 &middot; builds on <a href="spring-0002-applicationcontext-scopes-lifecycle.html">S02</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> “Bean not found” is a scan/profile/@Bean-name problem until proven otherwise. Can you explain where Boot scans from, when to use @Bean vs @Component, and why calling another @Bean method from a @Configuration class returns the singleton? Profiles in K8s are how prod accidentally gets H2.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.spring.io/spring-framework/reference/core/beans/classpath-scanning.html">Classpath Scanning</a> ·
+    <a href="https://docs.spring.io/spring-framework/reference/core/beans/java.html">Java-based Configuration</a> ·
+    <a href="https://docs.spring.io/spring-boot/reference/features/profiles.html">Boot Profiles</a>
+  </p>
+
+  <h2>1. Stereotypes — Same DI, Different Intent</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Annotation</th>
+        <th>Meaning</th>
+        <th>Core DI difference?</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>@Component</code></td>
+        <td>Generic scanned bean</td>
+        <td>Baseline</td>
+      </tr>
+      <tr>
+        <td><code>@Service</code></td>
+        <td>Application service</td>
+        <td>None for wiring</td>
+      </tr>
+      <tr>
+        <td><code>@Repository</code></td>
+        <td>Persistence adapter</td>
+        <td>Exception translation via advisor (nice to know)</td>
+      </tr>
+      <tr>
+        <td><code>@Controller</code> / <code>@RestController</code></td>
+        <td>MVC handler</td>
+        <td>Discovered by <code>RequestMappingHandlerMapping</code> (S07)</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>Must know:</strong> For constructor injection, <code>@Service</code> vs <code>@Component</code> is documentation. Do not invent magic.</p>
+
+  <h2>2. Component Scanning Flow</h2>
+  <pre>
+@SpringBootApplication
+        │  meta: @ComponentScan (default: this package + below)
+        ▼
+ClassPathBeanDefinitionScanner
+        │  finds @Component (and meta-annotated)
+        ▼
+BeanDefinition registered  (name: decapitalized class, or @Component("id"))
+        │
+        ▼
+S02 pipeline: instantiate → DI → init
+</pre>
+  <p><strong>Mental model:</strong> Scan writes <em>definitions</em>. Refresh instantiates. If the class is not a definition, you never get a bean — regardless of how pretty the constructor is.</p>
+
+  <h2>3. Package Boundaries — #1 “Bean Not Found”</h2>
+  <pre>
+com.acme.shop.ShopApplication   ← @SpringBootApplication here
+com.acme.shop.api.HelloController          scanned ✓
+com.acme.payments.StripeConfig             NOT scanned ✗  (sibling of shop)
+</pre>
+  <p>Default scan base = package of the annotated application class and <strong>subpackages</strong>, not the whole JAR. Fix: move code under the app package, or <code>@ComponentScan("com.acme")</code> / <code>@SpringBootApplication(scanBasePackages = ...)</code>.</p>
+  <blockquote>Trap: putting <code>main</code> in <code>com.acme</code> and accidentally scanning every library component. Too wide is also a bug (duplicate beans, slow start).</blockquote>
+
+  <h2>4. @Configuration and @Bean</h2>
+  <pre><code class="language-java">@Configuration
+public class ClockConfig {
+  @Bean
+  Clock utcClock() {
+    return Clock.systemUTC();
+  }
+}</code></pre>
+  <p>You own construction. Useful for types you cannot annotate (JDK, third-party <code>ObjectMapper</code>).</p>
+
+  <h2>5. @Component Class vs @Bean Method</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Use @Component on your class when</th>
+        <th>Use @Bean when</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>You own the source; simple ctor DI</td>
+        <td>Third-party type, explicit construction, multiple variants</td>
+      </tr>
+      <tr>
+        <td>Stereotype communicates layer</td>
+        <td>Conditional setup (S04) around one factory method</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>6. @Configuration Method Interception (Interview-Level)</h2>
+  <p>Full <code>@Configuration</code> classes are CGLIB-enhanced (unless <code>proxyBeanMethods = false</code>). Calling <code>utcClock()</code> from another <code>@Bean</code> method in the same class hits the <strong>container</strong>, not a second <code>new Clock</code> — you get the singleton.</p>
+  <pre><code class="language-java">@Configuration
+public class TimeConfig {
+  @Bean Clock clock() { return Clock.systemUTC(); }
+
+  @Bean Ticker ticker() {
+    return new Ticker(clock()); // same Clock bean, not a second instance
+  }
+}</code></pre>
+  <p><code>@AutoConfiguration</code> / lite mode uses <code>proxyBeanMethods = false</code> — then <code>clock()</code> really runs again. Boot auto-config classes are lite. App <code>@Configuration</code> defaults to proxied. Do not confuse the two (S05).</p>
+  <p><strong>Nice to know:</strong> <code>@Configuration(proxyBeanMethods = false)</code> is faster to start; you must inject beans as method parameters instead of calling sibling methods.</p>
+
+  <h2>7–8. @Profile</h2>
+  <pre><code class="language-java">@Configuration
+@Profile("dev")
+public class DevMailConfig {
+  @Bean MailSender mailSender() { return new LoggingMailSender(); }
+}</code></pre>
+  <p>Activate: <code>spring.profiles.active=dev</code> (env, CLI, K8s). Multiple profiles: comma-separated. Profile-specific files: <code>application-prod.yml</code> (S04).</p>
+  <p><strong>Production pitfalls:</strong></p>
+  <ul>
+    <li>Laptop accidentally <code>prod</code> → hits real Stripe.</li>
+    <li>K8s missing <code>SPRING_PROFILES_ACTIVE</code> → default profile, missing prod DataSource bean.</li>
+    <li><code>@Profile("!prod")</code> forgotten — H2 on in prod.</li>
+  </ul>
+
+  <h2>9. Common Mistakes</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Symptom</th>
+        <th>Cause</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>NoSuchBeanDefinitionException</td>
+        <td>Outside scan, missing @Component/@Bean, wrong profile, condition false (S04)</td>
+      </tr>
+      <tr>
+        <td>NoUniqueBeanDefinitionException</td>
+        <td>Two @Bean of same type — S04 @Primary/@Qualifier</td>
+      </tr>
+      <tr>
+        <td>Unexpected bean</td>
+        <td>Scan too wide; name clash (<code>foo</code> vs method name)</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Default @Bean name = method name. <code>@Bean("utc")</code> overrides. Duplicate names overwrite or fail depending on context — don’t rely on overwrite.</p>
+
+  <h2>10. Bridge to S02</h2>
+  <p>This lesson fills the first box: <strong>how BeanDefinitions get registered</strong>. S02 already covered instantiate → init. S05 adds a third registration source: auto-configuration imports.</p>
+
+  <h2>Production Relevance</h2>
+  <p>Most “it works on my machine” Boot tickets: main class in the wrong package after a refactor, or profile not set in the Deployment env. First debug step: log <code>ApplicationContext.getBeanDefinitionNames()</code> or Actuator <code>/beans</code> (S08) — is the definition even there?</p>
+
+  <h2>Interview Articulation</h2>
+  <p><em>“Boot scans the application class package and below for @Component. Third-party types I register with @Bean on a @Configuration class. @Configuration is CGLIB-proxied so @Bean methods return the singleton when they call each other. If a bean is missing, I check scan base, profile, and bean name before I blame autowiring.”</em></p>
+
+  <h2>Senior Interview Questions</h2>
+  <ol>
+    <li>Where does @SpringBootApplication scan by default?</li>
+    <li>@Service vs @Component for DI?</li>
+    <li>When must you use @Bean instead of annotating the class?</li>
+    <li>Why does ticker() calling clock() not create two Clocks?</li>
+    <li>proxyBeanMethods = false — what breaks if you call sibling @Bean methods?</li>
+    <li>How do you activate prod in Kubernetes?</li>
+    <li>Two modules, application class in api — where do domain @Services live?</li>
+    <li>Bean name of @Bean Clock utcClock()?</li>
+  </ol>
+
+  <h2>Revision Notes</h2>
+  <ul>
+    <li>Scan = package of main + children.</li>
+    <li>Stereotypes ≈ documentation for DI.</li>
+    <li>@Bean for types you don’t own.</li>
+    <li>Full @Configuration intercepts @Bean calls → singleton.</li>
+    <li>Profiles gate definitions; env must match.</li>
+  </ul>
+
+  <h2>Interview One-Liners</h2>
+  <ul>
+    <li>“If it’s not a BeanDefinition, injection cannot save you.”</li>
+    <li>“Sibling @Bean calls go through the container on a proxied @Configuration.”</li>
+    <li>“Wrong scan package is the boring answer — and usually the right one.”</li>
+  </ul>
+
+  <h2>Senior MCQs</h2>
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Main in com.acme.app. Bean in com.other.svc missing. Why?</p>
+        <ol type="A">
+          <li>Default scan does not include sibling packages.</li>
+          <li>@Service is invisible to the container always.</li>
+          <li>Tomcat cannot load classes outside java.lang.</li>
+          <li>Constructor injection forbids other packages.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Default scan does not include sibling packages.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: @Service versus @Component for constructor DI?</p>
+        <ol type="A">
+          <li>No wiring difference — stereotype is intent.</li>
+          <li>@Service is prototype; @Component is singleton.</li>
+          <li>@Component cannot be constructor-injected.</li>
+          <li>@Service skips BeanDefinition registration.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (No wiring difference — stereotype is intent.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: Third-party Jackson ObjectMapper as a bean?</p>
+        <ol type="A">
+          <li>@Bean factory method on a @Configuration class.</li>
+          <li>Put @Component on the library class in JDK.</li>
+          <li>Only field injection into ObjectMapper works.</li>
+          <li>Must subclass DispatcherServlet first.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (@Bean factory method on a @Configuration class.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: Full @Configuration: @Bean a() { return x; } @Bean b() { return new B(a()); }</p>
+        <ol type="A">
+          <li>a() call is intercepted — one X singleton.</li>
+          <li>a() always runs twice creating two X.</li>
+          <li>Illegal Java — methods cannot call methods.</li>
+          <li>Forces request scope on both beans.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (a() call is intercepted — one X singleton.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: @Profile("prod") bean missing in cluster. First check?</p>
+        <ol type="A">
+          <li>spring.profiles.active / SPRING_PROFILES_ACTIVE.</li>
+          <li>Whether the class is declared final only.</li>
+          <li>GC collector choice in the Dockerfile.</li>
+          <li>Whether HashMap load factor is 0.75.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (spring.profiles.active / SPRING_PROFILES_ACTIVE.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: Default name of @Bean Clock utcClock()?</p>
+        <ol type="A">
+          <li>utcClock — the method name.</li>
+          <li>Clock — the return type always.</li>
+          <li>clockConfig — the class name only.</li>
+          <li>anonymous — beans cannot have names.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (utcClock — the method name.)</strong></p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0002-applicationcontext-scopes-lifecycle.html">&larr; Lesson 2</a> &middot;
+    <a href="spring-0004-properties-conditional-primary.html">Lesson 4 &rarr;</a> &middot;
+    <a href="../reference/spring-0003-configuration-component-scan-profiles.html">Cheat sheet</a>
+  </nav>
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>

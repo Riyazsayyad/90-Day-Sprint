@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Auto-Configuration Internals — Reference</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/spring-0005-auto-configuration-internals.html">&larr; Lesson 05</a>
+  </nav>
+  <h1>Auto-Configuration Cheat Sheet</h1>
+  <pre>@SpringBootApplication = @SpringBootConfiguration + @EnableAutoConfiguration + @ComponentScan</pre>
+  <ul>
+    <li>Discovery: META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports (Boot 3)</li>
+    <li>spring.factories EnableAutoConfiguration key: legacy, removed in 3.0</li>
+    <li>@AutoConfiguration + @ConditionalOnClass/Property/MissingBean/WebApplication</li>
+    <li>User @Bean → OnMissingBean false → back-off</li>
+    <li>exclude / spring.autoconfigure.exclude</li>
+    <li>Debug: --debug Condition Evaluation Report; /actuator/conditions</li>
+  </ul>
+</body>
+</html>

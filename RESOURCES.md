@@ -2,6 +2,31 @@
 
 ## Knowledge
 
+- [Spring Framework — The IoC Container](https://docs.spring.io/spring-framework/reference/core/beans/introduction.html)
+  Authoritative: beans, container, DI styles. Use for: IoC vs DI interviews.
+- [Spring Framework — Dependency Injection](https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html)
+  Constructor vs setter; Spring team constructor guidance.
+- [Spring Framework — Bean Scopes](https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html)
+  Singleton, prototype, web scopes.
+- [Spring Framework — Proxying Mechanisms](https://docs.spring.io/spring-framework/reference/core/aop/proxying.html)
+  JDK vs CGLIB; self-invocation.
+- [Spring Framework — Transaction Management](https://docs.spring.io/spring-framework/reference/data-access/transaction.html)
+  Declarative tx, rollback, propagation.
+- [Spring Boot — Auto-configuration](https://docs.spring.io/spring-boot/reference/using/auto-configurations.html)
+  How Boot applies auto-config; exclude.
+- [Spring Boot — Creating Auto-configuration](https://docs.spring.io/spring-boot/reference/features/developing-auto-configuration.html)
+  `AutoConfiguration.imports`, conditions.
+- [Spring Boot 3.0 Migration Guide — Auto-configuration files](https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.0-Migration-Guide)
+  `spring.factories` EnableAutoConfiguration key removed.
+- [Spring Framework — DispatcherServlet](https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-servlet.html)
+  MVC request processing.
+- [Spring Boot Actuator](https://docs.spring.io/spring-boot/reference/actuator.html)
+  Health, metrics, endpoint exposure.
+- [Spring WebFlux](https://docs.spring.io/spring-framework/reference/web/webflux.html)
+  Reactive stack vs servlet model.
+
+
+
 - [Oracle: Object-Oriented Programming Concepts](https://docs.oracle.com/javase/tutorial/java/concepts/)
   Authoritative tutorial covering the foundations: objects, classes, inheritance, interfaces, and packages.
 - [Oracle: Controlling Access to Class Members](https://docs.oracle.com/javase/tutorial/java/javaOO/accesscontrol.html)

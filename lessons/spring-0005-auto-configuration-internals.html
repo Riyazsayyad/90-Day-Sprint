@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 5 — Spring Boot Auto-Configuration Internals</title>
+  <meta name="description" content="Spring Boot auto-configuration: @SpringBootApplication, AutoConfiguration.imports, conditions, back-off, exclude, --debug Condition Evaluation Report.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0004-properties-conditional-primary.html">&larr; Lesson 4</a> &middot;
+    Lesson 5 of 9 &middot;
+    <a href="spring-0006-aop-proxies-transactional.html">Lesson 6 &rarr;</a> &middot;
+    <a href="../reference/spring-0005-auto-configuration-internals.html">Cheat sheet</a>
+  </nav>
+
+  <h1>Spring Boot Auto-Configuration Internals</h1>
+  <p class="meta">~40 minutes &middot; Module 05 Lesson 5 of 9 &middot; deepest theory lesson &middot; builds on <a href="spring-0004-properties-conditional-primary.html">S04</a>, <a href="jvm-0006-class-loading-metaspace-classloader-leaks.html">classloaders / fat JAR</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Auto-config is not magic. It is: classpath entries listed in <code>AutoConfiguration.imports</code> + <code>@Conditional*</code> + “back off if user already defined the bean.” Can you answer “why did this DataSource appear?” and “why didn’t it?” with --debug / Condition Evaluation Report?
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.spring.io/spring-boot/reference/using/auto-configurations.html">Using Auto-configuration</a> ·
+    <a href="https://docs.spring.io/spring-boot/reference/features/developing-auto-configuration.html">Creating Auto-configuration</a> ·
+    <a href="https://github.com/spring-projects/spring-boot/wiki/Spring-Boot-3.0-Migration-Guide">Boot 3 — imports file</a>
+  </p>
+
+  <h2>1–2. Why Auto-Config Exists; Framework vs Boot</h2>
+  <p><strong>Spring Framework:</strong> IoC, MVC, AOP, tx — you wire or scan your classes.</p>
+  <p><strong>Spring Boot:</strong> opinions + starters + embedded server + <em>auto-configuration</em>: if JDBC is on the classpath and you did not define a DataSource, Boot creates one from <code>spring.datasource.*</code>.</p>
+  <p>Goal: 80% of apps share the same 50 @Bean methods. Encode them once. Let conditions skip the rest.</p>
+
+  <h2>3. @SpringBootApplication — Three Meta-Annotations</h2>
+  <pre>
+@SpringBootApplication
+    = @SpringBootConfiguration   → @Configuration (your app config)
+    + @EnableAutoConfiguration   → import auto-config classes (this lesson)
+    + @ComponentScan             → your package tree (S03)
+</pre>
+  <p>You can split them. Almost nobody does. Know the split for interviews.</p>
+
+  <h2>4–5. What @EnableAutoConfiguration Triggers</h2>
+  <pre>
+@EnableAutoConfiguration
+        │
+        ▼
+AutoConfigurationImportSelector
+        │  reads from every JAR on the classpath:
+        ▼
+META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
+        │  one FQCN per line
+        ▼
+Candidate auto-config classes (filtered by conditions + exclude)
+        │
+        ▼
+Imported as BeanDefinitions (lite @AutoConfiguration, proxyBeanMethods=false)
+</pre>
+  <p><strong>Must know (Boot 3):</strong> Auto-config registration is the <strong>imports</strong> file. <code>META-INF/spring.factories</code> key <code>EnableAutoConfiguration</code> was removed in 3.0. Other <code>spring.factories</code> keys still exist. Interviewers still say “spring.factories” — correct them politely: “for auto-config, imports file since 2.7/3.0.”</p>
+  <p>Fat JAR: Boot’s nested loader (<a href="jvm-0006-class-loading-metaspace-classloader-leaks.html">LaunchedURLClassLoader</a>) still exposes those META-INF files from nested jars.</p>
+
+  <h2>6. Anatomy of an Auto-Config Class</h2>
+  <pre><code class="language-java">@AutoConfiguration
+@ConditionalOnClass(DataSource.class)
+@EnableConfigurationProperties(DataSourceProperties.class)
+@Import(DataSourcePoolMetadataProvidersConfiguration.class)
+public class DataSourceAutoConfiguration {
+  // nested @Configuration classes with more @ConditionalOn*
+}</code></pre>
+  <ul>
+    <li><code>@AutoConfiguration</code> — stereotype; can declare <code>before</code>/<code>after</code> other auto-configs (ordering).</li>
+    <li>Must <strong>not</strong> be component-scanned. Only loaded via the imports file.</li>
+    <li>Inner beans typically <code>@ConditionalOnMissingBean(DataSource.class)</code>.</li>
+  </ul>
+
+  <h2>7–8. Conditions Deep Dive + JDBC Story</h2>
+  <pre>
+Need a DataSource bean?
+  │
+  ├─ spring-jdbc / DataSource class on classpath?     @ConditionalOnClass
+  ├─ User already defined DataSource?                 @ConditionalOnMissingBean → SKIP
+  ├─ spring.datasource.url (or embedded DB) present?
+  └─ Web vs none — sometimes extra conditions
+           │
+           ▼
+     Hikari DataSource bean created
+</pre>
+  <p>Add <code>spring-boot-starter-data-jpa</code> → Hibernate + DataSource auto-config light up. Remove the starter → conditions fail → beans gone. <strong>Classpath-driven behavior.</strong></p>
+
+  <h2>9–11. Convention, Risk, Back-off</h2>
+  <p><strong>Benefit:</strong> empty app + starter-web = Tomcat + DispatcherServlet.</p>
+  <p><strong>Risk:</strong> surprise beans (Redis connection to localhost in prod because starter-data-redis sneaked in). Always know your dependency tree.</p>
+  <p><strong>Back-off (must know):</strong> you declare <code>@Bean DataSource myDs()</code> → <code>@ConditionalOnMissingBean(DataSource.class)</code> is false → Hikari auto-config does not create a second pool. Your bean wins.</p>
+
+  <h2>12. Exclude</h2>
+  <pre><code class="language-java">@SpringBootApplication(exclude = DataSourceAutoConfiguration.class)
+public class ShopApplication { }</code></pre>
+  <p>Or <code>spring.autoconfigure.exclude=...</code>. Use when you must not have a DataSource (library, batch with custom routing) and conditions aren’t enough.</p>
+
+  <h2>13. Debugging Workflow</h2>
+  <ol>
+    <li><code>java -jar app.jar --debug</code> (or <code>logging.level.org.springframework.boot.autoconfigure=DEBUG</code>)</li>
+    <li>Read <strong>Condition Evaluation Report</strong> — Positive matches vs Negative matches with the failing condition named</li>
+    <li>Actuator <code>/actuator/conditions</code> (S08) in a secured management port</li>
+    <li><code>/actuator/beans</code> — is the bean in the factory at all?</li>
+  </ol>
+  <blockquote>Must know: the report names the <em>condition class</em> that failed — e.g. <code>OnClassCondition</code>, <code>OnBeanCondition</code>. That is the mechanism. Not “Spring decided not to.”</blockquote>
+
+  <h2>14. Scenario: “Why did Spring create this bean?”</h2>
+  <p>Trace: which starter brought which auto-config class → which condition was true → which @Bean method. Example: Hikari because <code>DataSourceAutoConfiguration</code> matched and you set <code>spring.datasource.url</code>.</p>
+
+  <h2>15. Scenario: “Why didn’t Spring create this bean?”</h2>
+  <p>Negative match. Typical: class missing (forgot starter), <code>OnMissingBean</code> lost (you already defined one), property <code>matchIfMissing=false</code> and key absent, <code>exclude</code>, wrong web application type (servlet vs reactive — S09).</p>
+
+  <h2>16. Tiny Custom Auto-Config (Illustrative)</h2>
+  <pre>
+my-starter.jar
+  META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
+      com.acme.MeowAutoConfiguration
+
+@AutoConfiguration
+@ConditionalOnClass(CatClient.class)
+class MeowAutoConfiguration {
+  @Bean
+  @ConditionalOnMissingBean
+  CatClient catClient() { return new CatClient(); }
+}
+</pre>
+  <p>Not a starter-authoring course. Enough to know libraries ship this file — not <code>@ComponentScan</code> of the library.</p>
+
+  <h2>Mental Model</h2>
+  <pre>
+dependency on classpath
+        +
+AutoConfiguration.imports lists a class
+        +
+@Conditional* all true
+        +
+@ConditionalOnMissingBean still true
+        =
+bean appears
+</pre>
+  <p>Auto-config ≠ magic.</p>
+
+  <h2>Misconceptions</h2>
+  <ul>
+    <li>“Boot scans all JARs for @Component.” Libraries should not. Auto-config is explicit imports.</li>
+    <li>“spring.factories still registers auto-config on Boot 3.” No.</li>
+    <li>“I cannot override Boot beans.” You can — MissingBean pattern, or exclude.</li>
+  </ul>
+
+  <h2>Production Relevance</h2>
+  <p>Unexpected Mongo client in a service that only needed a driver transitively — extra connections, extra failure modes. Review <code>mvn dependency:tree</code> like you review BeanDefinitions. Fat JAR classloader still participates (JVM S06).</p>
+
+  <h2>Interview Articulation</h2>
+  <p><em>“@EnableAutoConfiguration loads classes listed in AutoConfiguration.imports on the classpath. Each class is a bundle of conditional @Bean methods. If I already define a DataSource, OnMissingBean is false and Boot backs off. I debug with the Condition Evaluation Report from --debug or /actuator/conditions, not by guessing.”</em></p>
+
+  <h2>Senior Interview Questions</h2>
+  <ol>
+    <li>Three meta-annotations on @SpringBootApplication.</li>
+    <li>Boot 3 discovery file vs spring.factories.</li>
+    <li>Why must auto-config classes not be component-scanned?</li>
+    <li>Walk DataSource creation conditions.</li>
+    <li>How does a user @Bean disable Hikari auto-config?</li>
+    <li>How do you exclude DataSourceAutoConfiguration?</li>
+    <li>What does --debug print that /beans does not?</li>
+    <li>Classpath adds redis starter — what mechanism creates RedisConnectionFactory?</li>
+    <li>servlet vs reactive OnWebApplication — why would MVC beans vanish?</li>
+    <li>proxyBeanMethods false on @AutoConfiguration — implication?</li>
+  </ol>
+
+  <h2>Revision Notes</h2>
+  <ul>
+    <li>imports file → candidates → conditions → beans.</li>
+    <li>OnMissingBean = user override hook.</li>
+    <li>exclude = sledgehammer.</li>
+    <li>--debug / conditions endpoint = source of truth.</li>
+  </ul>
+
+  <h2>Interview One-Liners</h2>
+  <ul>
+    <li>“A starter is a POM plus auto-config, not a runtime daemon.”</li>
+    <li>“Negative matches are the answer key.”</li>
+    <li>“My DataSource bean is the feature, not a fight with Boot.”</li>
+  </ul>
+
+  <h2>Senior MCQs</h2>
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Boot 3 auto-config class names live in?</p>
+        <ol type="A">
+          <li>AutoConfiguration.imports under META-INF/spring.</li>
+          <li>Only web.xml in the WAR root.</li>
+          <li>The module-info.java provides list.</li>
+          <li>JDK META-INF/services of java.sql.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (AutoConfiguration.imports under META-INF/spring.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: User defines @Bean DataSource. Hikari auto-config?</p>
+        <ol type="A">
+          <li>Backs off via @ConditionalOnMissingBean.</li>
+          <li>Always creates a second pool anyway.</li>
+          <li>Deletes the user bean at runtime.</li>
+          <li>Promotes DataSource to request scope.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Backs off via @ConditionalOnMissingBean.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: @SpringBootApplication does not include?</p>
+        <ol type="A">
+          <li>@EnableAspectJAutoProxy by default here.</li>
+          <li>@SpringBootConfiguration alias.</li>
+          <li>@EnableAutoConfiguration trigger.</li>
+          <li>@ComponentScan of the app package.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (@EnableAspectJAutoProxy by default here.)</strong></p>
+          <p>The three are Configuration + EnableAutoConfiguration + ComponentScan. AOP is separate (S06), though Boot enables proxying when needed.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: Best tool for “why wasn’t X auto-configured?”</p>
+        <ol type="A">
+          <li>Condition Evaluation Report (--debug).</li>
+          <li>Only jmap histogram of the heap.</li>
+          <li>HashMap load factor in the JDK.</li>
+          <li>Replacing all beans with enums.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Condition Evaluation Report (--debug).)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: spring.factories EnableAutoConfiguration key on Boot 3?</p>
+        <ol type="A">
+          <li>Removed for auto-config registration.</li>
+          <li>The only supported discovery mechanism.</li>
+          <li>Required alongside Tomcat XML.</li>
+          <li>Used only by WebFlux Netty.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Removed for auto-config registration.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: Auto-config classes should be?</p>
+        <ol type="A">
+          <li>Listed in imports — never component-scanned.</li>
+          <li>Annotated @RestController in default package.</li>
+          <li>Loaded by Thread.currentThread only.</li>
+          <li>Compiled without -parameters always.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Listed in imports — never component-scanned.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q7: Adding starter-data-redis suddenly creates a factory. Why?</p>
+        <ol type="A">
+          <li>Classpath + imports + matching conditions.</li>
+          <li>JVM JIT inlined Redis into Tomcat.</li>
+          <li>@Primary on Object always includes Redis.</li>
+          <li>GC created it as a safepoint side effect.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Classpath + imports + matching conditions.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q8: exclude = DataSourceAutoConfiguration.class means?</p>
+        <ol type="A">
+          <li>That auto-config class is not imported.</li>
+          <li>JDBC driver is deleted from the JDK.</li>
+          <li>All @Repository beans become prototypes.</li>
+          <li>Actuator health is forced down.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (That auto-config class is not imported.)</strong></p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0004-properties-conditional-primary.html">&larr; Lesson 4</a> &middot;
+    <a href="spring-0006-aop-proxies-transactional.html">Lesson 6 &rarr;</a> &middot;
+    <a href="../reference/spring-0005-auto-configuration-internals.html">Cheat sheet</a>
+  </nav>
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>

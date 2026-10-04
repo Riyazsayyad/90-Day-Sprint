@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Exercise — Spring Internals Capstone</title>
+  <meta name="description" content="Module 05 capstone: five senior debugging scenarios plus 15 interview questions covering IoC through WebFlux.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+  <style>
+    .copy-bar { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin: 1rem 0; }
+    .copy-bar button,
+    .copy-bar .copy-bar-link {
+      font-family: inherit;
+      font-size: 0.95rem;
+      padding: 0.6rem 0.85rem;
+      background: var(--btn-bg);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      cursor: pointer;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .copy-bar button:hover,
+    .copy-bar .copy-bar-link:hover {
+      border-color: var(--accent);
+      background: var(--btn-hover);
+    }
+    .scenario-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+    .scenario-table th, .scenario-table td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; }
+    .scenario-table th { background: var(--surface); font-weight: normal; }
+    .log-snippet { font-size: 0.85rem; background: var(--surface); border: 1px solid var(--border); padding: 0.75rem; margin: 0.5rem 0; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot; <a href="../lessons/spring-0009-webflux-vs-mvc.html">⬅️ Prev: WebFlux vs MVC</a>
+  </nav>
+
+  <h1>Spring Boot Internals Capstone Exercise</h1>
+  <p class="meta">Capstone exercise &bull; Module 05 &bull; 5 scenarios + 15 interview Qs &bull; optional JUnit &bull; <a href="SpringInternalsCapstoneExercise.java">Stub</a></p>
+
+  <div class="callout">
+    <strong>How to use:</strong> No new theory. Work scenarios with notes closed. Reveal answers only after you write root cause + fix. Optional: implement the JUnit stub. Tie misses to <code>spring-0001</code>–<code>0009</code>.
+  </div>
+
+  <h2>Scenario Index</h2>
+  <table class="scenario-table">
+    <thead>
+      <tr><th>#</th><th>Topic</th><th>Lessons</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td>NoSuchBeanDefinitionException</td><td><a href="../lessons/spring-0003-configuration-component-scan-profiles.html">S03</a> <a href="../lessons/spring-0004-properties-conditional-primary.html">S04</a></td></tr>
+      <tr><td>2</td><td>NoUniqueBeanDefinitionException</td><td><a href="../lessons/spring-0004-properties-conditional-primary.html">S04</a></td></tr>
+      <tr><td>3</td><td>@Transactional ignored</td><td><a href="../lessons/spring-0006-aop-proxies-transactional.html">S06</a></td></tr>
+      <tr><td>4</td><td>Auto-config DataSource mystery</td><td><a href="../lessons/spring-0005-auto-configuration-internals.html">S05</a> <a href="../lessons/spring-0008-actuator-health-metrics.html">S08</a></td></tr>
+      <tr><td>5</td><td>Tomcat 200 / Hikari 20 latency</td><td><a href="../lessons/spring-0007-servlet-tomcat-mvc-dispatch.html">S07</a> <a href="../lessons/jvm-0008-diagnostics-profiling-memory-leaks.html">JVM S08</a></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Scenario 1 — NoSuchBeanDefinitionException</h2>
+  <p><code>com.shop.ShopApplication</code> lives in <code>com.shop</code>. A <code>@Service</code> <code>BillingService</code> lives in <code>com.payments.BillingService</code>. Also:</p>
+  <pre class="log-snippet">shop.billing.enabled=false   # application.yml
+@ConditionalOnProperty(name = "shop.billing.enabled", havingValue = "true")
+@Component
+class BillingClient { }</pre>
+  <p>Checkout constructor needs <code>BillingClient</code>. Startup: <code>NoSuchBeanDefinitionException: BillingClient</code>.</p>
+  <p><strong>Tasks:</strong> root cause (there may be two), discovery path, debug steps, minimal fix.</p>
+  <details>
+    <summary>Reveal answer</summary>
+    <p><strong>Root cause:</strong> (1) <code>com.payments</code> is outside default scan (package of <code>ShopApplication</code> + children). (2) Even if scanned, <code>shop.billing.enabled=false</code> makes <code>@ConditionalOnProperty</code> skip registration.</p>
+    <p><strong>Discovery:</strong> Is there a BeanDefinition? <code>/actuator/beans</code> or definition names. Conditions: <code>--debug</code> / <code>/actuator/conditions</code>.</p>
+    <p><strong>Minimal fix:</strong> Move billing under <code>com.shop</code> <em>or</em> <code>scanBasePackages = "com.shop", "com.payments"</code>, <strong>and</strong> set <code>shop.billing.enabled=true</code> in the profile that needs it (or drop the condition). Don’t “fix” with <code>new BillingClient()</code> — you skip the container (S01/S06).</p>
+  </details>
+
+  <h2>Scenario 2 — NoUniqueBeanDefinitionException</h2>
+  <pre class="log-snippet">public interface PaymentGateway { Receipt charge(Money m); }
+
+@Service class StripePaymentService implements PaymentGateway {}
+@Service class RazorpayPaymentService implements PaymentGateway {}
+
+@Service
+class CheckoutService {
+  CheckoutService(PaymentGateway gateway) { }
+}</pre>
+  <p><strong>Tasks:</strong> Why it fails. @Primary vs @Qualifier articulation. When List&lt;PaymentGateway&gt; is better.</p>
+  <details>
+    <summary>Reveal answer</summary>
+    <p>Two beans of type <code>PaymentGateway</code>, injection point unqualified → <code>NoUniqueBeanDefinitionException</code>.</p>
+    <p><strong>@Primary</strong> on Stripe = default when a single gateway is requested. <strong>@Qualifier("razorpayPaymentService")</strong> (default name) on a parameter when that site must be Razorpay. Use both: Primary for most call sites, Qualifier for the exception.</p>
+    <p><code>List&lt;PaymentGateway&gt;</code> when the use-case is “try all / route by currency” — not a silent pick.</p>
+  </details>
+
+  <h2>Scenario 3 — @Transactional Ignored</h2>
+  <pre class="log-snippet">@Service
+public class OrderService {
+  @Transactional
+  public void place(PlaceOrder cmd) {
+    repo.save(cmd.toOrder());
+    this.updateInventory(cmd); // also @Transactional
+  }
+
+  @Transactional(propagation = REQUIRES_NEW)
+  public void updateInventory(PlaceOrder cmd) { ... }
+}</pre>
+  <p>Inventory update rolls back with the outer method; REQUIRES_NEW never starts. Tasks: proxy flow, JDK vs CGLIB, exception rollback, REQUIRES_NEW contrast.</p>
+  <details>
+    <summary>Reveal answer</summary>
+    <p><code>this.updateInventory</code> is self-invocation: call stays on the target, never re-enters the Spring proxy, so no new tx, no independent commit. Outer REQUIRED (if place was called via proxy) still wraps save+inventory as one tx.</p>
+    <p>Boot CGLIB class proxy does <em>not</em> rewrite <code>this</code>. Fix: extract <code>InventoryService</code> bean and inject it; or inject self proxy.</p>
+    <p>If <code>updateInventory</code> threw a checked exception without <code>rollbackFor</code>, even a proxied call might <strong>commit</strong> — separate bug.</p>
+  </details>
+
+  <h2>Scenario 4 — Auto-config DataSource</h2>
+  <p>Service A: no user DataSource, <code>starter-jdbc</code> + <code>spring.datasource.url</code> → Hikari appears. Service B: same starter but a <code>@Bean DataSource routingDs()</code> → no second Hikari. Service C: forgot starter → no DataSource, JPA fails.</p>
+  <p>Tasks: dependency → auto-config → conditions → bean. Tools.</p>
+  <details>
+    <summary>Reveal answer</summary>
+    <p>A: <code>DataSourceAutoConfiguration</code> listed in <code>AutoConfiguration.imports</code>; <code>OnClass</code> true; <code>OnMissingBean</code> true; properties present → Hikari bean.</p>
+    <p>B: user bean → <code>@ConditionalOnMissingBean(DataSource.class)</code> false → Boot backs off. One pool (yours).</p>
+    <p>C: no JDBC auto-config match (or class missing) → NoSuchBean later. Debug: <code>--debug</code> Condition Evaluation Report, <code>/actuator/conditions</code>. Exclude only if you must disable despite classpath.</p>
+  </details>
+
+  <h2>Scenario 5 — Production Latency</h2>
+  <p>Tomcat <code>max=200</code>, Hikari <code>maximum-pool-size=20</code>, p99 8s, CPU 15%. Load spike.</p>
+  <p>Tasks: chain; Actuator; metrics; thread dump; JVM tie-in.</p>
+  <details>
+    <summary>Reveal answer</summary>
+    <p>Most Tomcat workers blocked acquiring a connection or in <code>socketRead</code> on the 20 connections. Raising Tomcat to 800 worsens queues. Measure: Hikari pending, Tomcat busy, HTTP timers (S08). Dump: <code>/threaddump</code> or <code>jcmd Thread.print</code> (JVM S08). Fix: queries, pool vs DB <code>max_connections</code>, timeouts, maybe VT for waiters — <strong>not</strong> extra workers without extra DB. Virtual threads do not add connections.</p>
+  </details>
+
+  <h2>Senior Interview Round — 15 questions</h2>
+  <p>Speak answers first. Then reveal.</p>
+  <ol>
+    <li>IoC vs DI in two sentences.
+      <details><summary>Reveal</summary><p>IoC: the container owns create/call graph. DI: collaborators are passed in (usually constructors). DI is a technique inside IoC.</p></details>
+    </li>
+    <li>What is a bean?
+      <details><summary>Reveal</summary><p>A container-managed object with a BeanDefinition — not every <code>new</code>, not DTOs/entities.</p></details>
+    </li>
+    <li>ApplicationContext vs BeanFactory.
+      <details><summary>Reveal</summary><p>Context is a BeanFactory plus events, i18n, AOP integration, eager singleton refresh.</p></details>
+    </li>
+    <li>Lifecycle order: ctor, inject, @PostConstruct, destroy.
+      <details><summary>Reveal</summary><p>Constructor → remaining DI → @PostConstruct / init → (proxy after BPP) → @PreDestroy on close (singletons).</p></details>
+    </li>
+    <li>Prototype into singleton — 100 HTTP calls.
+      <details><summary>Reveal</summary><p>One prototype unless ObjectProvider or scoped proxy.</p></details>
+    </li>
+    <li>Default scan base.
+      <details><summary>Reveal</summary><p>Package of @SpringBootApplication and subpackages.</p></details>
+    </li>
+    <li>@Primary vs @Qualifier.
+      <details><summary>Reveal</summary><p>Primary: default candidate of a type. Qualifier: this injection point’s identity. Qualifier wins locally.</p></details>
+    </li>
+    <li>Boot 3 auto-config discovery file.
+      <details><summary>Reveal</summary><p><code>META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports</code>. spring.factories EnableAutoConfiguration key removed in 3.0.</p></details>
+    </li>
+    <li>User @Bean DataSource — Hikari?
+      <details><summary>Reveal</summary><p>@ConditionalOnMissingBean false → auto-config backs off.</p></details>
+    </li>
+    <li>Why self-invocation skips @Transactional.
+      <details><summary>Reveal</summary><p>Advice lives on the proxy. <code>this</code> is the target.</p></details>
+    </li>
+    <li>Default rollback policy.
+      <details><summary>Reveal</summary><p>RuntimeException/Error. Checked commits unless rollbackFor.</p></details>
+    </li>
+    <li>Filter vs DispatcherServlet.
+      <details><summary>Reveal</summary><p>Filter: servlet chain around the servlet. DispatcherServlet: Spring MVC front controller (mapping, adapters, converters).</p></details>
+    </li>
+    <li>Liveness vs readiness.
+      <details><summary>Reveal</summary><p>Liveness → restart. Readiness → take traffic. Don’t DB-check liveness.</p></details>
+    </li>
+    <li>WebFlux + blocking JDBC.
+      <details><summary>Reveal</summary><p>If on the event loop, the loop stalls. Don’t. Use MVC±VT or reactive drivers.</p></details>
+    </li>
+    <li>Virtual threads vs WebFlux one-liner.
+      <details><summary>Reveal</summary><p>VT scale blocking imperative code; WebFlux scales non-blocking pipelines.</p></details>
+    </li>
+  </ol>
+
+  <h2>Final challenge — 2 minutes</h2>
+  <p>Outline aloud: Boot startup → ApplicationContext → BeanDefinitions (scan, @Bean, auto-config + conditions) → instances + lifecycle → AOP proxies / @Transactional → HTTP Tomcat → Filter → DispatcherServlet → Controller → Service → Repo → Actuator for health/metrics. If you skip conditions or proxies, restart the timer.</p>
+
+  <h2>Scoring rubric</h2>
+  <ul>
+    <li><strong>90%+</strong> — interview ready for Module 05 internals</li>
+    <li><strong>75–90%</strong> — revise weak letters (usually S05/S06)</li>
+    <li><strong>&lt;75%</strong> — re-read those lessons + cheat sheets; re-run scenarios</li>
+  </ul>
+
+  <h2>Optional JUnit</h2>
+  <div class="copy-bar">
+    <button type="button" id="copyJava">Copy entire file</button>
+    <a class="copy-bar-link" href="SpringInternalsCapstoneExercise.java">Open stub</a>
+  </div>
+  <pre id="javaSource"><code>Loading…</code></pre>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot; <a href="../lessons/spring-0009-webflux-vs-mvc.html">⬅️ Prev: WebFlux vs MVC</a>
+  </nav>
+  <script>
+    const sourceEl = document.querySelector('#javaSource code');
+    const copyBtn = document.getElementById('copyJava');
+    let fileText = '';
+    fetch('SpringInternalsCapstoneExercise.java')
+      .then(r => r.text())
+      .then(text => {
+        fileText = text;
+        sourceEl.textContent = text;
+      })
+      .catch(() => { sourceEl.textContent = 'Open exercises/SpringInternalsCapstoneExercise.java in your editor.'; });
+    copyBtn.addEventListener('click', () => {
+      if (!fileText) return;
+      navigator.clipboard.writeText(fileText).then(() => {
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy entire file'; }, 2000);
+      });
+    });
+  </script>
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>

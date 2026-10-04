@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 2 — ApplicationContext, Bean Scopes &amp; Bean Lifecycle</title>
+  <meta name="description" content="Spring ApplicationContext vs BeanFactory, bean lifecycle, scopes, singleton vs prototype, circular dependencies, @Lazy, @DependsOn — senior interview.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0001-why-spring-ioc-di.html">&larr; Lesson 1</a> &middot;
+    Lesson 2 of 9 &middot;
+    <a href="spring-0003-configuration-component-scan-profiles.html">Lesson 3 &rarr;</a> &middot;
+    <a href="../reference/spring-0002-applicationcontext-scopes-lifecycle.html">Cheat sheet</a>
+  </nav>
+
+  <h1>ApplicationContext, Bean Scopes &amp; Bean Lifecycle</h1>
+  <p class="meta">~35 minutes &middot; Module 05 Lesson 2 of 9 &middot; builds on <a href="spring-0001-why-spring-ioc-di.html">Why Spring</a>, <a href="oop-0005-object-lifecycle.html">Object lifecycle</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Can you walk a bean from BeanDefinition to ready singleton without stuttering? Singleton vs Java enum singleton? Why injecting a prototype into a singleton does not give a new instance per method? Why constructor cycles fail in modern Spring? This is the container — not annotations yet.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.spring.io/spring-framework/reference/core/beans/factory-nature.html">BeanFactory vs ApplicationContext</a> ·
+    <a href="https://docs.spring.io/spring-framework/reference/core/beans/factory-scopes.html">Bean Scopes</a> ·
+    <a href="https://docs.spring.io/spring-framework/reference/core/beans/factory-nature.html#beans-factory-lifecycle">Lifecycle Callbacks</a>
+  </p>
+
+  <h2>1. What ApplicationContext Is</h2>
+  <p><strong>Must know:</strong> <code>ApplicationContext</code> is the IoC container you actually use. It holds bean definitions, creates beans, injects them, publishes events, and (in web apps) is the parent of request-scoped contexts.</p>
+  <p>Typical Boot: one root <code>AnnotationConfigServletWebServerApplicationContext</code> (name varies) per JVM process. Beans are heap objects rooted by that context — GC will not collect singletons until the context closes (<a href="jvm-0003-garbage-collection-fundamentals.html">GC roots</a>).</p>
+
+  <h2>2. BeanFactory vs ApplicationContext</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th>BeanFactory</th>
+        <th>ApplicationContext</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Role</td>
+        <td>Core DI: getBean, definitions</td>
+        <td>BeanFactory + enterprise services</td>
+      </tr>
+      <tr>
+        <td>Messages</td>
+        <td>No</td>
+        <td>i18n <code>MessageSource</code></td>
+      </tr>
+      <tr>
+        <td>Events</td>
+        <td>No</td>
+        <td><code>ApplicationEventPublisher</code></td>
+      </tr>
+      <tr>
+        <td>AOP</td>
+        <td>Manual</td>
+        <td>Integrated post-processors / auto-proxy</td>
+      </tr>
+      <tr>
+        <td>Eager singletons</td>
+        <td>Typically lazy until getBean</td>
+        <td>Pre-instantiates singletons at refresh (default)</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>You never new a raw <code>DefaultListableBeanFactory</code> in Boot. Context <em>is-a</em> BeanFactory.</p>
+
+  <h2>3. Container Pipeline</h2>
+  <pre>
+Configuration (@Configuration, scan, auto-config)
+        │
+        ▼
+BeanDefinition registry   (name, class, scope, deps)
+        │
+        ▼
+Instantiate               (constructor / factory method)
+        │
+        ▼
+Populate / DI             (fields, setters — after ctor)
+        │
+        ▼
+Initialization            (BPP, @PostConstruct, InitializingBean)
+        │
+        ▼
+Ready bean in singleton cache
+        │
+        ▼
+Destruction on context close  (@PreDestroy, DisposableBean)
+</pre>
+  <p><strong>Mental model:</strong> Definitions first (metadata). Instances second. Refresh() runs this pipeline. Failures here are startup failures — better than 3 a.m. NPEs.</p>
+
+  <h2>4–7. Lifecycle Step-by-Step</h2>
+  <pre>
+  new Target()                    // 1 constructor — only ctor-injected deps exist
+       │
+       ▼
+  inject remaining                // 2 setter/field DI
+       │
+       ▼
+  BeanPostProcessor.before        // 3 framework wrappers start (proxy often later)
+       │
+       ▼
+  @PostConstruct / afterPropertiesSet / custom init-method
+       │
+       ▼
+  BeanPostProcessor.after         // 4 often where AOP proxy replaces bean (S06)
+       │
+       ▼
+  bean in use
+       │
+  context.close()
+       │
+       ▼
+  @PreDestroy / destroy() / DisposableBean
+</pre>
+  <pre><code class="language-java">@Component
+public class CacheWarmer {
+  private final CatalogRepo repo;
+
+  public CacheWarmer(CatalogRepo repo) {
+    this.repo = repo;
+    log.info("1 ctor — repo injected, not ready to serve HTTP yet");
+  }
+
+  @PostConstruct
+  void warm() {
+    log.info("2 @PostConstruct — safe: all deps set, proxy may wrap after");
+    repo.preload();
+  }
+
+  @PreDestroy
+  void stop() {
+    log.info("3 @PreDestroy — context closing, drain work");
+  }
+}</code></pre>
+  <p><code>jakarta.annotation.PostConstruct</code> / <code>PreDestroy</code> (Jakarta EE, Boot 3). Not a substitute for constructors: ctor still runs first.</p>
+  <blockquote>Trap: calling other beans’ business methods from a constructor — they may not be initialized; you can see NPEs or half-proxies. Warm in <code>@PostConstruct</code> or <code>ApplicationReadyEvent</code>.</blockquote>
+  <p><strong>Nice to know:</strong> <code>InitializingBean.afterPropertiesSet</code> is the Spring interface equivalent of <code>@PostConstruct</code>. Prefer the annotation for app code.</p>
+
+  <h2>8. Scopes</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Scope</th>
+        <th>How many instances</th>
+        <th>When</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>singleton</strong> (default)</td>
+        <td>One per context</td>
+        <td>Services, repos, DataSource — 99% of beans</td>
+      </tr>
+      <tr>
+        <td><strong>prototype</strong></td>
+        <td>New every <code>getBean</code> / injection <em>at injection time</em></td>
+        <td>Stateful helpers — rare; prefer immutable + args</td>
+      </tr>
+      <tr>
+        <td><strong>request</strong></td>
+        <td>One per HTTP request</td>
+        <td>Web only — request attributes</td>
+      </tr>
+      <tr>
+        <td><strong>session</strong></td>
+        <td>One per HTTP session</td>
+        <td>Web — avoid fat session state</td>
+      </tr>
+      <tr>
+        <td><strong>application</strong></td>
+        <td>One per ServletContext</td>
+        <td>Web — similar to singleton in one war</td>
+      </tr>
+      <tr>
+        <td><strong>websocket</strong></td>
+        <td>One per WebSocket session</td>
+        <td>Messaging apps</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Web scopes need a web-aware context. Using <code>request</code> in a CLI Boot app fails at injection.</p>
+
+  <h2>9. Singleton Mental Model</h2>
+  <pre>
+ApplicationContext
+   singleton cache:  UserService@7a3  ←── Controller.service
+                                      ←── OtherBean.userService
+                         SAME reference (identity ==)
+</pre>
+  <p>Many injection points, <strong>one instance</strong>. That instance must be thread-safe for shared mutable state — you studied this in <a href="concurrency-0001-thread-fundamentals.html">threads</a> and <a href="concurrency-0002-synchronization-monitors.html">monitors</a>. Stateless services are the easy path.</p>
+
+  <h2>10. Spring Singleton ≠ Enum Singleton</h2>
+  <p>Joshua Bloch enum singleton = one JVM-wide instance of that enum type. Spring singleton = one instance <em>per ApplicationContext</em>. Tests with two contexts → two UserService objects. Parent/child contexts → possibly two. Not <code>enum INSTANCE</code>.</p>
+
+  <h2>11. Prototype Destruction</h2>
+  <p>Container calls destroy callbacks on <strong>singletons</strong> it cached. Prototypes: after handing you the instance, Spring typically <strong>does not track</strong> them for <code>@PreDestroy</code>. You own disposal (or use a custom scope / <code>DestructionAwareBeanPostProcessor</code> — nice to know).</p>
+
+  <h2>12. Singleton Injecting Prototype</h2>
+  <pre>
+@Controller (singleton)
+    │ injects once at startup
+    ▼
+PrototypeBean instance_A   // frozen for the life of the controller
+</pre>
+  <p><strong>Must know:</strong> Injection happens once for the singleton. Every method call uses <code>instance_A</code>, not a fresh prototype. To get a new prototype per call: scoped proxy (<code>@Scope(proxyMode = TARGET_CLASS)</code>) or <code>ObjectProvider</code> (next).</p>
+
+  <h2>13. ObjectProvider / Provider</h2>
+  <pre><code class="language-java">@Service
+public class JobRunner {
+  private final ObjectProvider&lt;PrototypeWorker&gt; workers;
+
+  public JobRunner(ObjectProvider&lt;PrototypeWorker&gt; workers) {
+    this.workers = workers;
+  }
+
+  public void run() {
+    PrototypeWorker w = workers.getObject(); // new prototype
+    w.execute();
+  }
+}</code></pre>
+  <p><code>jakarta.inject.Provider</code> is the same idea. Prefer this over storing <code>ApplicationContext</code> and calling <code>getBean</code> (service locator smell).</p>
+
+  <h2>14. @Lazy</h2>
+  <p>Defers singleton creation until first use. Use for expensive beans or to break some cycles. Cost: first request pays init; failures move from startup to traffic. Prefer fixing the cycle.</p>
+
+  <h2>15. Circular Dependencies</h2>
+  <pre>
+A ctor needs B, B ctor needs A  →  BeanCurrentlyInCreationException (typical)
+</pre>
+  <p>Spring 6 / Boot 3: constructor cycles <strong>fail fast</strong>. Setter/field injection historically allowed a half-created singleton into the other bean (early reference). That hid design bugs. Interview framing: cycles mean muddled responsibilities — extract C that both depend on, or events, not “enable circular references.”</p>
+  <p><code>spring.main.allow-circular-references=true</code> exists as an escape hatch. Treat as debt.</p>
+
+  <h2>16. Ordering</h2>
+  <ul>
+    <li><code>@DependsOn("flyway")</code> — this bean after that bean’s init.</li>
+    <li><code>Ordered</code> / <code>@Order</code> — among list of same type (filters, listeners). Not a general “create A before B” for arbitrary beans — use <code>@DependsOn</code> or natural constructor deps.</li>
+  </ul>
+
+  <h2>Production Debugging</h2>
+  <ul>
+    <li>Startup hang in <code>@PostConstruct</code> that calls remote HTTP — blocks refresh; pod never Ready.</li>
+    <li>Prototype leak: creating prototypes in a loop without discard → heap growth (S08 + JVM dumps).</li>
+    <li>Request-scoped bean injected into singleton without proxy → exception or wrong instance.</li>
+  </ul>
+
+  <h2>Interview Articulation</h2>
+  <p><em>“ApplicationContext is the IoC container: it registers BeanDefinitions, instantiates, injects, runs init callbacks, then caches singletons. Default scope is singleton — one instance per context, not a JVM enum singleton. A prototype injected into a singleton is resolved once unless I use ObjectProvider or a scoped proxy. Constructor circular dependencies fail at startup; that’s a design smell, not a flag to flip.”</em></p>
+
+  <h2>Senior Interview Questions</h2>
+  <ol>
+    <li>BeanFactory vs ApplicationContext — three extras the context adds.</li>
+    <li>Order of constructor, DI, @PostConstruct, destroy.</li>
+    <li>Why not do I/O in a constructor of a bean?</li>
+    <li>Spring singleton vs enum singleton.</li>
+    <li>Prototype injected into singleton — how many instances after 100 HTTP calls?</li>
+    <li>Does @PreDestroy run on prototypes?</li>
+    <li>Constructor cycle: what exception, what refactor?</li>
+    <li>When is @Lazy justified vs harmful?</li>
+  </ol>
+
+  <h2>Revision Notes</h2>
+  <ul>
+    <li>Context = BeanFactory + events + i18n + eager singletons + AOP integration.</li>
+    <li>Pipeline: definition → new → inject → init → cache → destroy.</li>
+    <li>Singleton: one per context; thread-safety is your problem.</li>
+    <li>Prototype: new at lookup; destroy not managed like singleton.</li>
+    <li>ObjectProvider for fresh prototype; ctor cycles fail.</li>
+  </ul>
+
+  <h2>Interview One-Liners</h2>
+  <ul>
+    <li>“Startup is refresh(); traffic is getBean from an already-warm cache.”</li>
+    <li>“Same singleton reference everywhere is a feature — mutable fields are the bug.”</li>
+    <li>“@PostConstruct is after injection, not after the HTTP server is up — use ApplicationReadyEvent for that.”</li>
+  </ul>
+
+  <h2>Senior MCQs</h2>
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Default Spring bean scope?</p>
+        <ol type="A">
+          <li>Singleton — one instance per context.</li>
+          <li>Prototype — new instance per HTTP call.</li>
+          <li>Request — one instance per JVM boot.</li>
+          <li>Session — one instance per classloader.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Singleton — one instance per context.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Prototype injected into a singleton controller. 50 requests?</p>
+        <ol type="A">
+          <li>One prototype unless provider/proxy used.</li>
+          <li>Fifty prototypes created automatically.</li>
+          <li>Zero — prototypes cannot be injected.</li>
+          <li>Fifty plus one enum singleton extra.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (One prototype unless provider/proxy used.)</strong></p>
+          <p>Injection is once at singleton creation.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: Constructor circular dependency in Boot 3?</p>
+        <ol type="A">
+          <li>Fails at startup — fix the design.</li>
+          <li>Always silently creates two proxies.</li>
+          <li>Resolved by Tomcat thread pool size.</li>
+          <li>Impossible because Java forbids cycles.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Fails at startup — fix the design.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: @PreDestroy on a prototype bean?</p>
+        <ol type="A">
+          <li>Usually not invoked by the container.</li>
+          <li>Always runs after every HTTP request.</li>
+          <li>Replaces GC for that object always.</li>
+          <li>Runs only if the class is final.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Usually not invoked by the container.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: ApplicationContext compared to BeanFactory?</p>
+        <ol type="A">
+          <li>Adds events, messages, eager singletons, AOP hooks.</li>
+          <li>Removes dependency injection completely.</li>
+          <li>Is only the embedded Tomcat engine.</li>
+          <li>Exists solely for WebFlux event loops.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Adds events, messages, eager singletons, AOP hooks.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: Best fix for a new prototype per job run?</p>
+        <ol type="A">
+          <li>ObjectProvider.getObject() at call site.</li>
+          <li>Store ApplicationContext and ignore types.</li>
+          <li>Make the job runner request-scoped always.</li>
+          <li>Use static new inside a static block.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (ObjectProvider.getObject() at call site.)</strong></p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0001-why-spring-ioc-di.html">&larr; Lesson 1</a> &middot;
+    <a href="spring-0003-configuration-component-scan-profiles.html">Lesson 3 &rarr;</a> &middot;
+    <a href="../reference/spring-0002-applicationcontext-scopes-lifecycle.html">Cheat sheet</a>
+  </nav>
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>

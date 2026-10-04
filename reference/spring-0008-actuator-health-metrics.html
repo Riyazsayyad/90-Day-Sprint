@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Actuator &amp; Observability — Reference</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/spring-0008-actuator-health-metrics.html">&larr; Lesson 08</a>
+  </nav>
+  <h1>Actuator Cheat Sheet</h1>
+  <ul>
+    <li>Liveness = restart; readiness = LB membership</li>
+    <li>Do not DB-check liveness</li>
+    <li>management.port + deny /env /heapdump /loggers publicly</li>
+    <li>Micrometer: HTTP, JVM/GC, Tomcat, Hikari</li>
+    <li>Latency: metrics → thread dump (actuator or jcmd) → GC; heapdump last</li>
+    <li>/conditions = auto-config report</li>
+  </ul>
+</body>
+</html>

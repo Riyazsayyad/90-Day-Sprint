@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 6 — AOP Proxies, JDK vs CGLIB &amp; @Transactional Internals</title>
+  <meta name="description" content="Spring AOP proxies: JDK vs CGLIB, Boot defaults, @Transactional begin/commit/rollback, propagation, self-invocation, debug checklist.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0005-auto-configuration-internals.html">&larr; Lesson 5</a> &middot;
+    Lesson 6 of 9 &middot;
+    <a href="spring-0007-servlet-tomcat-mvc-dispatch.html">Lesson 7 &rarr;</a> &middot;
+    <a href="../reference/spring-0006-aop-proxies-transactional.html">Cheat sheet</a>
+  </nav>
+
+  <h1>AOP Proxies, JDK vs CGLIB &amp; @Transactional Internals</h1>
+  <p class="meta">~40 minutes &middot; Module 05 Lesson 6 of 9 &middot; critical interview lesson &middot; builds on <a href="oop-0013-this-super.html">this/super</a>, <a href="spring-0002-applicationcontext-scopes-lifecycle.html">lifecycle / BPP</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> @Transactional does nothing unless the call enters the Spring <strong>proxy</strong>. Self-invocation <code>this.save()</code> skips the proxy — same trap as <code>this.txMethod()</code> in <a href="oop-0013-this-super.html">oop-0013</a>. Can you draw Caller → Proxy → advice → target, pick JDK vs CGLIB, and explain REQUIRED vs REQUIRES_NEW without hand-waving “Spring handles it”?
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.spring.io/spring-framework/reference/core/aop/proxying.html">Proxying Mechanisms</a> ·
+    <a href="https://docs.spring.io/spring-framework/reference/data-access/transaction.html">Transaction Management</a> ·
+    <a href="https://docs.spring.io/spring-framework/reference/data-access/transaction/declarative/tx-decl-explained.html">Understanding the Spring Framework’s Declarative Transaction Implementation</a>
+  </p>
+
+  <h2>1. Why Proxies</h2>
+  <p>Cross-cutting: transactions, security, metrics. Keep them off the domain method body. Mechanism: wrap the bean with a <strong>proxy</strong> that runs <strong>advice</strong> then delegates to the <strong>target</strong>.</p>
+  <p>Spring AOP is <strong>proxy-based</strong> (runtime). Full AspectJ compile/load-time weaving is out of scope.</p>
+
+  <h2>2. Vocabulary</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Term</th>
+        <th>Meaning</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Target</td>
+        <td>Your real <code>OrderService</code> instance</td>
+      </tr>
+      <tr>
+        <td>Proxy</td>
+        <td>Object the container injects into other beans</td>
+      </tr>
+      <tr>
+        <td>Advice</td>
+        <td>Code around the call (begin tx, log, …)</td>
+      </tr>
+      <tr>
+        <td>Join point</td>
+        <td>A method execution (Spring AOP limitation)</td>
+      </tr>
+      <tr>
+        <td>Pointcut</td>
+        <td>Which methods get advice (<code>@Transactional</code> is a shortcut)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3. Call Chain</h2>
+  <pre>
+Caller (Controller)
+    │  orderService.place(cmd)   // reference is the PROXY
+    ▼
+┌──────────── Spring Proxy ────────────┐
+│  TransactionInterceptor (advice)     │
+│    begin / get tx                    │
+│         │                            │
+│         ▼                            │
+│    target.place(cmd)                 │
+│         │                            │
+│    commit / rollback                 │
+└──────────────────────────────────────┘
+</pre>
+  <p>BeanPostProcessor (<code>AbstractAutoProxyCreator</code>) replaces the bean with the proxy after init (S02 after-BPP). Other beans receive the proxy reference.</p>
+
+  <h2>4–6. JDK vs CGLIB</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th>JDK dynamic proxy</th>
+        <th>CGLIB subclass</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>How</td>
+        <td><code>java.lang.reflect.Proxy</code> implementing interfaces</td>
+        <td>Runtime subclass of the target class</td>
+      </tr>
+      <tr>
+        <td>Needs</td>
+        <td>Target implements an interface; callers use the interface</td>
+        <td>Non-final class; intercept non-final public methods</td>
+      </tr>
+      <tr>
+        <td>Framework default</td>
+        <td>If ≥1 interface → JDK</td>
+        <td>If no interface → CGLIB</td>
+      </tr>
+      <tr>
+        <td>Boot default</td>
+        <td></td>
+        <td><code>spring.aop.proxy-target-class=true</code> → CGLIB even with interfaces</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>Must know:</strong> Spring Framework docs: interface → JDK. <strong>Spring Boot</strong> sets class proxies on by default so injecting the concrete class still hits the proxy. If you inject by interface only, both work. Mixing “I injected the class” + <code>proxy-target-class=false</code> → ClassCastException.</p>
+  <p>CGLIB proxy is created via Objenesis — constructor of the subclass is not a second business ctor call in normal JVMs.</p>
+
+  <h2>7. final — Proxy Limits</h2>
+  <ul>
+    <li>Final class: CGLIB cannot subclass → proxy creation fails for class-based proxy.</li>
+    <li>Final method: CGLIB cannot override → <strong>no advice</strong> on that method (silent skip — deadly for @Transactional).</li>
+    <li>Private methods: never proxied. Package-private: unreliable across classloaders.</li>
+  </ul>
+
+  <h2>8–9. @Transactional Internals</h2>
+  <pre>
+enter proxy method
+    │
+    ▼
+PlatformTransactionManager.getTransaction(def)
+    │  REQUIRED: join existing or begin new
+    ▼
+target method
+    │
+    ├─ return normally → commit
+    ├─ RuntimeException / Error → rollback (default)
+    └─ checked Exception → commit unless rollbackFor=...
+</pre>
+  <p>Default rollback: <strong>unchecked</strong> only. <code>throws Exception</code> that you catch-and-wrap as checked → <strong>commit</strong> unless <code>rollbackFor = Exception.class</code>. Must know.</p>
+  <p>Swallowed exception (<code>catch (RuntimeException e) { log }</code> without rethrow) → interceptor sees success → <strong>commit</strong>.</p>
+
+  <h2>10. Propagation (Interview Pair)</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Propagation</th>
+        <th>If tx exists</th>
+        <th>If none</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>REQUIRED</strong> (default)</td>
+        <td>Join it</td>
+        <td>Begin one</td>
+      </tr>
+      <tr>
+        <td><strong>REQUIRES_NEW</strong></td>
+        <td>Suspend, begin nested independent tx, resume</td>
+        <td>Begin one</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>REQUIRES_NEW: audit log that must save even if outer tx rolls back. Cost: extra connection, deadlock risk. Do not sprinkle.</p>
+  <p><strong>Nice to know:</strong> NESTED uses savepoints (JDBC). NEVER / NOT_SUPPORTED / MANDATORY — name them if asked; don’t invent.</p>
+
+  <h2>11. Transaction Boundaries</h2>
+  <p>The boundary is the <strong>proxy method</strong> you entered. Repository calls inside that method join REQUIRED. HTTP filter is outside. <code>@Transactional</code> on controller works but is a smell (transaction includes JSON mapping). Prefer service layer.</p>
+  <p>Reactive @Transactional is a different stack (S09 caveat: WebFlux + blocking @Transactional on servlet model ≠ event-loop safe).</p>
+
+  <h2>12–13. Self-Invocation</h2>
+  <pre>
+OrderService (target)
+  place()                // no @Transactional
+      this.charge()      // SAME this — no proxy — no tx
+  @Transactional charge()
+</pre>
+  <p>Caller → proxy.place() → target.place() → <code>this.charge()</code> never re-enters proxy. You studied <code>this</code> bypassing Spring AOP in <a href="oop-0013-this-super.html">this &amp; super</a>.</p>
+  <p>Fix: move <code>charge</code> to another bean (self-injection of the proxy, or <code>TransactionTemplate</code>). Not <code>AopContext.currentProxy()</code> in app code.</p>
+  <pre>
+Controller → proxy.place()     // tx if @Transactional on place
+OtherService → orderService.charge()  // goes through proxy ✓
+</pre>
+
+  <h2>14. Pitfall Checklist (@Transactional doesn’t work)</h2>
+  <ol>
+    <li>Self-invocation / same class</li>
+    <li>Method not public (or final + CGLIB)</li>
+    <li>Bean not Spring-managed (<code>new OrderService()</code>)</li>
+    <li>Checked exception / swallowed exception</li>
+    <li>Called from another thread without passing context (tx is thread-bound — <a href="concurrency-0001-thread-fundamentals.html">thread</a>)</li>
+    <li>Wrong DataSource / no <code>PlatformTransactionManager</code> bean</li>
+    <li>Long tx holding DB connections → pool exhaustion (S07)</li>
+  </ol>
+
+  <h2>15. readOnly = true</h2>
+  <p>Hint to the manager / Hibernate flush skip. <strong>Not</strong> a hard SQL write ban. A <code>save()</code> inside readOnly may still write depending on provider. Don’t use it as security.</p>
+
+  <h2>16. Realistic Sketch</h2>
+  <pre><code class="language-java">@Service
+public class OrderService {
+  private final OrderRepository repo;
+  private final PaymentGateway gateway;
+
+  public OrderService(OrderRepository repo, PaymentGateway gateway) {
+    this.repo = repo;
+    this.gateway = gateway;
+  }
+
+  @Transactional
+  public OrderId place(PlaceOrder cmd) {
+    Order order = repo.save(Order.from(cmd));
+    gateway.charge(order.total()); // if this throws RuntimeException → rollback save
+    return order.id();
+  }
+}</code></pre>
+  <p>Controller injects <code>OrderService</code> (proxy). One HTTP thread, one tx, one rollback story.</p>
+
+  <h2>Production Relevance</h2>
+  <p>Silent commit after caught exceptions. Self-invocation in “refactor extract method.” Final methods on @Transactional services after a record conversion. REQUIRES_NEW leaking connections under load.</p>
+
+  <h2>Interview Articulation</h2>
+  <p><em>“Declarative transactions are Spring AOP. The container injects a proxy; advice starts a transaction via PlatformTransactionManager, invokes the target, then commits or rolls back. Default rollback is runtime exceptions. this.foo() never hits the proxy, so @Transactional on foo is skipped. Boot class-proxies with CGLIB unless you turn that off; final methods then silently lose advice.”</em></p>
+
+  <h2>Senior Interview Questions</h2>
+  <ol>
+    <li>Draw the proxy call chain for @Transactional.</li>
+    <li>JDK vs CGLIB — Framework vs Boot default.</li>
+    <li>Why final methods break transactions.</li>
+    <li>Self-invocation: exact this reference story.</li>
+    <li>Checked vs runtime rollback defaults.</li>
+    <li>REQUIRED vs REQUIRES_NEW with a failure in the inner method.</li>
+    <li>Where should the tx boundary live?</li>
+    <li>Transaction + thread pools — is context inherited?</li>
+    <li>readOnly=true — what it is not.</li>
+    <li>Debug checklist when “tx doesn’t roll back.”</li>
+  </ol>
+
+  <h2>Revision Notes</h2>
+  <ul>
+    <li>Advice runs only through the proxy.</li>
+    <li>Boot: CGLIB class proxy default.</li>
+    <li>Rollback: RuntimeException; set rollbackFor for checked.</li>
+    <li>REQUIRED join; REQUIRES_NEW suspend+new.</li>
+    <li>this.method() bypass; other bean OK.</li>
+  </ul>
+
+  <h2>Interview One-Liners</h2>
+  <ul>
+    <li>“If the call never entered the proxy, there was no transaction.”</li>
+    <li>“Catch without rethrow is a commit.”</li>
+    <li>“REQUIRES_NEW is a new connection story, not a flag of quality.”</li>
+  </ul>
+
+  <h2>Senior MCQs</h2>
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: this.save() inside the same @Service?</p>
+        <ol type="A">
+          <li>Bypasses the proxy — no @Transactional advice.</li>
+          <li>Always starts REQUIRES_NEW automatically.</li>
+          <li>CGLIB rewrites this to the proxy always.</li>
+          <li>Fails compilation on Java 21.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Bypasses the proxy — no @Transactional advice.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Default rollback for throws Exception (checked)?</p>
+        <ol type="A">
+          <li>Commit unless rollbackFor includes it.</li>
+          <li>Always rollback like RuntimeException.</li>
+          <li>Tomcat converts it to HTTP 204.</li>
+          <li>Opens a second nested savepoint always.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Commit unless rollbackFor includes it.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: Spring Boot AOP proxy default?</p>
+        <ol type="A">
+          <li>Class-based CGLIB (proxy-target-class true).</li>
+          <li>JDK proxies only, even without interfaces.</li>
+          <li>No proxies — bytecode weaving required.</li>
+          <li>Enum singletons replace all proxies.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Class-based CGLIB (proxy-target-class true).)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: REQUIRED when a tx already exists?</p>
+        <ol type="A">
+          <li>Join the existing transaction.</li>
+          <li>Always suspend and start another.</li>
+          <li>Ignore @Transactional completely.</li>
+          <li>Bind the tx to a new virtual thread.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Join the existing transaction.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: final @Transactional method on a CGLIB proxy?</p>
+        <ol type="A">
+          <li>Advice typically does not run.</li>
+          <li>JDK proxy is used instead automatically.</li>
+          <li>JVM rejects the class at verify time.</li>
+          <li>readOnly becomes a hard SQL lock.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Advice typically does not run.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: Catch RuntimeException, log, no rethrow?</p>
+        <ol type="A">
+          <li>Interceptor commits — exception was swallowed.</li>
+          <li>Rollback still happens via ThreadLocal.</li>
+          <li>REQUIRES_NEW starts on the catch block.</li>
+          <li>Actuator marks liveness DOWN.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Interceptor commits — exception was swallowed.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q7: new OrderService(repo) inside a controller?</p>
+        <ol type="A">
+          <li>Not a bean — no transactional proxy.</li>
+          <li>Boot wraps every new automatically.</li>
+          <li>Equals injecting the singleton proxy.</li>
+          <li>Forces request scope on the repo.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Not a bean — no transactional proxy.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q8: readOnly = true guarantees?</p>
+        <ol type="A">
+          <li>A hint — not a hard write block.</li>
+          <li>Database user is switched to SELECT.</li>
+          <li>CGLIB cannot proxy the class.</li>
+          <li>Propagation becomes NEVER always.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (A hint — not a hard write block.)</strong></p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0005-auto-configuration-internals.html">&larr; Lesson 5</a> &middot;
+    <a href="spring-0007-servlet-tomcat-mvc-dispatch.html">Lesson 7 &rarr;</a> &middot;
+    <a href="../reference/spring-0006-aop-proxies-transactional.html">Cheat sheet</a>
+  </nav>
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>

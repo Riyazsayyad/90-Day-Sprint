@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 7 — Servlet Stack: Tomcat, Filters &amp; MVC Dispatch</title>
+  <meta name="description" content="Embedded Tomcat, request threads, servlet filters, DispatcherServlet, HandlerMapping, blocking I/O, virtual threads, pool exhaustion.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0006-aop-proxies-transactional.html">&larr; Lesson 6</a> &middot;
+    Lesson 7 of 9 &middot;
+    <a href="spring-0008-actuator-health-metrics.html">Lesson 8 &rarr;</a> &middot;
+    <a href="../reference/spring-0007-servlet-tomcat-mvc-dispatch.html">Cheat sheet</a>
+  </nav>
+
+  <h1>Servlet Stack: Tomcat, Filters &amp; MVC Dispatch</h1>
+  <p class="meta">~35 minutes &middot; Module 05 Lesson 7 of 9 &middot; builds on <a href="concurrency-0001-thread-fundamentals.html">threads</a>, <a href="concurrency-0005-executors.html">pools</a>, <a href="concurrency-0008-virtual-threads.html">virtual threads</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> One HTTP request occupies a Tomcat worker for the whole blocking JDBC call. Can you walk Client → Tomcat → Filter → DispatcherServlet → Controller → Service, name where a correlation ID is set, and diagnose 200 Tomcat threads vs 20 Hikari connections? This is production, not servlet certification.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-servlet.html">DispatcherServlet</a> ·
+    <a href="https://docs.spring.io/spring-boot/reference/web/servlet.html">Boot Servlet Web</a> ·
+    <a href="https://docs.spring.io/spring-boot/reference/web/graceful-shutdown.html">Graceful Shutdown</a>
+  </p>
+
+  <h2>Mental Model — Request Path</h2>
+  <pre>
+Client → Load balancer → Embedded Tomcat connector
+                              │
+                              ▼
+                     Tomcat worker thread  (or virtual thread if enabled)
+                              │
+                              ▼
+                     Servlet Filter chain  (security, CORS, MDC)
+                              │
+                              ▼
+                     DispatcherServlet
+                              │
+                              ├─ HandlerMapping     → @RequestMapping match
+                              ├─ HandlerAdapter     → invoke controller
+                              ├─ Controller         → args, HttpMessageConverter
+                              ├─ Service / @Transactional proxy (S06)
+                              └─ Repository → JDBC  (thread still blocked)
+                              │
+                              ▼
+                     return → converters → filters → client
+</pre>
+
+  <h2>1. Embedded Tomcat in Boot</h2>
+  <p>starter-web pulls Tomcat. Boot creates a <code>TomcatServletWebServerFactory</code>, starts a connector on <code>server.port</code> (8080). No external catalina install. The JVM process <em>is</em> the server (<a href="jvm-0001-jvm-runtime-architecture.html">JVM S01</a>).</p>
+  <p>You can switch to Jetty/Undertow via starters. Same servlet programming model.</p>
+
+  <h2>2. Platform / Request Threads</h2>
+  <p>Classic: pool of platform threads (<code>server.tomcat.threads.max</code>, default 200). Each in-flight blocking request holds one thread. You sized pools in <a href="concurrency-0005-executors.html">Executors</a> — same math: threads ≈ concurrent blocking work, not QPS.</p>
+  <p>Boot 3.2+: <code>spring.threads.virtual.enabled=true</code> — Tomcat can run requests on virtual threads (<a href="concurrency-0008-virtual-threads.html">VT</a>). Helps <strong>blocking I/O</strong>. Does not help CPU-bound work. Pinning still applies (<code>synchronized</code>, native).</p>
+
+  <h2>3. Connector (Practical)</h2>
+  <p>Acceptor takes the TCP connection; worker runs the servlet. Timeouts: connection, keep-alive. You rarely tune protocol internals in interviews — you tune <strong>max threads</strong>, <strong>accept count</strong>, and <strong>downstream pools</strong>.</p>
+
+  <h2>4. Servlet Filter Chain</h2>
+  <p>Filters wrap the servlet. Ordered (<code>@Order</code> / <code>FilterRegistrationBean</code>). Typical: correlation ID into MDC, security, metrics.</p>
+  <pre><code class="language-java">@Component
+public class CorrelationFilter extends OncePerRequestFilter {
+  @Override
+  protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res,
+                                  FilterChain chain) throws ServletException, IOException {
+    String cid = Optional.ofNullable(req.getHeader("X-Correlation-Id"))
+        .orElse(UUID.randomUUID().toString());
+    MDC.put("cid", cid);
+    try {
+      chain.doFilter(req, res);
+    } finally {
+      MDC.clear(); // ThreadLocal leak otherwise — JVM S06 / concurrency
+    }
+  }
+}</code></pre>
+  <blockquote>Must know: MDC is ThreadLocal. Forget <code>clear()</code> on a pool thread → leaked IDs (and classloader leaks on redeploy). Virtual threads: still clear; cheaper threads ≠ optional hygiene.</blockquote>
+
+  <h2>5–8. DispatcherServlet &amp; MVC</h2>
+  <ul>
+    <li><strong>DispatcherServlet</strong> — front controller. One servlet mapping <code>/</code>.</li>
+    <li><strong>HandlerMapping</strong> — path + method + consumes → handler method.</li>
+    <li><strong>HandlerAdapter</strong> — invokes that method (you don’t call it).</li>
+    <li><strong>Argument resolvers</strong> — <code>@RequestBody</code>, <code>@PathVariable</code>, Principal.</li>
+    <li><strong>HttpMessageConverter</strong> — JSON via Jackson, etc.</li>
+  </ul>
+  <p>404 vs 405 vs 415: mapping miss vs method vs media type — interview precision.</p>
+
+  <h2>9. @ControllerAdvice</h2>
+  <p>Exception → HTTP mapping in one place. After the controller throws, before the response is committed. Not a substitute for Filter errors that never reach the dispatcher.</p>
+
+  <h2>10–12. Blocking Path &amp; Exhaustion</h2>
+  <pre>
+Tomcat max = 200
+Hikari max = 20
+Inbound: 200 slow queries
+
+  20 threads:  in JDBC (have a connection)
+ 180 threads:  blocked waiting on Hikari pool
+ Cost: 180 platform stacks + timeouts + tail latency
+ Thread dump: socketRead0 / HikariProxyConnection.getConnection  (JVM S08)
+</pre>
+  <p><strong>Must know:</strong> Fix the bottleneck (query, pool size vs DB, timeouts). Raising Tomcat to 2000 without DB capacity makes GC and context switching worse.</p>
+  <p>Virtual threads: waiting on Hikari still serializes on 20 connections. VT does not multiply database capacity.</p>
+
+  <h2>13. Filter vs HandlerInterceptor vs @ControllerAdvice</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th>Filter</th>
+        <th>HandlerInterceptor</th>
+        <th>@ControllerAdvice</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Layer</td>
+        <td>Servlet</td>
+        <td>Spring MVC</td>
+        <td>MVC exception / binding</td>
+      </tr>
+      <tr>
+        <td>Sees</td>
+        <td>All requests to the servlet</td>
+        <td>Mapped handlers (not raw static if bypassed)</td>
+        <td>Controller exceptions</td>
+      </tr>
+      <tr>
+        <td>Use</td>
+        <td>Auth gateway, CID, CORS</td>
+        <td>Handler-specific metrics, model</td>
+        <td>API error JSON</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Spring Security is a filter chain — out of scope for internals here; know it sits <em>before</em> DispatcherServlet.</p>
+
+  <h2>14. Correlation ID</h2>
+  <p>Propagate <code>X-Correlation-Id</code> to downstream HTTP and logs. Actuator/metrics tags later (S08). Without it, six replicas are a haystack.</p>
+
+  <h2>Production Relevance</h2>
+  <p>Latency spike: thread dump + Hikari metrics, not “restart Tomcat.” Graceful shutdown: Boot waits in-flight requests (<code>server.shutdown=graceful</code>) — K8s preStop should match.</p>
+
+  <h2>Interview Articulation</h2>
+  <p><em>“Embedded Tomcat runs the servlet container in-process. A worker thread (or virtual thread) runs the filter chain then DispatcherServlet, which maps to a controller. If the service blocks on JDBC, that thread stays occupied. I size Tomcat against downstream pools. Exhausted Tomcat with idle CPU often means all workers are blocked on I/O — dump threads, don’t add replicas blindly.”</em></p>
+
+  <h2>Senior Interview Questions</h2>
+  <ol>
+    <li>Walk an HTTP GET from NIC to repository.</li>
+    <li>Default Tomcat max threads — what does 200 mean?</li>
+    <li>Filter vs Interceptor vs ControllerAdvice.</li>
+    <li>Why MDC.clear in finally?</li>
+    <li>200 Tomcat / 20 Hikari under load — dump what?</li>
+    <li>When do virtual threads help this stack?</li>
+    <li>What does DispatcherServlet do that Tomcat does not?</li>
+    <li>404 vs 405 vs 415.</li>
+  </ol>
+
+  <h2>Revision Notes</h2>
+  <ul>
+    <li>Worker thread held for entire blocking request.</li>
+    <li>DispatcherServlet = front controller.</li>
+    <li>Filters wrap servlet; interceptors wrap handlers.</li>
+    <li>Pool mismatch: Tomcat vs Hikari vs DB.</li>
+    <li>VT: more waiters, same DB capacity.</li>
+  </ul>
+
+  <h2>Interview One-Liners</h2>
+  <ul>
+    <li>“The servlet thread is the currency of a blocking API.”</li>
+    <li>“Hikari is often the real max concurrency.”</li>
+    <li>“MDC without finally is a lie in the next request.”</li>
+  </ul>
+
+  <h2>Senior MCQs</h2>
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: Blocking JDBC inside a controller. Worker thread?</p>
+        <ol type="A">
+          <li>Stays occupied until the query returns.</li>
+          <li>Returns to the pool during socket read.</li>
+          <li>Is always a virtual thread in Boot 2.7.</li>
+          <li>Migrates to the common ForkJoinPool.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Stays occupied until the query returns.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: DispatcherServlet role?</p>
+        <ol type="A">
+          <li>Front controller: map and invoke handlers.</li>
+          <li>The JDBC driver wrapper for Hikari.</li>
+          <li>The JVM safepoint coordinator.</li>
+          <li>Kubernetes liveness HTTP client.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Front controller: map and invoke handlers.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: Correlation ID in a Filter. Must also?</p>
+        <ol type="A">
+          <li>Clear MDC in finally on the worker.</li>
+          <li>Store it in a static HashMap only.</li>
+          <li>Disable Tomcat to avoid ThreadLocal.</li>
+          <li>Put it in Metaspace as a class constant.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Clear MDC in finally on the worker.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: 200 busy Tomcat threads, Hikari 20. Likely?</p>
+        <ol type="A">
+          <li>Threads waiting on the DB pool.</li>
+          <li>Need 200 more database replicas first.</li>
+          <li>DispatcherServlet is not registered.</li>
+          <li>Only GC safepoints can explain it.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Threads waiting on the DB pool.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: spring.threads.virtual.enabled=true helps most?</p>
+        <ol type="A">
+          <li>Many concurrent blocking I/O requests.</li>
+          <li>Single-thread CPU-bound JSON crypto.</li>
+          <li>Replacing Hikari with unbounded queues.</li>
+          <li>Avoiding all proxy transactional advice.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Many concurrent blocking I/O requests.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: HandlerInterceptor vs Filter?</p>
+        <ol type="A">
+          <li>Interceptor is MVC; Filter is servlet API.</li>
+          <li>Filter only runs after @ControllerAdvice.</li>
+          <li>Interceptor replaces Tomcat connectors.</li>
+          <li>They are identical JVM bytecodes.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Interceptor is MVC; Filter is servlet API.)</strong></p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0006-aop-proxies-transactional.html">&larr; Lesson 6</a> &middot;
+    <a href="spring-0008-actuator-health-metrics.html">Lesson 8 &rarr;</a> &middot;
+    <a href="../reference/spring-0007-servlet-tomcat-mvc-dispatch.html">Cheat sheet</a>
+  </nav>
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>

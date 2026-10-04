@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 9 — WebFlux: Reactive Model vs Servlet MVC</title>
+  <meta name="description" content="Spring WebFlux vs MVC: event loop vs worker threads, Mono/Flux, backpressure, blocking JDBC trap, virtual threads vs reactive.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0008-actuator-health-metrics.html">&larr; Lesson 8</a> &middot;
+    Lesson 9 of 9 &middot;
+    <a href="../exercises/spring-internals-capstone-exercise.html">➡️ Capstone Exercise</a> &middot;
+    <a href="../reference/spring-0009-webflux-vs-mvc.html">Cheat sheet</a>
+  </nav>
+
+  <h1>WebFlux: Reactive Model vs Servlet MVC</h1>
+  <p class="meta">~35 minutes &middot; Module 05 Lesson 9 of 9 &middot; architecture choice, not a Reactor course &middot; builds on <a href="spring-0007-servlet-tomcat-mvc-dispatch.html">S07</a>, <a href="concurrency-0008-virtual-threads.html">virtual threads</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> WebFlux is not “faster Spring.” It is an event-loop + non-blocking I/O model. Blocking JDBC on the event loop is an outage. Virtual threads give a second scalability story on the servlet stack. Can you pick MVC+VT vs WebFlux with a decision tree, not a buzzword?
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.spring.io/spring-framework/reference/web/webflux.html">Spring WebFlux</a> ·
+    <a href="https://docs.spring.io/spring-framework/reference/web/webflux/reactive-spring.html">Reactive Spring</a> ·
+    <a href="https://docs.spring.io/spring-boot/reference/web/reactive.html">Boot Reactive Web</a>
+  </p>
+
+  <h2>1. Why WebFlux Exists</h2>
+  <p>Servlet MVC (S07): one thread per in-flight blocking request. High concurrency of slow I/O → huge thread counts, stack memory, context switches. WebFlux: small set of event-loop threads, I/O completion callbacks, many concurrent requests without 1:1 platform threads.</p>
+  <p>Born for gateways, streaming, high fan-out HTTP — <strong>if the whole stack is non-blocking</strong>.</p>
+
+  <h2>2. MVC Path</h2>
+  <pre>
+request → Tomcat worker
+              │  blocking JDBC / RestTemplate
+              ▼
+          thread waits  (stack allocated the whole time)
+              │
+          response
+</pre>
+
+  <h2>3. WebFlux Path</h2>
+  <pre>
+request → Netty event loop (N threads, N ≈ cores)
+              │  register I/O, do not block
+              ▼
+          event-loop free for other connections
+              │  completion → resume Mono/Flux
+              ▼
+          write response  (still on loop or scheduled worker)
+</pre>
+
+  <h2>4. Event Loops — Blocking Is Fatal</h2>
+  <p><strong>Must know:</strong> If you call JDBC <code>ResultSet</code> on the event-loop thread, that loop cannot process other connections. One slow query stalls a slice of the server. This is worse than occupying one Tomcat worker — you poison a shared loop.</p>
+  <p><code>publishOn</code> / bounded elastic schedulers exist to offload blocking — you then have a thread pool again. At that point ask why you aren’t on MVC+VT.</p>
+
+  <h2>5–7. Mono, Flux, Lazy, Backpressure (Roles Only)</h2>
+  <ul>
+    <li><strong>Mono</strong> — 0..1 value (one JSON body, one user).</li>
+    <li><strong>Flux</strong> — 0..N stream (SSE, chunked rows).</li>
+    <li><strong>Lazy:</strong> assembling a pipeline does nothing until subscribe (HTTP response subscription).</li>
+    <li><strong>Backpressure:</strong> consumer signals demand so a fast publisher doesn’t OOM the heap. Conceptual — not every operator.</li>
+  </ul>
+  <pre><code class="language-java">@GetMapping("/users/{id}")
+Mono&lt;User&gt; get(@PathVariable String id) {
+  return userRepo.findById(id); // reactive repo — not JPA blocking
+}</code></pre>
+
+  <h2>8. MVC vs WebFlux Table</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th>Servlet MVC</th>
+        <th>WebFlux</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Threading</td>
+        <td>Worker per request (or VT)</td>
+        <td>Event loops + workers</td>
+      </tr>
+      <tr>
+        <td>I/O</td>
+        <td>Blocking OK</td>
+        <td>Non-blocking required on loop</td>
+      </tr>
+      <tr>
+        <td>Programming</td>
+        <td>Imperative, simple stacks</td>
+        <td>Declarative pipelines, harder dumps</td>
+      </tr>
+      <tr>
+        <td>Debug</td>
+        <td>Thread dump maps to request</td>
+        <td>Async stacks; need reactor debug / traces</td>
+      </tr>
+      <tr>
+        <td>Data access</td>
+        <td>JDBC/JPA natural</td>
+        <td>R2DBC / reactive drivers end-to-end</td>
+      </tr>
+      <tr>
+        <td>Tx</td>
+        <td>@Transactional thread-bound (S06)</td>
+        <td>Different story — don’t paste servlet tx on loop</td>
+      </tr>
+      <tr>
+        <td>Fit</td>
+        <td>CRUD services, mixed blocking libs</td>
+        <td>Gateway, streams, reactive DB</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>9. Misconception: “WebFlux Is Always Faster”</h2>
+  <p>CPU-bound JSON + business rules: same cores, extra pipeline overhead. Blocking JDBC on WebFlux: <strong>slower and less stable</strong> than MVC. Benchmark your shape of work.</p>
+
+  <h2>10. Blocking JDBC on WebFlux</h2>
+  <p>JPA/JDBC calls <code>socketRead</code> on whatever thread you ran them. On the event loop = stall. On <code>boundedElastic</code> = hidden Tomcat. Mixing Hibernate Session (thread-bound) with reactive chains is a bug factory. Module 06 will deepen ORM; here: <strong>don’t</strong>.</p>
+
+  <h2>11–13. Virtual Threads vs WebFlux</h2>
+  <p>Two strategies for “lots of waiting I/O”:</p>
+  <ol>
+    <li><strong>MVC + virtual threads</strong> — keep imperative style, JDBC, @Transactional; VT unmounts while blocking (pinning caveats, concurrency-0008).</li>
+    <li><strong>WebFlux</strong> — keep event loops; every I/O library must be reactive.</li>
+  </ol>
+  <p>MVC+VT is simpler for most business services in 2026. WebFlux wins when: streaming, backpressure, reactive clients all the way, gateway routing.</p>
+
+  <h2>14. Decision Tree</h2>
+  <pre>
+Need end-to-end non-blocking + streaming / gateway?
+    YES → WebFlux (and reactive data access)
+    NO  → Servlet MVC
+            │
+            Lots of concurrent blocking I/O, Java 21+?
+            YES → consider spring.threads.virtual.enabled
+            CPU-bound / simple CRUD / JPA?
+            YES → MVC platform threads are fine; measure first
+</pre>
+  <p>Cannot mix starter-web and starter-webflux as two competing servers without a clear choice — Boot picks one web application type. Wrong OnWebApplication conditions (S05) then surprise you.</p>
+
+  <h2>Production Relevance</h2>
+  <p>Teams copy a WebFlux template, keep JPA, page the CEO. Thread dumps show event-loop threads in <code>socketRead0</code>. Fix: move to MVC or extract blocking to a dedicated pool (and accept you lost the model).</p>
+
+  <h2>Interview Articulation</h2>
+  <p><em>“MVC occupies a worker for blocking I/O. WebFlux uses event loops and requires non-blocking I/O; blocking JDBC on the loop is an outage. WebFlux is not automatically faster. For JPA CRUD I pick MVC, and virtual threads if concurrency of blocking calls is the bottleneck. I pick WebFlux when the pipeline is reactive end-to-end.”</em></p>
+
+  <h2>Senior Interview Questions</h2>
+  <ol>
+    <li>Why does WebFlux exist if Tomcat already has a pool?</li>
+    <li>What happens if JDBC runs on the Netty loop?</li>
+    <li>Mono vs Flux — one sentence each.</li>
+    <li>Why is the pipeline lazy?</li>
+    <li>Backpressure in one sentence.</li>
+    <li>Is WebFlux always lower latency?</li>
+    <li>VT vs WebFlux — two sentences.</li>
+    <li>@Transactional on a WebFlux handler?</li>
+    <li>When is MVC+VT the senior default?</li>
+    <li>starter-web vs starter-webflux both on the classpath?</li>
+  </ol>
+
+  <h2>Revision Notes</h2>
+  <ul>
+    <li>Event loop ≠ worker pool.</li>
+    <li>Non-blocking all the way or don’t pretend.</li>
+    <li>VT: imperative blocking; WebFlux: reactive I/O.</li>
+    <li>JPA + WebFlux is a smell.</li>
+  </ul>
+
+  <h2>Interview One-Liners</h2>
+  <ul>
+    <li>“WebFlux multiplies concurrency only if I/O doesn’t block the loop.”</li>
+    <li>“Virtual threads scale blocking code; WebFlux scales callbacks.”</li>
+    <li>“Faster is a benchmark, not a stack name.”</li>
+  </ul>
+
+  <h2>Senior MCQs</h2>
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: JDBC on the Netty event loop?</p>
+        <ol type="A">
+          <li>Stalls that loop — other channels wait.</li>
+          <li>Automatically hops to Tomcat workers.</li>
+          <li>Turns JDBC into R2DBC at runtime.</li>
+          <li>Is required for @Transactional.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Stalls that loop — other channels wait.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: WebFlux always faster than MVC?</p>
+        <ol type="A">
+          <li>False — CPU-bound and blocking JDBC disagree.</li>
+          <li>True — event loops beat all CPUs.</li>
+          <li>True if and only if G1 is enabled.</li>
+          <li>True for every JPA findById.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (False — CPU-bound and blocking JDBC disagree.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: Mono represents?</p>
+        <ol type="A">
+          <li>At most one asynchronous result.</li>
+          <li>Unbounded platform thread pool.</li>
+          <li>A servlet Filter registration.</li>
+          <li>Hikari’s maximum pool size.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (At most one asynchronous result.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: Typical 2026 CRUD + JPA service default?</p>
+        <ol type="A">
+          <li>MVC; consider virtual threads for blocking I/O load.</li>
+          <li>WebFlux plus Hibernate on the event loop.</li>
+          <li>Both starters as two servers always.</li>
+          <li>Skip Tomcat and poll in a while(true).</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (MVC; consider virtual threads for blocking I/O load.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: Virtual threads vs WebFlux?</p>
+        <ol type="A">
+          <li>VT scale blocking; WebFlux needs non-blocking I/O.</li>
+          <li>They are identical bytecode after JIT.</li>
+          <li>VT only work inside Flux operators.</li>
+          <li>WebFlux replaces the JVM scheduler.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (VT scale blocking; WebFlux needs non-blocking I/O.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: Assembling a Flux without subscribe?</p>
+        <ol type="A">
+          <li>Lazy — no I/O until subscription.</li>
+          <li>Runs immediately on the caller thread.</li>
+          <li>Commits a JDBC transaction always.</li>
+          <li>Registers a Tomcat Filter automatically.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Lazy — no I/O until subscription.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q7: When WebFlux is the right default?</p>
+        <ol type="A">
+          <li>Reactive I/O end-to-end — gateway/streaming.</li>
+          <li>Any service that uses HashMap locally.</li>
+          <li>Whenever Boot version is 3.2+.</li>
+          <li>To avoid writing unit tests.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Reactive I/O end-to-end — gateway/streaming.)</strong></p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q8: Backpressure is?</p>
+        <ol type="A">
+          <li>Consumer demand so publishers don’t flood memory.</li>
+          <li>Tomcat maxThreads divided by two.</li>
+          <li>G1 mixed GC of old regions only.</li>
+          <li>A synonym for HTTP 429 always.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Consumer demand so publishers don’t flood memory.)</strong></p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="spring-0008-actuator-health-metrics.html">&larr; Lesson 8</a> &middot;
+    <a href="../exercises/spring-internals-capstone-exercise.html">➡️ Capstone Exercise</a> &middot;
+    <a href="../reference/spring-0009-webflux-vs-mvc.html">Cheat sheet</a>
+  </nav>
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>

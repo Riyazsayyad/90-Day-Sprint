@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AOP Proxies &amp; @Transactional — Reference</title>
+  <link rel="stylesheet" href="../assets/lesson.css">
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../lessons/spring-0006-aop-proxies-transactional.html">&larr; Lesson 06</a>
+  </nav>
+  <h1>AOP &amp; Transactions Cheat Sheet</h1>
+  <pre>Caller → Proxy → TransactionInterceptor → Target → commit/rollback</pre>
+  <ul>
+    <li>JDK proxy: interfaces; CGLIB: subclass. Boot: proxy-target-class=true (CGLIB)</li>
+    <li>final class/method, private, new Service() → no advice</li>
+    <li>this.foo() skips proxy (self-invocation)</li>
+    <li>Rollback default: RuntimeException/Error; checked commits unless rollbackFor</li>
+    <li>REQUIRED join; REQUIRES_NEW suspend + new tx</li>
+    <li>readOnly = hint, not a write firewall</li>
+    <li>Tx bound to thread (platform); don’t assume hop to another thread</li>
+  </ul>
+</body>
+</html>

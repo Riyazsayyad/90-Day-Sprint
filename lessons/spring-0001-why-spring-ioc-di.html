@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="../assets/theme-init.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 1 — Why Spring: IoC, DI, Layers &amp; Manual Wiring</title>
+  <meta name="description" content="Why Spring exists from a Senior Backend perspective: IoC vs DI, constructor injection, beans, layered architecture, DIP, and Boot startup preview.">
+  <link rel="stylesheet" href="../assets/lesson.css">
+  <script src="../assets/lesson-tray.js" defer></script>
+</head>
+<body>
+  <nav class="lesson-nav">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="../exercises/jvm-capstone-exercise.html">⬅️ Prev: JVM Capstone</a> &middot;
+    Lesson 1 of 9 &middot;
+    <a href="spring-0002-applicationcontext-scopes-lifecycle.html">Lesson 2 &rarr;</a> &middot;
+    <a href="../reference/spring-0001-why-spring-ioc-di.html">Cheat sheet</a>
+  </nav>
+
+  <h1>Why Spring: IoC, DI, Layers &amp; Manual Wiring</h1>
+  <p class="meta">~30 minutes &middot; Module 05 Lesson 1 of 9 &middot; builds on <a href="oop-0008-polymorphism.html">Polymorphism</a>, <a href="oop-0009-abstraction.html">Abstraction</a>, <a href="oop-0015-final.html">final</a>, <a href="jvm-0001-jvm-runtime-architecture.html">JVM process model</a></p>
+
+  <div class="callout">
+    <strong>Senior Interview Focus:</strong> Can you explain Spring without listing annotations? Interviewers want: why object graphs explode, what inversion of control actually inverts, why constructor injection beats field injection, what a bean is (and is not), and how layers + DIP keep a payment service testable. This lesson is the “why.” Lifecycle, scan, auto-config, and proxies come later — do not hide behind them yet.
+  </div>
+
+  <p><strong>Primary sources:</strong>
+    <a href="https://docs.spring.io/spring-framework/reference/core/beans/introduction.html">Spring Framework — IoC Container</a> ·
+    <a href="https://docs.spring.io/spring-framework/reference/core/beans/dependencies/factory-collaborators.html">Spring Framework — Dependency Injection</a> ·
+    <a href="https://docs.spring.io/spring-boot/reference/using/structuring-your-code.html">Spring Boot — Structuring Your Code</a>
+  </p>
+
+  <h2>1. Why <code>new</code> Graphs Rot</h2>
+  <p><strong>Must know (interview):</strong> Hard-coded construction couples <em>who uses</em> a type to <em>how it is built</em>. Tests, environments, and feature flags all fight that coupling.</p>
+  <pre>
+CheckoutService
+  └─ new StripeClient(apiKey)
+       └─ new HttpClient()
+            └─ new RetryPolicy()
+                 └─ new MetricsSink()   // now every test needs Stripe + HTTP
+</pre>
+  <p>Pain that shows up in production codebases:</p>
+  <ul>
+    <li><strong>Change blast radius</strong> — swap Stripe for Razorpay and every <code>new CheckoutService()</code> site changes.</li>
+    <li><strong>Hidden graph</strong> — constructors grow; nobody sees the full tree until a NPE in prod.</li>
+    <li><strong>Untestable</strong> — cannot inject a fake gateway without bytecode tricks or static mocks.</li>
+    <li><strong>Env chaos</strong> — local vs K8s URLs, secrets, pool sizes baked into constructors.</li>
+  </ul>
+  <blockquote>Common misconception: “Spring exists so we type less.” No. Spring exists so <strong>composition of the object graph is a first-class, inspectable concern</strong> — not scattered <code>new</code>.</blockquote>
+
+  <h2>2. Manual Wiring First (No Spring)</h2>
+  <p>Write the composition root by hand. This is still valid Java. Spring later <em>automates this same graph</em>.</p>
+  <pre><code class="language-java">public final class App {
+  public static void main(String[] args) {
+    UserRepository repo = new JdbcUserRepository(dataSource);
+    UserService service = new UserService(repo);
+    UserController controller = new UserController(service);
+    // start HTTP server, pass controller
+  }
+}</code></pre>
+  <p><strong>Mental model:</strong> One place owns construction. Dependencies flow <strong>inward</strong> through constructors. The rest of the app never calls <code>new</code> on collaborators.</p>
+  <p>Manual wiring scales until: 80 beans, 3 profiles, 12 optional features. Then you reinvent a container (poorly). That is Spring’s job.</p>
+
+  <h2>3. IoC — Simple Mental Model</h2>
+  <p><strong>Inversion of Control</strong> = you stop being the one who decides <em>when</em> and <em>how</em> objects are created. The framework calls you.</p>
+  <pre>
+Without IoC (you drive):
+  main() → new A() → new B() → new C() → a.run()
+
+With IoC (framework drives):
+  framework starts → creates C, B, A → injects → calls your methods
+                     (HTTP handler, @Scheduled, CommandLineRunner)
+</pre>
+  <p>The “control” that inverted is <strong>object lifetime + call graph assembly</strong>, not business logic. Your <code>charge()</code> method still belongs to you.</p>
+  <p>Hollywood principle: “Don’t call us — we’ll call you.” Servlet container did this decades before Spring. Spring applied it to <em>plain Java objects</em>.</p>
+
+  <h2>4. Dependency Injection — How Collaborators Arrive</h2>
+  <p><strong>DI</strong> is one technique of IoC: the object does not look up collaborators; they are <em>passed in</em>.</p>
+
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Style</th>
+        <th>Shape</th>
+        <th>Senior judgment</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Constructor</strong></td>
+        <td><code>Foo(Bar bar)</code> + <code>private final Bar bar</code></td>
+        <td><strong>Default.</strong> Required deps, immutable, fully initialized, unit-test with <code>new Foo(mock)</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>Setter</strong></td>
+        <td><code>setBar(Bar bar)</code></td>
+        <td>Optional / reconfigurable. Object can exist half-wired. Use sparingly.</td>
+      </tr>
+      <tr>
+        <td><strong>Field</strong></td>
+        <td><code>@Autowired Bar bar;</code></td>
+        <td>Works. Hides deps. Hard to test without Spring Test. Reflection. Avoid in application code.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>Spring team guidance (Framework reference): constructors for <strong>mandatory</strong> deps; setters for optional. Constructor-injected beans are returned only after all required collaborators exist — no “use before init.”</p>
+  <p>You already met this in <a href="oop-0015-final.html">final</a>: constructor injection + <code>final</code> fields is the Boot 3 house style. Single constructor: <code>@Autowired</code> is optional (Spring 4.3+).</p>
+  <blockquote>Interview trap: “Field injection is fine because Boot uses it in samples.” Samples optimize for brevity. Production services optimize for testability and required-deps-at-compile-time.</blockquote>
+  <p><strong>Nice to know:</strong> Boot 3.2 / Framework 6.1 stopped guessing parameter names from bytecode. Compile with <code>-parameters</code> (Maven/Gradle plugins do this) or constructor binding / <code>@Qualifier</code> names break in surprising ways.</p>
+
+  <h2>5. Who Creates What</h2>
+  <pre>
+WITHOUT Spring
+  Application code
+       │  new + wire
+       ▼
+  Object graph
+
+WITH Spring
+  Application code  ──asks──►  IoC container (ApplicationContext)
+                                    │  creates + wires beans
+                                    ▼
+                               Object graph
+</pre>
+  <p>Your <code>main</code> still exists — it starts the container (<code>SpringApplication.run</code>). After that, you <em>ask</em> or you <em>get called</em>. You do not assemble 80 constructors yourself.</p>
+
+  <h2>6. What a Bean Is</h2>
+  <p>A <strong>bean</strong> is an object whose <strong>lifecycle and wiring</strong> the Spring container manages. It has a name, a type, a scope, and (usually) dependencies recorded in a <code>BeanDefinition</code>.</p>
+  <ul>
+    <li><strong>Is a bean:</strong> <code>UserService</code>, <code>DataSource</code>, <code>ObjectMapper</code> if registered.</li>
+    <li><strong>Usually not a bean:</strong> JPA entities, request DTOs, <code>Money</code> value objects, loop-local <code>ArrayList</code>.</li>
+  </ul>
+  <blockquote>Must know: Spring does <strong>not</strong> intercept every <code>new</code>. A DTO you construct in a controller is a plain heap object — see <a href="oop-0003-stack-vs-heap.html">Stack vs Heap</a>. Only registered types enter the container.</blockquote>
+
+  <h2>7. Layers &amp; Dependency Direction</h2>
+  <pre>
+  HTTP
+    │
+    ▼
+┌─────────────┐
+│ Controller  │  translation: HTTP ↔ application commands
+└──────┬──────┘
+       │ depends on
+       ▼
+┌─────────────┐
+│  Service    │  use-cases, transactions (S06), orchestration
+└──────┬──────┘
+       │ depends on
+       ▼
+┌─────────────┐
+│ Repository  │  persistence port (interface)
+└──────┬──────┘
+       │ implemented by
+       ▼
+┌─────────────┐
+│  Database   │  JDBC / JPA (Module 06)
+└─────────────┘
+</pre>
+  <p>Arrows mean <strong>compile-time dependency</strong>. Upper layers depend on <em>abstractions</em> (interfaces), not on JDBC driver classes. That is DIP in one diagram — you met the idea in <a href="oop-0009-abstraction.html">Abstraction</a>.</p>
+  <p><strong>Production relevance:</strong> A controller that talks JDBC skips the service layer → no single transaction boundary, no place for authz, untestable HTTP+SQL mash. Seniors defend the layer, not the annotation.</p>
+
+  <h2>8. DIP — Tiny Payment Gateway</h2>
+  <pre><code class="language-java">public interface PaymentGateway {
+  Receipt charge(Money amount, String customerId);
+}
+
+public final class CheckoutService {
+  private final PaymentGateway gateway;
+
+  public CheckoutService(PaymentGateway gateway) {
+    this.gateway = gateway;
+  }
+
+  public OrderId checkout(Cart cart) {
+    gateway.charge(cart.total(), cart.customerId());
+    return OrderId.newId();
+  }
+}
+
+public final class StripeGateway implements PaymentGateway { /* HTTP to Stripe */ }
+public final class FakeGateway implements PaymentGateway { /* tests */ }</code></pre>
+  <p>High-level <code>CheckoutService</code> does not import Stripe. Infra implements the interface. Swap in tests with <code>new CheckoutService(new FakeGateway())</code> — zero Spring required for that unit test.</p>
+
+  <h2>9. Before / After Spring (Same Graph)</h2>
+  <p><strong>After</strong> (stereotype sketch — scanning detail is S03):</p>
+  <pre><code class="language-java">@RestController
+public class UserController {
+  private final UserService service;
+  public UserController(UserService service) { this.service = service; }
+}
+
+@Service
+public class UserService {
+  private final UserRepository repo;
+  public UserService(UserRepository repo) { this.repo = repo; }
+}
+
+@Repository
+public class JdbcUserRepository implements UserRepository {
+  private final DataSource ds;
+  public JdbcUserRepository(DataSource ds) { this.ds = ds; }
+}</code></pre>
+  <p>Container finds types, creates <code>JdbcUserRepository</code>, then <code>UserService</code>, then <code>UserController</code> — same order you wrote by hand. Annotations are <em>metadata</em>, not magic.</p>
+
+  <h2>10. Why Spring Is More Than Boilerplate</h2>
+  <p>If DI were the whole story, a 40-line composition root would suffice. Spring also provides:</p>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Capability</th>
+        <th>Mechanism (named)</th>
+        <th>When you need it</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Lifecycle</td>
+        <td>Bean factory + init/destroy callbacks</td>
+        <td>Warm caches, close pools — S02</td>
+      </tr>
+      <tr>
+        <td>Configuration</td>
+        <td><code>Environment</code>, profiles, properties</td>
+        <td>dev vs prod without recompile — S03–S04</td>
+      </tr>
+      <tr>
+        <td>AOP</td>
+        <td>JDK / CGLIB <strong>proxies</strong> wrapping beans</td>
+        <td>tx, security, metrics without polluting domain — S06</td>
+      </tr>
+      <tr>
+        <td>Transactions</td>
+        <td><code>PlatformTransactionManager</code> + proxy advice</td>
+        <td>commit/rollback around a service method — S06</td>
+      </tr>
+      <tr>
+        <td>Testing</td>
+        <td>Test slices, mock beans, Testcontainers later</td>
+        <td>Slice tests without full server</td>
+      </tr>
+      <tr>
+        <td>Extensibility</td>
+        <td>Auto-config + conditions + starters</td>
+        <td>Add JDBC → get DataSource unless you defined one — S05</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>Boot specifically: embedded Tomcat (S07), actuator (S08), opinionated classpath. Framework IoC still sits underneath.</p>
+
+  <h2>11. IoC Container vs DI — Precise Distinction</h2>
+  <table class="reference-table">
+    <thead>
+      <tr>
+        <th>Term</th>
+        <th>What it is</th>
+        <th>What it is not</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>IoC</strong></td>
+        <td>Who controls creation, wiring, and when your code runs</td>
+        <td>Not “using Spring annotations”</td>
+      </tr>
+      <tr>
+        <td><strong>IoC container</strong></td>
+        <td><code>BeanFactory</code> / <code>ApplicationContext</code> holding beans</td>
+        <td>Not the HTTP server</td>
+      </tr>
+      <tr>
+        <td><strong>DI</strong></td>
+        <td>Passing collaborators in (constructor/setter/field)</td>
+        <td>Not a synonym for IoC</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>You can do DI with zero Spring (manual wiring). You can have IoC without constructor DI (Service Locator / <code>getBean</code> lookups — generally worse). Spring’s default story: <strong>container + constructor DI</strong>.</p>
+  <blockquote>Common misconception: “DI = IoC.” DI is <em>how</em> dependencies arrive. IoC is <em>who owns the call/create graph</em>.</blockquote>
+
+  <h2>12. Misconceptions</h2>
+  <ol>
+    <li><strong>Spring creates every object.</strong> False. Only beans. <code>new OrderRequest(json)</code> is yours.</li>
+    <li><strong><code>new</code> is forbidden.</strong> False. Forbidden: <code>new</code> of a <em>collaborator that should be a bean</em> inside another bean (you skip the proxy — S06). Allowed: value objects, builders, test fakes, JDK types.</li>
+    <li><strong>Stereotypes change DI.</strong> <code>@Service</code> vs <code>@Component</code> — same container registration for core DI. Specializations are documentation + exception translation later.</li>
+    <li><strong>Spring replaces OOP.</strong> False. Polymorphism and interfaces <em>are</em> the injection points.</li>
+  </ol>
+
+  <h2>13. What Happens When Spring Boot Starts? — Preview Only</h2>
+  <pre>
+java -jar app.jar
+        │
+        ▼
+SpringApplication.run
+        │
+        ├─ 1. Environment  (properties, profiles, env vars)     → S04
+        ├─ 2. ApplicationContext created                         → S02
+        ├─ 3. Bean definitions (scan + @Bean + auto-config)      → S03, S05
+        ├─ 4. Instantiate + inject + init callbacks              → S02
+        ├─ 5. Embedded web server starts (Tomcat by default)     → S07
+        └─ 6. Ready — Actuator, traffic                          → S08
+</pre>
+  <p>Do not memorize this as a 40-step list yet. Remember: <strong>environment → definitions → instances → server</strong>. Detail in later sections.</p>
+
+  <h2>Production Relevance</h2>
+  <ul>
+    <li>Incident: “works locally, missing bean in prod” — usually scan base package or profile/condition (S03–S05), not “Spring broken.”</li>
+    <li>Review smell: <code>@Autowired</code> on 12 fields, no constructor — untestable and circular-deps-prone (S02).</li>
+    <li>K8s: one JVM process (<a href="jvm-0001-jvm-runtime-architecture.html">S01 JVM</a>) hosting one <code>ApplicationContext</code> (typical). Beans live on the heap like any objects.</li>
+  </ul>
+
+  <h2>Interview Articulation</h2>
+  <p><em>“Spring’s IoC container owns the object graph. We declare types and constructor dependencies; the context instantiates and injects them. DI is the passing-in of collaborators — we prefer constructors so deps are required, final, and mockable without starting Spring. A bean is a container-managed object, not every Java object. Layers keep HTTP, use-cases, and persistence from collapsing into one class.”</em></p>
+
+  <h2>Interview Traps</h2>
+  <ul>
+    <li>Equating IoC with DI.</li>
+    <li>Saying field injection is “the Spring way.”</li>
+    <li>Claiming controllers must <code>new</code> services.</li>
+    <li>Promising auto-config details you have not learned (S05).</li>
+  </ul>
+
+  <h2>Senior Interview Questions (open)</h2>
+  <ol>
+    <li>Why is a 200-class app painful if every class constructs its own collaborators?</li>
+    <li>Walk a three-layer graph using only <code>new</code>. What did you just invent?</li>
+    <li>Define IoC in one sentence without the word “annotation.”</li>
+    <li>Constructor vs field injection — three concrete reasons for constructor.</li>
+    <li>What is a Spring bean? Give two objects that should not be beans.</li>
+    <li>Draw Controller → Service → Repository. Which way do source dependencies point?</li>
+    <li>How does DIP show up in a payment integration?</li>
+    <li>Is <code>new ArrayList&lt;&gt;()</code> inside a <code>@Service</code> a smell? Why or why not?</li>
+  </ol>
+
+  <h2>Revision Notes</h2>
+  <ul>
+    <li>Composition root: one owner of <code>new</code> for collaborators.</li>
+    <li>IoC = framework owns create/call graph. DI = pass deps in.</li>
+    <li>Constructor + <code>final</code> = required, testable, initialized.</li>
+    <li>Bean = container-managed. DTOs/entities usually not.</li>
+    <li>Depend on interfaces; infra implements.</li>
+    <li>Boot start preview: env → context → definitions → instances → Tomcat.</li>
+  </ul>
+
+  <h2>Interview One-Liners</h2>
+  <ul>
+    <li>“DI is a technique; the IoC container is the runtime that applies it.”</li>
+    <li>“If I can <code>new</code> it in a unit test with fakes, constructor injection paid off.”</li>
+    <li>“<code>new</code> of a collaborator inside a bean skips the container — and later the transaction proxy.”</li>
+    <li>“Layers are dependency direction, not folder names.”</li>
+  </ul>
+
+  <h2>Senior MCQs</h2>
+  <p>Cover answers before opening. Option lengths matched.</p>
+  <div class="quiz">
+    <ol>
+      <li>
+        <p class="quiz-question">Q1: IoC primarily inverts which responsibility?</p>
+        <ol type="A">
+          <li>Who creates and wires application objects.</li>
+          <li>Who writes SQL inside repository classes.</li>
+          <li>Who allocates heap vs stack for locals.</li>
+          <li>Who compiles Java sources in Maven.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Who creates and wires application objects.)</strong></p>
+          <p>IoC is about object graph assembly and call timing, not SQL, JVM memory, or the compiler.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q2: Preferred injection style for a required UserRepository?</p>
+        <ol type="A">
+          <li>Constructor plus a final field.</li>
+          <li>Public setter called after traffic.</li>
+          <li>Field autowire with no constructor.</li>
+          <li>Static lookup from a global map.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Constructor plus a final field.)</strong></p>
+          <p>Spring team guidance: mandatory deps via constructor. Immutable, testable, fully initialized.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q3: Which object is typically a Spring bean?</p>
+        <ol type="A">
+          <li>A singleton UserService in the context.</li>
+          <li>A JSON request DTO per HTTP call.</li>
+          <li>A JPA entity loaded from a row.</li>
+          <li>A loop-local ArrayList of IDs.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (A singleton UserService in the context.)</strong></p>
+          <p>DTOs, entities, and local collections are ordinary heap objects, not container-managed beans.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q4: DI versus IoC — accurate statement?</p>
+        <ol type="A">
+          <li>DI is one way to implement IoC wiring.</li>
+          <li>DI and IoC are identical terms always.</li>
+          <li>IoC means field injection only in Boot.</li>
+          <li>DI requires Tomcat to exist first.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (DI is one way to implement IoC wiring.)</strong></p>
+          <p>You can DI by hand with no container. Tomcat is the servlet container (S07), not the definition of DI.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q5: Correct compile-time dependency direction?</p>
+        <ol type="A">
+          <li>Service depends on PaymentGateway interface.</li>
+          <li>Service imports Stripe SDK classes only.</li>
+          <li>Repository depends on RestController types.</li>
+          <li>Entity depends on DispatcherServlet class.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Service depends on PaymentGateway interface.)</strong></p>
+          <p>DIP: high-level policy depends on abstractions. Infra (Stripe) implements the port.</p>
+        </details>
+      </li>
+      <li>
+        <p class="quiz-question">Q6: new HashMap inside a @Service method?</p>
+        <ol type="A">
+          <li>Fine — not a collaborator bean.</li>
+          <li>Illegal — Spring forbids all new.</li>
+          <li>Always a circular dependency bug.</li>
+          <li>Requires @Bean on HashMap always.</li>
+        </ol>
+        <details>
+          <summary>View Answer &amp; Explanation</summary>
+          <p><strong>Answer: A (Fine — not a collaborator bean.)</strong></p>
+          <p>Local JDK structures are not IoC concerns. Smell is <code>new StripeClient()</code> inside the service.</p>
+        </details>
+      </li>
+    </ol>
+  </div>
+
+  <hr>
+  <h2>Bridge to Next Lessons</h2>
+  <ul>
+    <li><strong>S02</strong> — ApplicationContext, scopes, lifecycle callbacks</li>
+    <li><strong>S03</strong> — scan, <code>@Configuration</code>, profiles</li>
+    <li><strong>S05</strong> — auto-config (why beans appear from a dependency)</li>
+  </ul>
+
+  <nav class="lesson-nav" style="margin-top: 2rem;">
+    <a href="../index.html">🏠 Home</a> &middot;
+    <a href="../exercises/jvm-capstone-exercise.html">⬅️ Prev: JVM Capstone</a> &middot;
+    <a href="spring-0002-applicationcontext-scopes-lifecycle.html">Lesson 2 &rarr;</a> &middot;
+    <a href="../reference/spring-0001-why-spring-ioc-di.html">Cheat sheet</a>
+  </nav>
+  <script src="../assets/theme.js" defer></script>
+</body>
+</html>
