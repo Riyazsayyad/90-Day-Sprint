@@ -38,89 +38,72 @@ document.addEventListener('DOMContentLoaded', () => {
   const springDrawer = document.getElementById('springDrawer');
   const closeSpringBtn = document.getElementById('closeSpringDrawerBtn');
 
-  // Open / Close Drawer Functions for Collections
-  const openDrawer = () => {
-    drawer.classList.add('open');
-    backdrop.classList.add('open');
+  const moduleDrawers = [
+    drawer,
+    oopDrawer,
+    streamsDrawer,
+    concurrencyDrawer,
+    jvmDrawer,
+    springDrawer,
+  ];
+
+  const showModuleDrawer = (target) => {
+    moduleDrawers.forEach((d) => {
+      if (d) d.classList.remove('open');
+    });
+    if (target) target.classList.add('open');
+    if (backdrop) backdrop.classList.add('open');
     document.body.style.overflow = 'hidden';
   };
 
-  const closeDrawer = () => {
-    drawer.classList.remove('open');
-    backdrop.classList.remove('open');
+  const hideAllModuleDrawers = () => {
+    moduleDrawers.forEach((d) => {
+      if (d) d.classList.remove('open');
+    });
+    if (backdrop) backdrop.classList.remove('open');
     document.body.style.overflow = '';
   };
+
+  // Open / Close Drawer Functions for Collections
+  const openDrawer = () => {
+    showModuleDrawer(drawer);
+  };
+
+  const closeDrawer = () => hideAllModuleDrawers();
 
   // Open / Close Drawer Functions for OOP
   const openOopDrawer = () => {
-    if (oopDrawer) oopDrawer.classList.add('open');
-    if (backdrop) backdrop.classList.add('open');
-    document.body.style.overflow = 'hidden';
+    showModuleDrawer(oopDrawer);
   };
 
-  const closeOopDrawer = () => {
-    if (oopDrawer) oopDrawer.classList.remove('open');
-    if (backdrop) backdrop.classList.remove('open');
-    document.body.style.overflow = '';
-  };
+  const closeOopDrawer = () => hideAllModuleDrawers();
 
   // Open / Close Drawer Functions for Streams
   const openStreamsDrawer = () => {
-    if (streamsDrawer) streamsDrawer.classList.add('open');
-    if (backdrop) backdrop.classList.add('open');
-    document.body.style.overflow = 'hidden';
+    showModuleDrawer(streamsDrawer);
   };
 
-  const closeStreamsDrawer = () => {
-    if (streamsDrawer) streamsDrawer.classList.remove('open');
-    if (backdrop) backdrop.classList.remove('open');
-    document.body.style.overflow = '';
-  };
+  const closeStreamsDrawer = () => hideAllModuleDrawers();
 
   const openConcurrencyDrawer = () => {
-    if (concurrencyDrawer) concurrencyDrawer.classList.add('open');
-    if (backdrop) backdrop.classList.add('open');
-    document.body.style.overflow = 'hidden';
+    showModuleDrawer(concurrencyDrawer);
   };
 
-  const closeConcurrencyDrawer = () => {
-    if (concurrencyDrawer) concurrencyDrawer.classList.remove('open');
-    if (backdrop) backdrop.classList.remove('open');
-    document.body.style.overflow = '';
-  };
+  const closeConcurrencyDrawer = () => hideAllModuleDrawers();
 
   const openJvmDrawer = () => {
-    if (jvmDrawer) jvmDrawer.classList.add('open');
-    if (backdrop) backdrop.classList.add('open');
-    document.body.style.overflow = 'hidden';
+    showModuleDrawer(jvmDrawer);
   };
 
-  const closeJvmDrawer = () => {
-    if (jvmDrawer) jvmDrawer.classList.remove('open');
-    if (backdrop) backdrop.classList.remove('open');
-    document.body.style.overflow = '';
-  };
+  const closeJvmDrawer = () => hideAllModuleDrawers();
 
   const openSpringDrawer = () => {
-    if (springDrawer) springDrawer.classList.add('open');
-    if (backdrop) backdrop.classList.add('open');
-    document.body.style.overflow = 'hidden';
+    showModuleDrawer(springDrawer);
   };
 
-  const closeSpringDrawer = () => {
-    if (springDrawer) springDrawer.classList.remove('open');
-    if (backdrop) backdrop.classList.remove('open');
-    document.body.style.overflow = '';
-  };
+  const closeSpringDrawer = () => hideAllModuleDrawers();
 
-  const closeAllDrawers = () => {
-    closeDrawer();
-    closeOopDrawer();
-    closeStreamsDrawer();
-    closeConcurrencyDrawer();
-    closeJvmDrawer();
-    closeSpringDrawer();
-  };
+  const closeAllDrawers = () => hideAllModuleDrawers();
 
   // Click active cards to open
   if (collectionsCard) {
